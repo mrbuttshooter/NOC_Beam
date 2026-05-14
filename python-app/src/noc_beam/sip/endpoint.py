@@ -242,10 +242,32 @@ class SipEndpoint:
     def hold_call(self, call: SipCall) -> None:
         call.setHold(pj.CallOpParam(True))
 
+    def resume_call(self, call: SipCall) -> None:
+        """Take a held call off hold. pjsua2 unholds via reinvite with the
+        UNHOLD flag set; the constant is PJSUA_CALL_UNHOLD = 1."""
+        prm = pj.CallOpParam(True)
+        try:
+            prm.opt.flag = getattr(pj, "PJSUA_CALL_UNHOLD", 1)
+            prm.opt.audioCount = 1
+        except Exception:
+            pass
+        call.reinvite(prm)
+
     def reinvite_call(self, call: SipCall) -> None:
         prm = pj.CallOpParam(True)
         prm.opt.audioCount = 1
         call.reinvite(prm)
+
+    def find_call(self, call_id: int) -> SipCall | None:
+        """Look up a live SipCall across all accounts by pjsua2 call-id."""
+        for acc in self._accounts.values():
+            for c in acc.calls:
+                try:
+                    if c.getInfo().id == call_id:
+                        return c
+                except Exception:
+                    continue
+        return None
 
     def send_dtmf(self, call: SipCall, digits: str, account_cfg: AccountConfig) -> None:
         method = account_cfg.dtmf_method.lower()

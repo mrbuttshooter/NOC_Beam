@@ -16,12 +16,14 @@ class CallWidget(QWidget):
     reject_clicked = Signal(int)
     hangup_clicked = Signal(int)
     hold_clicked = Signal(int)
+    resume_clicked = Signal(int)
     mute_toggled = Signal(int, bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
         self.call_id = -1
+        self._on_hold = False
 
         self.peer_label = QLabel("Idle")
         self.peer_label.setObjectName("CallPeer")
@@ -40,7 +42,7 @@ class CallWidget(QWidget):
         self.answer_btn.clicked.connect(lambda: self.answer_clicked.emit(self.call_id))
         self.reject_btn.clicked.connect(lambda: self.reject_clicked.emit(self.call_id))
         self.hangup_btn.clicked.connect(lambda: self.hangup_clicked.emit(self.call_id))
-        self.hold_btn.clicked.connect(lambda: self.hold_clicked.emit(self.call_id))
+        self.hold_btn.clicked.connect(self._on_hold_clicked)
         self.mute_btn.toggled.connect(lambda b: self.mute_toggled.emit(self.call_id, b))
 
         btns = QHBoxLayout()
@@ -88,13 +90,18 @@ class CallWidget(QWidget):
     def update_state(self, state_name: str, code: int, reason: str) -> None:
         suffix = f" ({code} {reason})" if code else ""
         self.state_label.setText(f"{state_name}{suffix}")
-        in_call = state_name in ("CONFIRMED", "EARLY", "CONNECTING")
-        self.hold_btn.setEnabled(state_name == "CONFIRMED")
-        self.mute_btn.setEnabled(state_name == "CONFIRMED")
+        self._on_hold = state_name == "HELD"
+        self.hold_btn.setText("Resume" if self._on_hold else "Hold")
+        # Hold/resume only valid in CONFIRMED or HELD.
+        self.hold_btn.setEnabled(state_name in ("CONFIRMED", "HELD"))
+        self.mute_btn.setEnabled(state_name in ("CONFIRMED", "HELD"))
         self.hangup_btn.setEnabled(state_name != "DISCONNECTED")
-        if not in_call and state_name == "DISCONNECTED":
-            # Caller will switch to idle after this
-            pass
+
+    def _on_hold_clicked(self) -> None:
+        if self._on_hold:
+            self.resume_clicked.emit(self.call_id)
+        else:
+            self.hold_clicked.emit(self.call_id)
 
     def update_media(self, codec: str, clock: int, channels: int) -> None:
         if codec:

@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
 )
 
 from noc_beam import __app_name__, __version__
+from noc_beam.audio.ringer import Ringer
+from noc_beam.config.history import CdrEntry, append_entry
 from noc_beam.config.store import (
     AccountConfig,
     GlobalSettings,
@@ -31,11 +33,14 @@ from noc_beam.config.store import (
     save_accounts,
     save_settings,
 )
+from noc_beam.sip.call_manager import CallRecord, CallState, call_manager
 from noc_beam.sip.endpoint import SipEndpoint
 from noc_beam.sip.events import sip_events
 from noc_beam.ui.account_dialog import AccountDialog
+from noc_beam.ui.call_list_widget import CallListWidget
 from noc_beam.ui.call_widget import CallWidget
 from noc_beam.ui.dialpad import DialPad
+from noc_beam.ui.history_view import HistoryView
 from noc_beam.ui.settings_dialog import SettingsDialog
 from noc_beam.ui.trace_view import TraceView
 
@@ -50,7 +55,13 @@ class MainWindow(QMainWindow):
 
         self.settings: GlobalSettings = load_settings()
         self.accounts: list[AccountConfig] = load_accounts()
-        self._active_call = None  # current SipCall in the call widget
+        self.calls = call_manager()
+        self.ringer = Ringer()
+        # Selected call_id drives the in-call widget. None = no selection.
+        self._selected_call_id: int | None = None
+        # CDR snapshots captured the moment a call goes DISCONNECTED — the
+        # manager drops the record immediately after.
+        self._last_snapshots: dict[int, CdrEntry] = {}
 
         self._build_ui()
         self._connect_events()
@@ -117,12 +128,23 @@ class MainWindow(QMainWindow):
         left_widget.setLayout(left_layout)
         left_widget.setMaximumWidth(360)
 
-        # Right: tabbed call view + trace
+        # Right: tabbed call view + history + trace
         self.call_widget = CallWidget()
+        self.call_list = CallListWidget(self.calls)
+        self.history_view = HistoryView()
         self.trace_view = TraceView()
 
+        # Compose Call tab as: call list on top (compact) + call widget below.
+        call_tab = QWidget()
+        call_layout = QVBoxLayout(call_tab)
+        call_layout.setContentsMargins(0, 0, 0, 0)
+        self.call_list.setMaximumHeight(120)
+        call_layout.addWidget(self.call_list)
+        call_layout.addWidget(self.call_widget, 1)
+
         right_tabs = QTabWidget()
-        right_tabs.addTab(self.call_widget, "Call")
+        right_tabs.addTab(call_tab, "Call")
+        right_tabs.addTab(self.history_view, "History")
         right_tabs.addTab(self.trace_view, "SIP trace")
         self.right_tabs = right_tabs
 
@@ -156,6 +178,16 @@ class MainWindow(QMainWindow):
         self.call_widget.answer_clicked.connect(self._on_answer)
         self.call_widget.reject_clicked.connect(self._on_reject)
         self.call_widget.hangup_clicked.connect(self._on_hangup_by_id)
+        self.call_widget.hold_clicked.connect(self._on_hold)
+        self.call_widget.resume_clicked.connect(self._on_resume)
+        self.call_widget.mute_toggled.connect(self._on_mute_toggled)
+
+        self.call_list.call_selected.connect(self._select_call)
+        self.calls.call_added.connect(self._on_call_record_added)
+        self.calls.call_updated.connect(self._on_call_record_updated)
+        self.calls.call_removed.connect(self._on_call_record_removed)
+
+        self.history_view.redial_requested.connect(self._on_call_requested)
 
     # ------------------------------------------------------------------
     # Account management
@@ -257,30 +289,127 @@ class MainWindow(QMainWindow):
         self.status.showMessage(f"[{label}] registration: {code} {reason}", 5000)
 
     def _on_call_incoming(self, account_id: str, call_id: int, remote: str, is_in: bool) -> None:
+        # Register the incoming call with the manager so the list picks it up.
+        rec = CallRecord(
+            call_id=call_id,
+            account_id=account_id,
+            remote_uri=remote,
+            direction="in",
+            state=CallState.NULL,
+        )
+        self.calls.register(rec)
+        self.calls.update_state(call_id, CallState.INCOMING)
+        self._select_call(call_id)
         self.call_widget.show_incoming(call_id, remote)
-        self.right_tabs.setCurrentWidget(self.call_widget)
-        ep = SipEndpoint.instance()
-        acc = ep.get_account(account_id)
-        if acc:
-            for c in acc.calls:
-                if c.getInfo().id == call_id:
-                    self._active_call = c
-                    break
+        self.right_tabs.setCurrentIndex(0)
+        # Ring on a fresh incoming call.
+        self.ringer.start()
 
     def _on_call_state(self, account_id: str, call_id: int, state: str, code: int, reason: str) -> None:
-        self.call_widget.update_state(state, code, reason)
-        self.dialpad.set_in_call(state not in ("DISCONNECTED", "NULL"))
+        try:
+            new_state = CallState(state)
+        except ValueError:
+            # Unknown pjsua2 state — surface it on the widget but skip the SM.
+            if call_id == self._selected_call_id:
+                self.call_widget.update_state(state, code, reason)
+            return
+        # If the registry doesn't know about this call yet, it's an outbound
+        # we created via make_call — synthesize a record.
+        if self.calls.get(call_id) is None:
+            self.calls.register(
+                CallRecord(call_id=call_id, account_id=account_id, direction="out")
+            )
+        self.calls.update_state(call_id, new_state, code, reason)
+        if new_state in (CallState.CONFIRMED, CallState.DISCONNECTED) or new_state == CallState.EARLY:
+            # Caller picked up, or call ended/failed — stop ringing.
+            self.ringer.stop()
 
     def _on_call_media(self, call_id: int, codec: str, clock: int, channels: int) -> None:
-        self.call_widget.update_media(codec, clock, channels)
+        self.calls.update_media(call_id, codec, clock, channels)
 
     def _on_call_ended(self, call_id: int) -> None:
-        self.call_widget.show_idle()
-        self.dialpad.set_in_call(False)
-        self._active_call = None
+        # call_state_changed already fed DISCONNECTED into the manager; this is
+        # the final pjsua2 signal. Write the CDR row from the (now-removed) rec
+        # before its data is gone. We keep a side-channel copy because the
+        # state machine removes the record on transition to DISCONNECTED.
+        self._maybe_write_cdr(call_id)
+        self.ringer.stop()
+
+    # The call manager removes records on DISCONNECTED, so we snapshot them
+    # one step earlier in `_on_call_record_updated`. CDR data lives here.
+    def _maybe_write_cdr(self, call_id: int) -> None:
+        snap = self._last_snapshots.pop(call_id, None)
+        if snap is None:
+            return
+        try:
+            append_entry(snap)
+            self.history_view.reload()
+        except Exception:
+            log.exception("Failed to append CDR entry")
 
     # ------------------------------------------------------------------
     # Dialpad actions
+    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Call selection + manager callbacks
+    # ------------------------------------------------------------------
+    def _select_call(self, call_id: int) -> None:
+        self._selected_call_id = call_id
+        rec = self.calls.get(call_id)
+        if rec is None:
+            self.call_widget.show_idle()
+            return
+        if rec.direction == "in" and rec.state == CallState.INCOMING:
+            self.call_widget.show_incoming(call_id, rec.remote_uri)
+        else:
+            self.call_widget.show_outgoing(call_id, rec.remote_uri or "…")
+        self.call_widget.update_state(rec.state.value, rec.last_code, rec.last_reason)
+        if rec.codec:
+            self.call_widget.update_media(rec.codec, rec.clock_rate, rec.channels)
+
+    def _on_call_record_added(self, call_id: int) -> None:
+        # Auto-select the first call if nothing's selected yet.
+        if self._selected_call_id is None:
+            self._select_call(call_id)
+        self.dialpad.set_in_call(True)
+
+    def _on_call_record_updated(self, call_id: int) -> None:
+        rec = self.calls.get(call_id)
+        if rec is None:
+            return
+        # Snapshot for CDR right before the manager removes the record.
+        if rec.state == CallState.DISCONNECTED:
+            self._last_snapshots[call_id] = CdrEntry(
+                call_id=rec.call_id,
+                account_id=rec.account_id,
+                peer_uri=rec.remote_uri,
+                direction=rec.direction,
+                started_at=rec.started_at,
+                connected_at=rec.connected_at,
+                ended_at=rec.ended_at or rec.started_at,
+                end_code=rec.last_code,
+                end_reason=rec.last_reason,
+                codec=rec.codec,
+            )
+        # Refresh the call widget only if this is the selected call.
+        if call_id == self._selected_call_id:
+            self.call_widget.update_state(rec.state.value, rec.last_code, rec.last_reason)
+            if rec.codec:
+                self.call_widget.update_media(rec.codec, rec.clock_rate, rec.channels)
+
+    def _on_call_record_removed(self, call_id: int) -> None:
+        if call_id == self._selected_call_id:
+            self._selected_call_id = None
+            # Promote another active call into the widget if there is one.
+            next_active = self.calls.first_active()
+            if next_active is not None:
+                self._select_call(next_active.call_id)
+            else:
+                self.call_widget.show_idle()
+                self.dialpad.set_in_call(False)
+
+    # ------------------------------------------------------------------
+    # Dialpad / call_widget actions
     # ------------------------------------------------------------------
     def _on_call_requested(self, target: str) -> None:
         acc_id = self.active_account.currentData()
@@ -289,41 +418,95 @@ class MainWindow(QMainWindow):
             return
         try:
             call = SipEndpoint.instance().make_call(acc_id, target)
-            self._active_call = call
-            self.call_widget.show_outgoing(-1, target)
+            cid = call.getInfo().id
+            self.calls.register(CallRecord(
+                call_id=cid, account_id=acc_id, remote_uri=target, direction="out"
+            ))
+            self.calls.update_state(cid, CallState.CALLING)
+            self._select_call(cid)
             self.dialpad.set_in_call(True)
-            self.right_tabs.setCurrentWidget(self.call_widget)
+            self.right_tabs.setCurrentIndex(0)
         except Exception as e:
             log.exception("make_call failed")
             QMessageBox.warning(self, "Call failed", str(e))
 
+    def _selected_pjsua_call(self):  # type: ignore[no-untyped-def]
+        if self._selected_call_id is None:
+            return None
+        return SipEndpoint.instance().find_call(self._selected_call_id)
+
     def _on_hangup_requested(self) -> None:
-        if self._active_call:
-            try:
-                SipEndpoint.instance().hangup_call(self._active_call)
-            except Exception:
-                log.exception("hangup failed")
+        call = self._selected_pjsua_call()
+        if call is None:
+            return
+        try:
+            SipEndpoint.instance().hangup_call(call)
+        except Exception:
+            log.exception("hangup failed")
 
     def _on_hangup_by_id(self, _call_id: int) -> None:
         self._on_hangup_requested()
 
     def _on_answer(self, _call_id: int) -> None:
-        if self._active_call:
-            SipEndpoint.instance().answer_call(self._active_call)
+        call = self._selected_pjsua_call()
+        if call is None:
+            return
+        try:
+            SipEndpoint.instance().answer_call(call)
+            self.ringer.stop()
+        except Exception:
+            log.exception("answer failed")
 
     def _on_reject(self, _call_id: int) -> None:
-        if self._active_call:
-            SipEndpoint.instance().hangup_call(self._active_call, code=603)
+        call = self._selected_pjsua_call()
+        if call is None:
+            return
+        try:
+            SipEndpoint.instance().hangup_call(call, code=603)
+            self.ringer.stop()
+        except Exception:
+            log.exception("reject failed")
+
+    def _on_hold(self, _call_id: int) -> None:
+        call = self._selected_pjsua_call()
+        if call is None:
+            return
+        try:
+            SipEndpoint.instance().hold_call(call)
+            if self._selected_call_id is not None:
+                self.calls.update_state(self._selected_call_id, CallState.HELD)
+        except Exception:
+            log.exception("hold failed")
+
+    def _on_resume(self, _call_id: int) -> None:
+        call = self._selected_pjsua_call()
+        if call is None:
+            return
+        try:
+            SipEndpoint.instance().resume_call(call)
+            if self._selected_call_id is not None:
+                self.calls.update_state(self._selected_call_id, CallState.CONFIRMED)
+        except Exception:
+            log.exception("resume failed")
+
+    def _on_mute_toggled(self, _call_id: int, muted: bool) -> None:
+        # Mute is local capture-side: detach the capture device transmit to
+        # this call's audio port. We mark the manager record; actual PJSIP
+        # plumbing lands with the audio routing rewrite.
+        if self._selected_call_id is not None:
+            self.calls.set_mute(self._selected_call_id, muted)
 
     def _on_digit_pressed(self, digit: str) -> None:
-        if self._active_call is None:
+        call = self._selected_pjsua_call()
+        if call is None:
             return
-        acc_id = self.active_account.currentData()
+        rec = self.calls.get(self._selected_call_id) if self._selected_call_id else None
+        acc_id = rec.account_id if rec else self.active_account.currentData()
         acc_cfg = next((a for a in self.accounts if a.id == acc_id), None)
         if acc_cfg is None:
             return
         try:
-            SipEndpoint.instance().send_dtmf(self._active_call, digit, acc_cfg)
+            SipEndpoint.instance().send_dtmf(call, digit, acc_cfg)
         except Exception:
             log.exception("send_dtmf failed")
 
