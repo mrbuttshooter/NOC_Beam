@@ -18,6 +18,7 @@ class CallWidget(QWidget):
     hold_clicked = Signal(int)
     resume_clicked = Signal(int)
     mute_toggled = Signal(int, bool)
+    transfer_clicked = Signal(int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -38,15 +39,18 @@ class CallWidget(QWidget):
         self.hold_btn = QPushButton("Hold")
         self.mute_btn = QPushButton("Mute")
         self.mute_btn.setCheckable(True)
+        self.transfer_btn = QPushButton("Transfer")
 
         self.answer_btn.clicked.connect(lambda: self.answer_clicked.emit(self.call_id))
         self.reject_btn.clicked.connect(lambda: self.reject_clicked.emit(self.call_id))
         self.hangup_btn.clicked.connect(lambda: self.hangup_clicked.emit(self.call_id))
         self.hold_btn.clicked.connect(self._on_hold_clicked)
         self.mute_btn.toggled.connect(lambda b: self.mute_toggled.emit(self.call_id, b))
+        self.transfer_btn.clicked.connect(lambda: self.transfer_clicked.emit(self.call_id))
 
         btns = QHBoxLayout()
-        for b in (self.answer_btn, self.reject_btn, self.hangup_btn, self.hold_btn, self.mute_btn):
+        for b in (self.answer_btn, self.reject_btn, self.hangup_btn,
+                  self.hold_btn, self.mute_btn, self.transfer_btn):
             btns.addWidget(b)
 
         layout = QVBoxLayout(self)
@@ -62,7 +66,8 @@ class CallWidget(QWidget):
         self.peer_label.setText("Idle")
         self.state_label.setText("")
         self.codec_label.setText("")
-        for b in (self.answer_btn, self.reject_btn, self.hangup_btn, self.hold_btn, self.mute_btn):
+        for b in (self.answer_btn, self.reject_btn, self.hangup_btn,
+                  self.hold_btn, self.mute_btn, self.transfer_btn):
             b.setEnabled(False)
 
     def show_outgoing(self, call_id: int, target: str) -> None:
@@ -92,9 +97,12 @@ class CallWidget(QWidget):
         self.state_label.setText(f"{state_name}{suffix}")
         self._on_hold = state_name == "HELD"
         self.hold_btn.setText("Resume" if self._on_hold else "Hold")
+        in_call = state_name in ("CONFIRMED", "HELD")
         # Hold/resume only valid in CONFIRMED or HELD.
-        self.hold_btn.setEnabled(state_name in ("CONFIRMED", "HELD"))
-        self.mute_btn.setEnabled(state_name in ("CONFIRMED", "HELD"))
+        self.hold_btn.setEnabled(in_call)
+        self.mute_btn.setEnabled(in_call)
+        # Transfer is only legal once the dialog is established.
+        self.transfer_btn.setEnabled(in_call)
         self.hangup_btn.setEnabled(state_name != "DISCONNECTED")
 
     def _on_hold_clicked(self) -> None:

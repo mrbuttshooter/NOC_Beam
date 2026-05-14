@@ -8,6 +8,7 @@ from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -43,6 +44,7 @@ from noc_beam.ui.dialpad import DialPad
 from noc_beam.ui.history_view import HistoryView
 from noc_beam.ui.settings_dialog import SettingsDialog
 from noc_beam.ui.trace_view import TraceView
+from noc_beam.ui.tray import Presence, TrayController
 
 log = logging.getLogger(__name__)
 
@@ -57,11 +59,14 @@ class MainWindow(QMainWindow):
         self.accounts: list[AccountConfig] = load_accounts()
         self.calls = call_manager()
         self.ringer = Ringer()
+        self.tray = TrayController(self)
         # Selected call_id drives the in-call widget. None = no selection.
         self._selected_call_id: int | None = None
         # CDR snapshots captured the moment a call goes DISCONNECTED — the
         # manager drops the record immediately after.
         self._last_snapshots: dict[int, CdrEntry] = {}
+        # User-initiated quit vs window-close — only the former exits the app.
+        self._really_quitting = False
 
         self._build_ui()
         self._connect_events()
@@ -181,6 +186,7 @@ class MainWindow(QMainWindow):
         self.call_widget.hold_clicked.connect(self._on_hold)
         self.call_widget.resume_clicked.connect(self._on_resume)
         self.call_widget.mute_toggled.connect(self._on_mute_toggled)
+        self.call_widget.transfer_clicked.connect(self._on_transfer)
 
         self.call_list.call_selected.connect(self._select_call)
         self.calls.call_added.connect(self._on_call_record_added)
@@ -188,6 +194,9 @@ class MainWindow(QMainWindow):
         self.calls.call_removed.connect(self._on_call_record_removed)
 
         self.history_view.redial_requested.connect(self._on_call_requested)
+
+        self.tray.show_requested.connect(self._restore_from_tray)
+        self.tray.quit_requested.connect(self._on_quit)
 
     # ------------------------------------------------------------------
     # Account management
@@ -302,8 +311,12 @@ class MainWindow(QMainWindow):
         self._select_call(call_id)
         self.call_widget.show_incoming(call_id, remote)
         self.right_tabs.setCurrentIndex(0)
-        # Ring on a fresh incoming call.
-        self.ringer.start()
+        # Surface the call in the system tray when the window is hidden.
+        if not self.isVisible() and self.tray.available:
+            self.tray.notify("Incoming call", remote or "Unknown caller")
+        # Ring only when presence is Available — DND silences the ringer.
+        if self.tray.presence == Presence.AVAILABLE:
+            self.ringer.start()
 
     def _on_call_state(self, account_id: str, call_id: int, state: str, code: int, reason: str) -> None:
         try:
@@ -489,12 +502,35 @@ class MainWindow(QMainWindow):
         except Exception:
             log.exception("resume failed")
 
+    def _on_transfer(self, _call_id: int) -> None:
+        call = self._selected_pjsua_call()
+        if call is None or self._selected_call_id is None:
+            return
+        target, ok = QInputDialog.getText(
+            self,
+            "Blind transfer",
+            "Transfer to (number or SIP URI):",
+        )
+        if not ok or not target.strip():
+            return
+        rec = self.calls.get(self._selected_call_id)
+        acc_id = rec.account_id if rec else None
+        try:
+            SipEndpoint.instance().blind_transfer(call, target.strip(), account_id=acc_id)
+            self.status.showMessage(f"Transferring to {target.strip()}…", 5000)
+        except Exception as e:
+            log.exception("blind transfer failed")
+            QMessageBox.warning(self, "Transfer failed", str(e))
+
     def _on_mute_toggled(self, _call_id: int, muted: bool) -> None:
-        # Mute is local capture-side: detach the capture device transmit to
-        # this call's audio port. We mark the manager record; actual PJSIP
-        # plumbing lands with the audio routing rewrite.
-        if self._selected_call_id is not None:
+        call = self._selected_pjsua_call()
+        if call is None or self._selected_call_id is None:
+            return
+        try:
+            SipEndpoint.instance().set_call_mute(call, muted)
             self.calls.set_mute(self._selected_call_id, muted)
+        except Exception:
+            log.exception("mute toggle failed")
 
     def _on_digit_pressed(self, digit: str) -> None:
         call = self._selected_pjsua_call()
@@ -511,7 +547,23 @@ class MainWindow(QMainWindow):
             log.exception("send_dtmf failed")
 
     # ------------------------------------------------------------------
+    # Tray + lifecycle
+    # ------------------------------------------------------------------
+    def _restore_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def _on_quit(self) -> None:
+        self._really_quitting = True
+        self.close()
+
     def closeEvent(self, event) -> None:  # noqa: N802, ANN001
+        # Close ⇒ minimize-to-tray; only Quit (from the tray menu) actually exits.
+        if not self._really_quitting and self.tray.available:
+            event.ignore()
+            self.hide()
+            return
         try:
             SipEndpoint.instance().stop()
         except Exception:

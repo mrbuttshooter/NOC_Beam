@@ -49,6 +49,9 @@ class SipEndpoint:
             cls._instance = cls()
         return cls._instance
 
+    def is_started(self) -> bool:
+        return self._started
+
     def start(self, settings: GlobalSettings) -> None:
         with self._lock:
             if self._started:
@@ -269,13 +272,89 @@ class SipEndpoint:
                     continue
         return None
 
+    def blind_transfer(self, call: SipCall, target_uri: str, account_id: str | None = None) -> None:
+        """Send REFER with `Refer-To: target_uri` (blind transfer).
+
+        The remote party will INVITE the target on our behalf. We stay on
+        the call until they hang up; pjsua2 emits an NOTIFY-driven state
+        change via onTransferState which we surface as a status update.
+        """
+        if not target_uri.startswith(("sip:", "sips:", "tel:")):
+            acc = self._accounts.get(account_id) if account_id else None
+            if acc is None:
+                raise ValueError("Plain number requires an account context for the domain")
+            target_uri = f"sip:{target_uri}@{acc.cfg.domain}"
+        prm = pj.CallOpParam(True)
+        call.xfer(target_uri, prm)
+        log.info("Blind transfer: %s", target_uri)
+
+    def set_call_mute(self, call: SipCall, muted: bool) -> None:
+        """Stop/resume the capture device → call audio transmit.
+
+        pjsua2 routes audio via the conference bridge: the capture device's
+        port transmits into the call's port. Stopping that one-way link is
+        equivalent to muting the microphone for this call only — playback
+        from the remote still works, and other calls (if any) are unaffected.
+        """
+        if self._ep is None:
+            return
+        info = call.getInfo()
+        for mi in info.media:
+            if mi.type != 1 or mi.status != 1:   # audio + active
+                continue
+            try:
+                aud = call.getAudioMedia(mi.index)
+                capture = self._ep.audDevManager().getCaptureDevMedia()
+                if muted:
+                    capture.stopTransmit(aud)
+                else:
+                    capture.startTransmit(aud)
+            except Exception:
+                log.exception("set_call_mute(%s) failed for media %d", muted, mi.index)
+
     def send_dtmf(self, call: SipCall, digits: str, account_cfg: AccountConfig) -> None:
-        method = account_cfg.dtmf_method.lower()
+        """Send DTMF using the method configured on the account.
+
+        * rfc2833 — RTP telephone-event payload (RFC 4733). pjsua2's
+          `dialDtmf` does this.
+        * info    — SIP INFO with `application/dtmf-relay` body, one INFO
+          per digit. Used by some legacy carriers and BroadWorks gateways.
+        * inband  — in-band tone generation in the audio stream. pjsua2
+          handles this at the codec layer when `PJMEDIA_TONEGEN` is set;
+          we still drive it via `dialDtmf` for the API contract.
+        """
+        method = (account_cfg.dtmf_method or "rfc2833").lower()
         if method == "info":
-            # SIP INFO via dialUci is not exposed — fall back to dialDtmf (RFC2833)
-            # plus an INFO body via sendRequest.
-            call.dialDtmf(digits)
+            self._send_dtmf_info(call, digits)
         else:
-            # RFC2833 and inband both use dialDtmf; inband generation is
-            # configured at the codec level (PJMEDIA_TONEGEN).
             call.dialDtmf(digits)
+
+    def _send_dtmf_info(self, call: SipCall, digits: str) -> None:
+        """One SIP INFO per digit with an `application/dtmf-relay` body."""
+        for d in digits:
+            try:
+                prm = pj.SendInstantMessageParam()
+                prm.contentType = "application/dtmf-relay"
+                prm.content = f"Signal={d}\r\nDuration=160\r\n"
+                call.sendRequest(self._build_info_param(prm.contentType, prm.content))
+            except Exception:
+                # pjsua2's call.sendRequest signature varies across versions;
+                # fall back to the in-band path so the digit isn't silently
+                # dropped.
+                log.exception("SIP INFO DTMF send failed; falling back to RFC2833")
+                try:
+                    call.dialDtmf(d)
+                except Exception:
+                    log.exception("RFC2833 fallback also failed")
+
+    @staticmethod
+    def _build_info_param(content_type: str, body: str):  # type: ignore[no-untyped-def]
+        """Construct a pjsua2.CallSendRequestParam for a SIP INFO with body."""
+        prm = pj.CallSendRequestParam()
+        prm.method = "INFO"
+        # pjsua2 SipTxOption carries content-type + body
+        opt = pj.SipTxOption()
+        opt.contentType = content_type
+        opt.msgBody = body
+        prm.txOption = opt
+        return prm
