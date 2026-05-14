@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QHeaderView,
+    QLabel,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -31,6 +33,7 @@ class SettingsDialog(QDialog):
         tabs = QTabWidget()
         tabs.addTab(self._build_audio_tab(), "Audio")
         tabs.addTab(self._build_codec_tab(), "Codecs")
+        tabs.addTab(self._build_appearance_tab(), "Appearance")
         tabs.addTab(self._build_advanced_tab(), "Advanced")
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -112,6 +115,33 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.codec_table)
         return w
 
+    def _build_appearance_tab(self) -> QWidget:
+        w = QWidget()
+        form = QFormLayout(w)
+        self.high_contrast_chk = QCheckBox("Use high-contrast theme")
+        self.high_contrast_chk.setChecked(self._settings.appearance.high_contrast)
+        hc_hint = QLabel(
+            "Pure-black background, white foreground/borders, yellow focus. "
+            "Use when running on the on-call NOC desk or under bright glare."
+        )
+        hc_hint.setStyleSheet("color: #7C8696;")
+        hc_hint.setWordWrap(True)
+
+        self.reduced_motion_chk = QCheckBox("Reduce motion (skip drawer slide and pulse)")
+        self.reduced_motion_chk.setChecked(self._settings.appearance.reduced_motion)
+        rm_hint = QLabel(
+            "Snaps the trace drawer open/closed and stops the LIVE pulse. "
+            "Honoured live; no app restart needed."
+        )
+        rm_hint.setStyleSheet("color: #7C8696;")
+        rm_hint.setWordWrap(True)
+
+        form.addRow(self.high_contrast_chk)
+        form.addRow(hc_hint)
+        form.addRow(self.reduced_motion_chk)
+        form.addRow(rm_hint)
+        return w
+
     def _build_advanced_tab(self) -> QWidget:
         w = QWidget()
         form = QFormLayout(w)
@@ -149,6 +179,8 @@ class SettingsDialog(QDialog):
         settings.audio.clock_rate = self.clock.value()
         settings.sip_port = self.sip_port.value()
         settings.log_level = self.log_level.value()
+        settings.appearance.high_contrast = self.high_contrast_chk.isChecked()
+        settings.appearance.reduced_motion = self.reduced_motion_chk.isChecked()
 
         new_priorities: dict[str, int] = {}
         codec_map: dict[str, int] = {}

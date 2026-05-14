@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import sys
-from importlib import resources
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -11,21 +10,12 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from noc_beam import __app_name__
+from noc_beam.config.store import load_settings
 from noc_beam.logging_setup import setup_logging
 from noc_beam.ui.main_window import MainWindow
+from noc_beam.ui.theme import apply_theme
 
 log = logging.getLogger(__name__)
-
-
-def _load_stylesheet() -> str:
-    try:
-        qss = resources.files("noc_beam.ui.resources").joinpath("dark.qss").read_text(
-            encoding="utf-8"
-        )
-        return qss
-    except Exception:
-        log.warning("Could not load stylesheet")
-        return ""
 
 
 def _load_icon() -> QIcon:
@@ -53,9 +43,12 @@ def run(argv: list[str]) -> int:
     app = QApplication(argv)
     app.setWindowIcon(_load_icon())
 
-    qss = _load_stylesheet()
-    if qss:
-        app.setStyleSheet(qss)
+    # Load persisted settings to pick the theme. MainWindow loads them
+    # again itself; this is the small price of theme being a process-
+    # wide concern (QApplication.setStyleSheet) while the rest of
+    # settings live on the window.
+    settings = load_settings()
+    apply_theme(app, settings.appearance.high_contrast)
 
     window = MainWindow()
     window.show()
