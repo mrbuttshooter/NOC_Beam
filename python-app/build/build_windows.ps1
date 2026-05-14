@@ -13,7 +13,8 @@ param(
     [switch]$Clean,
     [string]$PythonExe = "python",
     [string]$OpenSslTag = "openssl-3.0.13",
-    [string]$PjsipTag = "2.14.1"
+    [string]$PjsipTag = "2.14.1",
+    [string]$OpusTag = "v1.5.2"
 )
 
 $ErrorActionPreference = "Stop"
@@ -79,6 +80,28 @@ if (-not $SkipNativeBuild -and -not (Test-Path "$NativeOut\_pjsua2.pyd")) {
         Pop-Location
     }
 
+    # --- Opus ---
+    # PJSIP enables PJMEDIA_HAS_OPUS_CODEC in config_site.h below, so we
+    # have to ship Opus headers + static lib too. Without this the PJSIP
+    # build fails with `Cannot open include file: 'opus/opus.h'`.
+    if (-not (Test-Path "opus-install\lib\opus.lib")) {
+        Write-Header "Building Opus $OpusTag"
+        if (-not (Test-Path "opus")) {
+            git clone --depth 1 --branch $OpusTag https://github.com/xiph/opus.git
+        }
+        Push-Location opus
+        New-Item -ItemType Directory -Force -Path build-win | Out-Null
+        Push-Location build-win
+        cmake -G "Visual Studio 17 2022" -A x64 `
+              -DCMAKE_INSTALL_PREFIX="$ThirdParty\opus-install" `
+              -DBUILD_SHARED_LIBS=OFF `
+              -DOPUS_BUILD_TESTING=OFF `
+              -DOPUS_BUILD_PROGRAMS=OFF ..
+        cmake --build . --config Release --target install
+        Pop-Location
+        Pop-Location
+    }
+
     # --- PJSIP ---
     Write-Header "Building PJSIP $PjsipTag"
     if (-not (Test-Path "pjproject")) {
@@ -105,8 +128,30 @@ if (-not $SkipNativeBuild -and -not (Test-Path "$NativeOut\_pjsua2.pyd")) {
 
     $env:OPENSSL_DIR = "$ThirdParty\openssl-install"
     $env:BCG729_DIR  = "$ThirdParty\bcg729-install"
+    $env:OPUS_DIR    = "$ThirdParty\opus-install"
 
-    Invoke-VcCmd "set INCLUDE=$env:OPENSSL_DIR\include;$env:BCG729_DIR\include;%INCLUDE% && set LIB=$env:OPENSSL_DIR\lib;$env:BCG729_DIR\lib;%LIB% && msbuild pjproject-vs14.sln /p:Configuration=Release /p:Platform=x64 /m"
+    # MSBuild does not reliably propagate %INCLUDE%/%LIB% to the cl.exe
+    # processes it spawns for each .vcxproj. Inject the external paths via
+    # a Directory.Build.props at the pjproject root — MSBuild auto-imports
+    # it into every project under the tree.
+    $externIncludes = "$env:OPENSSL_DIR\include;$env:BCG729_DIR\include;$env:OPUS_DIR\include"
+    $externLibs     = "$env:OPENSSL_DIR\lib;$env:BCG729_DIR\lib;$env:OPUS_DIR\lib"
+    @"
+<Project>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$externIncludes;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$externLibs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+</Project>
+"@ | Set-Content -Encoding UTF8 -Path "Directory.Build.props"
+
+    # pjproject 2.14.1 vcxproj files target PlatformToolset v141 (VS2017) which
+    # isn't installed on most modern Windows hosts — override to v143 (VS2022).
+    Invoke-VcCmd "msbuild pjproject-vs14.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0 /m"
 
     Write-Header "Building pjsua2 Python extension"
     Push-Location pjsip-apps\src\swig
