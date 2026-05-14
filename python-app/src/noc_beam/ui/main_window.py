@@ -56,6 +56,7 @@ from noc_beam.sip.quality import CallQualitySampler
 from noc_beam.sip.registration_retry import RegistrationRetry
 from noc_beam.ui.account_dialog import AccountDialog
 from noc_beam.ui.accounts_view import AccountsView
+from noc_beam.ui.diagnostics_view import DiagnosticsView
 from noc_beam.ui.call_list_widget import CallListWidget
 from noc_beam.ui.call_widget import CallWidget
 from noc_beam.ui.dialpad import DialPad
@@ -155,7 +156,7 @@ class MainWindow(QMainWindow):
         self.settings_view = SettingsView(self.settings)
         self.settings_view.apply_requested.connect(self._on_settings_applied)
 
-        self.diagnostics_page = self._build_diagnostics_placeholder()
+        self.diagnostics_page = DiagnosticsView()
 
         self.stack = QStackedWidget(self)
         # Order MUST mirror Dest enum.
@@ -237,25 +238,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(right, 1)
         return page
 
-    def _build_diagnostics_placeholder(self) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(24, 24, 24, 24)
-        title = QLabel("Diagnostics")
-        title.setObjectName("ViewTitle")
-        body = QLabel(
-            "OPTIONS probe · ICE/STUN candidates · TLS cert chain · "
-            "REGISTER timing · RTCP-XR voice metrics.\n\n"
-            "Phase E populates this view."
-        )
-        body.setWordWrap(True)
-        body.setStyleSheet("color: #7C8696;")
-        layout.addWidget(title)
-        layout.addSpacing(8)
-        layout.addWidget(body)
-        layout.addStretch(1)
-        return page
-
     # ------------------------------------------------------------------
     def _connect_events(self) -> None:
         ev = sip_events()
@@ -290,6 +272,9 @@ class MainWindow(QMainWindow):
             if a.enabled
         ]
         self.title_bar.set_accounts(chip_items)
+        # Diagnostics surfaces per-account STUN / TLS rows -- keep them
+        # in sync so the view never lies about current config.
+        self.diagnostics_page.update_accounts(self.accounts)
 
     def _add_account_to_endpoint(self, cfg: AccountConfig) -> None:
         try:
@@ -459,6 +444,9 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     def _select_call(self, call_id: int) -> None:
         self._selected_call_id = call_id
+        # Route the selection to the RTCP-XR panel so its readout
+        # follows the focused call.
+        self.diagnostics_page.set_selected_call(call_id)
         rec = self.calls.get(call_id)
         if rec is None:
             self.call_widget.show_idle()
@@ -503,6 +491,7 @@ class MainWindow(QMainWindow):
     def _on_call_record_removed(self, call_id: int) -> None:
         if call_id == self._selected_call_id:
             self._selected_call_id = None
+            self.diagnostics_page.set_selected_call(None)
             next_active = self.calls.first_active()
             if next_active is not None:
                 self._select_call(next_active.call_id)
