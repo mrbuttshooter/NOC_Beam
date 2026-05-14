@@ -116,9 +116,19 @@ class CodecSettings:
 
 
 @dataclass
+class AppearanceSettings:
+    # Honoured by the trace-drawer slide and the rail's LIVE pulse.
+    # Maps to the design system's prefers-reduced-motion gate.
+    reduced_motion: bool = False
+    # Swap dark.qss <-> dark-hc.qss. Phase F wires the toggle.
+    high_contrast: bool = False
+
+
+@dataclass
 class GlobalSettings:
     audio: AudioSettings = field(default_factory=AudioSettings)
     codecs: CodecSettings = field(default_factory=CodecSettings)
+    appearance: AppearanceSettings = field(default_factory=AppearanceSettings)
     sip_port: int = 0               # 0 = ephemeral
     log_level: int = 4              # PJSIP log level 0..6
     user_agent: str = "NOC_Beam/0.1"
@@ -136,9 +146,11 @@ def load_settings() -> GlobalSettings:
         raw = json.loads(path.read_text(encoding="utf-8"))
         audio = AudioSettings(**raw.get("audio", {}))
         codecs = CodecSettings(**raw.get("codecs", {}))
+        appearance = AppearanceSettings(**raw.get("appearance", {}))
         return GlobalSettings(
             audio=audio,
             codecs=codecs,
+            appearance=appearance,
             sip_port=raw.get("sip_port", 0),
             log_level=raw.get("log_level", 4),
             user_agent=raw.get("user_agent", "NOC_Beam/0.1"),
@@ -154,6 +166,7 @@ def save_settings(settings: GlobalSettings) -> None:
     payload = {
         "audio": asdict(settings.audio),
         "codecs": asdict(settings.codecs),
+        "appearance": asdict(settings.appearance),
         "sip_port": settings.sip_port,
         "log_level": settings.log_level,
         "user_agent": settings.user_agent,

@@ -170,6 +170,7 @@ class MainWindow(QMainWindow):
         # while the user works in another destination.
         self.drawer_trace = TraceView()
         self.drawer = TraceDrawer(self.drawer_trace, self)
+        self.drawer.set_reduced_motion(self.settings.appearance.reduced_motion)
 
         # ---- Body row: rail | stack | drawer
         body = QWidget(self)
@@ -351,7 +352,24 @@ class MainWindow(QMainWindow):
             self.settings.audio.input_device,
             self.settings.audio.output_device,
         )
+        # Honour appearance toggles live so the user sees the effect
+        # without restarting -- motion stops/starts, theme swaps.
+        self.drawer.set_reduced_motion(self.settings.appearance.reduced_motion)
+        self._apply_theme()
         self.status.showMessage("Settings applied", 3000)
+
+    def _apply_theme(self) -> None:
+        """Swap dark.qss <-> dark-hc.qss based on the appearance.high_contrast
+        toggle. Live (no app restart needed)."""
+        from PySide6.QtWidgets import QApplication
+
+        try:
+            from noc_beam.ui.theme import apply_theme
+        except ImportError:
+            return  # Phase F adds the module; no-op until then.
+        app = QApplication.instance()
+        if app is not None:
+            apply_theme(app, self.settings.appearance.high_contrast)
 
     # ------------------------------------------------------------------
     # SIP event handlers
