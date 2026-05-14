@@ -38,6 +38,10 @@ class SipEvents(QObject):
     # timestamp, direction ("RX"/"TX"), peer, message
     sip_message = Signal(float, str, str, str)
 
+    # --- live media quality ---
+    # call_id, mos (1.0..4.5), packet_loss_pct, jitter_ms, rtt_ms
+    call_quality = Signal(int, float, float, float, float)
+
     # --- generic log line (pjsip log_cb) ---
     log_line = Signal(int, str)
 

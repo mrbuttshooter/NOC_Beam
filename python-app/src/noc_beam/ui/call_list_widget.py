@@ -53,8 +53,11 @@ class CallListWidget(QWidget):
         arrow = "←" if rec.direction == "in" else "→"
         peer = rec.remote_uri or "unknown"
         state = _STATE_PRETTY.get(rec.state, rec.state.value)
-        muted = " 🔇" if rec.muted else ""
-        return f"{arrow} {peer}   [{state}]{muted}"
+        muted = "  mute" if rec.muted else ""
+        # Always show which account the call came on — multi-account is core.
+        label = rec.account_label or rec.account_id
+        acc = f"  via {label}" if label else ""
+        return f"{arrow} {peer}   [{state}]{muted}{acc}"
 
     def _refresh(self, *_args: object) -> None:
         prev_selected = self.selected_call_id()

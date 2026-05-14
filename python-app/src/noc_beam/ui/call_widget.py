@@ -1,7 +1,9 @@
 """Active-call display + in-call controls."""
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+import time
+
+from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -32,6 +34,16 @@ class CallWidget(QWidget):
         self.state_label.setObjectName("CallState")
         self.codec_label = QLabel("")
         self.codec_label.setObjectName("CallCodec")
+        self.duration_label = QLabel("")
+        self.duration_label.setObjectName("CallDuration")
+        self.quality_label = QLabel("")
+        self.quality_label.setObjectName("CallQuality")
+
+        # Tick once a second while connected to update the duration counter.
+        self._connected_at: float | None = None
+        self._duration_timer = QTimer(self)
+        self._duration_timer.setInterval(1000)
+        self._duration_timer.timeout.connect(self._tick_duration)
 
         self.answer_btn = QPushButton("Answer")
         self.reject_btn = QPushButton("Reject")
@@ -53,10 +65,16 @@ class CallWidget(QWidget):
                   self.hold_btn, self.mute_btn, self.transfer_btn):
             btns.addWidget(b)
 
+        meta = QHBoxLayout()
+        meta.addWidget(self.codec_label)
+        meta.addWidget(self.duration_label)
+        meta.addWidget(self.quality_label)
+        meta.addStretch(1)
+
         layout = QVBoxLayout(self)
         layout.addWidget(self.peer_label)
         layout.addWidget(self.state_label)
-        layout.addWidget(self.codec_label)
+        layout.addLayout(meta)
         layout.addLayout(btns)
 
         self.show_idle()
@@ -66,6 +84,10 @@ class CallWidget(QWidget):
         self.peer_label.setText("Idle")
         self.state_label.setText("")
         self.codec_label.setText("")
+        self.duration_label.setText("")
+        self.quality_label.setText("")
+        self._connected_at = None
+        self._duration_timer.stop()
         for b in (self.answer_btn, self.reject_btn, self.hangup_btn,
                   self.hold_btn, self.mute_btn, self.transfer_btn):
             b.setEnabled(False)
@@ -104,6 +126,48 @@ class CallWidget(QWidget):
         # Transfer is only legal once the dialog is established.
         self.transfer_btn.setEnabled(in_call)
         self.hangup_btn.setEnabled(state_name != "DISCONNECTED")
+
+        # Drive the duration timer off the call state.
+        if state_name == "CONFIRMED":
+            if self._connected_at is None:
+                self._connected_at = time.time()
+            if not self._duration_timer.isActive():
+                self._duration_timer.start()
+            self._tick_duration()
+        elif state_name == "HELD":
+            # Keep the counter running but don't restart it.
+            self._tick_duration()
+        elif state_name == "DISCONNECTED":
+            self._duration_timer.stop()
+
+    def update_quality(self, mos: float, packet_loss_pct: float) -> None:
+        """Set the in-call quality indicator. mos in [1.0, 4.5]."""
+        bars = self._mos_to_bars(mos)
+        glyph = "▮" * bars + "▯" * (4 - bars)
+        loss = f"  ⌀ {packet_loss_pct:.1f}%" if packet_loss_pct > 0 else ""
+        self.quality_label.setText(f"{glyph}  MOS {mos:.1f}{loss}")
+
+    @staticmethod
+    def _mos_to_bars(mos: float) -> int:
+        # E-model R-factor → MOS rough buckets: <2.5 dire, <3.1 poor,
+        # <3.6 fair, <4.0 good, ≥4.0 excellent.
+        if mos < 2.5:
+            return 1
+        if mos < 3.1:
+            return 2
+        if mos < 3.6:
+            return 3
+        return 4
+
+    def _tick_duration(self) -> None:
+        if self._connected_at is None:
+            self.duration_label.setText("")
+            return
+        elapsed = int(time.time() - self._connected_at)
+        h, rem = divmod(elapsed, 3600)
+        m, s = divmod(rem, 60)
+        fmt = f"{h:d}:{m:02d}:{s:02d}" if h else f"{m:d}:{s:02d}"
+        self.duration_label.setText(fmt)
 
     def _on_hold_clicked(self) -> None:
         if self._on_hold:

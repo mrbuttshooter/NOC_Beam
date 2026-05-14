@@ -152,6 +152,27 @@ class SipEndpoint:
     # ------------------------------------------------------------------
     # Codecs
     # ------------------------------------------------------------------
+    @staticmethod
+    def _codec_match(key: str, codec_id: str) -> bool:
+        """Match a user-configured codec key against a pjsua2 codec id.
+
+        pjsua2 codec ids look like ``PCMA/8000/1`` or ``opus/48000/2``.
+        Keys may be either the bare name (``opus``) or name+clockrate
+        (``opus/48000``); channel count is ignored either way. Comparison
+        is case-insensitive on the name only.
+        """
+        kparts = key.lower().split("/")
+        cparts = codec_id.lower().split("/")
+        if not kparts or not cparts:
+            return False
+        if kparts[0] != cparts[0]:
+            return False
+        if len(kparts) == 1:
+            return True                       # name-only match — any clockrate
+        if len(cparts) < 2:
+            return False
+        return kparts[1] == cparts[1]         # name + clockrate must agree
+
     def _apply_codec_priorities(self, priorities: dict[str, int]) -> None:
         assert self._ep is not None
         try:
@@ -162,18 +183,25 @@ class SipEndpoint:
 
         for codec in codecs:
             codec_id = codec.codecId
-            # Find a configured priority by substring match
-            new_prio = None
+            # Prefer the most-specific key; "opus/48000" beats "opus".
+            best_key: str | None = None
+            best_prio: int | None = None
+            best_specificity = -1
             for key, prio in priorities.items():
-                if key.lower() in codec_id.lower():
-                    new_prio = prio
-                    break
-            if new_prio is not None:
-                try:
-                    self._ep.codecSetPriority(codec_id, new_prio)
-                    log.info("Codec %s priority=%d", codec_id, new_prio)
-                except Exception:
-                    log.exception("codecSetPriority failed for %s", codec_id)
+                if not self._codec_match(key, codec_id):
+                    continue
+                specificity = key.count("/")
+                if specificity > best_specificity:
+                    best_specificity = specificity
+                    best_key = key
+                    best_prio = prio
+            if best_prio is None:
+                continue
+            try:
+                self._ep.codecSetPriority(codec_id, best_prio)
+                log.info("Codec %s priority=%d (rule %s)", codec_id, best_prio, best_key)
+            except Exception:
+                log.exception("codecSetPriority failed for %s", codec_id)
 
     def list_codecs(self) -> list[tuple[str, int]]:
         if not self._started or self._ep is None:
@@ -279,14 +307,32 @@ class SipEndpoint:
         the call until they hang up; pjsua2 emits an NOTIFY-driven state
         change via onTransferState which we surface as a status update.
         """
-        if not target_uri.startswith(("sip:", "sips:", "tel:")):
-            acc = self._accounts.get(account_id) if account_id else None
-            if acc is None:
-                raise ValueError("Plain number requires an account context for the domain")
-            target_uri = f"sip:{target_uri}@{acc.cfg.domain}"
+        target_uri = self._normalize_uri(target_uri, account_id)
         prm = pj.CallOpParam(True)
         call.xfer(target_uri, prm)
         log.info("Blind transfer: %s", target_uri)
+
+    def attended_transfer(self, original: SipCall, consult: SipCall) -> None:
+        """REFER with Replaces — hand `original`'s remote over to `consult`'s.
+
+        Preconditions: both calls are CONFIRMED on this endpoint and on the
+        same account. pjsua2 builds the Replaces header automatically when
+        we call `xferReplaces(original, consult, ...)` — but the API is
+        ``original.xferReplaces(consult, prm)``: tell the *consult* peer to
+        REPLACE their dialog with the original one.
+        """
+        prm = pj.CallOpParam(True)
+        original.xferReplaces(consult, prm)
+        log.info("Attended transfer issued (call %s ⇋ call %s)",
+                 original.getInfo().id, consult.getInfo().id)
+
+    def _normalize_uri(self, target: str, account_id: str | None) -> str:
+        if target.startswith(("sip:", "sips:", "tel:")):
+            return target
+        acc = self._accounts.get(account_id) if account_id else None
+        if acc is None:
+            raise ValueError("Plain number requires an account context for the domain")
+        return f"sip:{target}@{acc.cfg.domain}"
 
     def set_call_mute(self, call: SipCall, muted: bool) -> None:
         """Stop/resume the capture device → call audio transmit.

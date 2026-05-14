@@ -28,7 +28,7 @@ def setup_logging(level: int = logging.INFO) -> None:
     )
 
     file_handler = logging.handlers.RotatingFileHandler(
-        log_path, maxBytes=2_000_000, backupCount=3, encoding="utf-8"
+        log_path, maxBytes=5_000_000, backupCount=5, encoding="utf-8"
     )
     file_handler.setFormatter(fmt)
 
@@ -39,5 +39,13 @@ def setup_logging(level: int = logging.INFO) -> None:
     root.setLevel(level)
     root.addHandler(file_handler)
     root.addHandler(stderr_handler)
+
+    # Quiet chatty third-party loggers.
+    for noisy in ("PySide6", "shiboken6", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    # The SIP wire trace is a separate, larger logger handled by trace_view;
+    # don't pipe it through the root file handler too — would balloon log_dir.
+    logging.getLogger("noc_beam.sip.trace.file").propagate = False
 
     logging.getLogger("noc_beam").info("Logging initialised → %s", log_path)

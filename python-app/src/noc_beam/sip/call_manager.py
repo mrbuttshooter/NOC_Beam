@@ -57,6 +57,7 @@ class CallRecord:
 
     call_id: int
     account_id: str
+    account_label: str = ""          # human label for the account_id
     remote_uri: str = ""
     direction: str = "out"          # "in" | "out"
     state: CallState = CallState.NULL

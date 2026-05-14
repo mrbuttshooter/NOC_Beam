@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QIcon
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from noc_beam import __app_name__, __version__
+from noc_beam.audio.headset import detect_headsets
 from noc_beam.audio.ringer import Ringer
 from noc_beam.config.history import CdrEntry, append_entry
 from noc_beam.config.store import (
@@ -37,6 +38,8 @@ from noc_beam.config.store import (
 from noc_beam.sip.call_manager import CallRecord, CallState, call_manager
 from noc_beam.sip.endpoint import SipEndpoint
 from noc_beam.sip.events import sip_events
+from noc_beam.sip.quality import CallQualitySampler
+from noc_beam.sip.registration_retry import RegistrationRetry
 from noc_beam.ui.account_dialog import AccountDialog
 from noc_beam.ui.call_list_widget import CallListWidget
 from noc_beam.ui.call_widget import CallWidget
@@ -44,6 +47,7 @@ from noc_beam.ui.dialpad import DialPad
 from noc_beam.ui.history_view import HistoryView
 from noc_beam.ui.settings_dialog import SettingsDialog
 from noc_beam.ui.trace_view import TraceView
+from noc_beam.ui.transfer_dialog import TransferDialog
 from noc_beam.ui.tray import Presence, TrayController
 
 log = logging.getLogger(__name__)
@@ -60,6 +64,10 @@ class MainWindow(QMainWindow):
         self.calls = call_manager()
         self.ringer = Ringer()
         self.tray = TrayController(self)
+        # Listens for non-2xx REGISTER replies and re-registers with backoff.
+        self.reg_retry = RegistrationRetry(self)
+        # Samples RTCP stats every 2 s and emits call_quality.
+        self.quality_sampler = CallQualitySampler(self.calls, self)
         # Selected call_id drives the in-call widget. None = no selection.
         self._selected_call_id: int | None = None
         # CDR snapshots captured the moment a call goes DISCONNECTED — the
@@ -67,9 +75,13 @@ class MainWindow(QMainWindow):
         self._last_snapshots: dict[int, CdrEntry] = {}
         # User-initiated quit vs window-close — only the former exits the app.
         self._really_quitting = False
+        # Pending attended transfers: consult_call_id -> original_call_id.
+        # When the consult call reaches CONFIRMED we offer to complete.
+        self._pending_attended: dict[int, int] = {}
 
         self._build_ui()
         self._connect_events()
+        self._install_shortcuts()
         self._refresh_account_list()
 
         # Defer SIP endpoint startup until the event loop is running so that
@@ -84,6 +96,12 @@ class MainWindow(QMainWindow):
             if acc.enabled:
                 self._add_account_to_endpoint(acc)
         self._refresh_account_list()
+        # One-shot headset advert — silent if hidapi isn't installed.
+        headsets = detect_headsets()
+        if headsets:
+            label = ", ".join(str(h) for h in headsets)
+            log.info("Headsets detected: %s", label)
+            self.status.showMessage(f"Headset: {label}", 8000)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -174,6 +192,7 @@ class MainWindow(QMainWindow):
         ev.call_incoming.connect(self._on_call_incoming)
         ev.call_state_changed.connect(self._on_call_state)
         ev.call_media_active.connect(self._on_call_media)
+        ev.call_quality.connect(self._on_call_quality)
         ev.call_ended.connect(self._on_call_ended)
 
         self.dialpad.call_requested.connect(self._on_call_requested)
@@ -297,11 +316,19 @@ class MainWindow(QMainWindow):
         label = acc.display_name if acc and acc.display_name else (acc.username if acc else account_id)
         self.status.showMessage(f"[{label}] registration: {code} {reason}", 5000)
 
+    def _account_label(self, account_id: str) -> str:
+        acc = next((a for a in self.accounts if a.id == account_id), None)
+        if acc is None:
+            return account_id
+        return acc.display_name or f"{acc.username}@{acc.domain}"
+
     def _on_call_incoming(self, account_id: str, call_id: int, remote: str, is_in: bool) -> None:
         # Register the incoming call with the manager so the list picks it up.
+        label = self._account_label(account_id)
         rec = CallRecord(
             call_id=call_id,
             account_id=account_id,
+            account_label=label,
             remote_uri=remote,
             direction="in",
             state=CallState.NULL,
@@ -313,7 +340,7 @@ class MainWindow(QMainWindow):
         self.right_tabs.setCurrentIndex(0)
         # Surface the call in the system tray when the window is hidden.
         if not self.isVisible() and self.tray.available:
-            self.tray.notify("Incoming call", remote or "Unknown caller")
+            self.tray.notify("Incoming call", f"{remote or 'Unknown caller'}  ·  via {label}")
         # Ring only when presence is Available — DND silences the ringer.
         if self.tray.presence == Presence.AVAILABLE:
             self.ringer.start()
@@ -339,6 +366,11 @@ class MainWindow(QMainWindow):
 
     def _on_call_media(self, call_id: int, codec: str, clock: int, channels: int) -> None:
         self.calls.update_media(call_id, codec, clock, channels)
+
+    def _on_call_quality(self, call_id: int, mos: float, loss: float,
+                        jitter_ms: float, rtt_ms: float) -> None:
+        if call_id == self._selected_call_id:
+            self.call_widget.update_quality(mos, loss)
 
     def _on_call_ended(self, call_id: int) -> None:
         # call_state_changed already fed DISCONNECTED into the manager; this is
@@ -390,6 +422,10 @@ class MainWindow(QMainWindow):
         rec = self.calls.get(call_id)
         if rec is None:
             return
+        # If this is a consult leg of an attended transfer and it just
+        # reached CONFIRMED, offer to complete.
+        if rec.state == CallState.CONFIRMED and call_id in self._pending_attended:
+            self._offer_complete_attended(call_id)
         # Snapshot for CDR right before the manager removes the record.
         if rec.state == CallState.DISCONNECTED:
             self._last_snapshots[call_id] = CdrEntry(
@@ -433,7 +469,11 @@ class MainWindow(QMainWindow):
             call = SipEndpoint.instance().make_call(acc_id, target)
             cid = call.getInfo().id
             self.calls.register(CallRecord(
-                call_id=cid, account_id=acc_id, remote_uri=target, direction="out"
+                call_id=cid,
+                account_id=acc_id,
+                account_label=self._account_label(acc_id),
+                remote_uri=target,
+                direction="out",
             ))
             self.calls.update_state(cid, CallState.CALLING)
             self._select_call(cid)
@@ -506,21 +546,92 @@ class MainWindow(QMainWindow):
         call = self._selected_pjsua_call()
         if call is None or self._selected_call_id is None:
             return
-        target, ok = QInputDialog.getText(
-            self,
-            "Blind transfer",
-            "Transfer to (number or SIP URI):",
-        )
-        if not ok or not target.strip():
+        dlg = TransferDialog(self)
+        if dlg.exec() != TransferDialog.Accepted:
+            return
+        target = dlg.result_target()
+        kind = dlg.result_kind()
+        if not target:
             return
         rec = self.calls.get(self._selected_call_id)
         acc_id = rec.account_id if rec else None
         try:
-            SipEndpoint.instance().blind_transfer(call, target.strip(), account_id=acc_id)
-            self.status.showMessage(f"Transferring to {target.strip()}…", 5000)
+            if kind == "blind":
+                SipEndpoint.instance().blind_transfer(call, target, account_id=acc_id)
+                self.status.showMessage(f"Transferring to {target}…", 5000)
+            else:
+                self._start_attended_transfer(call, target, acc_id)
         except Exception as e:
-            log.exception("blind transfer failed")
+            log.exception("transfer failed")
             QMessageBox.warning(self, "Transfer failed", str(e))
+
+    def _offer_complete_attended(self, consult_id: int) -> None:
+        original_id = self._pending_attended.pop(consult_id, None)
+        if original_id is None:
+            return
+        ep = SipEndpoint.instance()
+        original = ep.find_call(original_id)
+        consult = ep.find_call(consult_id)
+        if original is None or consult is None:
+            return
+        button = QMessageBox.question(
+            self,
+            "Complete transfer",
+            "Consult call connected. Complete the attended transfer now?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if button == QMessageBox.Yes:
+            try:
+                ep.attended_transfer(original, consult)
+                self.status.showMessage("Attended transfer issued.", 5000)
+            except Exception as e:
+                log.exception("attended_transfer failed")
+                QMessageBox.warning(self, "Transfer failed", str(e))
+        # If No, leave both calls live — user can hang up the consult and
+        # resume the original manually.
+
+    def _start_attended_transfer(self, original_call, target: str, acc_id: str | None) -> None:  # noqa: ANN001
+        """Hold the current call, dial the consult target, queue completion."""
+        if acc_id is None:
+            QMessageBox.warning(self, "Transfer", "Can't start attended transfer without an account.")
+            return
+        ep = SipEndpoint.instance()
+        # Step 1: hold the original.
+        original_id = original_call.getInfo().id
+        try:
+            ep.hold_call(original_call)
+            self.calls.update_state(original_id, CallState.HELD)
+        except Exception:
+            log.exception("Hold original failed")
+            QMessageBox.warning(self, "Transfer", "Couldn't hold the current call.")
+            return
+        # Step 2: dial the consult target.
+        try:
+            consult = ep.make_call(acc_id, target)
+            consult_id = consult.getInfo().id
+            self.calls.register(CallRecord(
+                call_id=consult_id,
+                account_id=acc_id,
+                account_label=self._account_label(acc_id),
+                remote_uri=target,
+                direction="out",
+            ))
+            self.calls.update_state(consult_id, CallState.CALLING)
+            self._pending_attended[consult_id] = original_id
+            self._select_call(consult_id)
+            self.status.showMessage(
+                f"Attended transfer: consulting {target}. Complete when they answer.", 8000,
+            )
+        except Exception as e:
+            log.exception("Consult call failed")
+            QMessageBox.warning(self, "Transfer", f"Consult call failed: {e}")
+            # Best-effort: bring the original back off hold.
+            try:
+                ep.resume_call(original_call)
+                self.calls.update_state(original_id, CallState.CONFIRMED)
+            except Exception:
+                log.exception("Resume after failed consult also failed")
 
     def _on_mute_toggled(self, _call_id: int, muted: bool) -> None:
         call = self._selected_pjsua_call()
@@ -545,6 +656,62 @@ class MainWindow(QMainWindow):
             SipEndpoint.instance().send_dtmf(call, digit, acc_cfg)
         except Exception:
             log.exception("send_dtmf failed")
+
+    # ------------------------------------------------------------------
+    # Keyboard shortcuts (in-window only — system-wide hotkeys land later)
+    # ------------------------------------------------------------------
+    def _install_shortcuts(self) -> None:
+        # Inspired by Eyebeam's classic bindings. Best-effort: shortcuts only
+        # fire while the window is focused; system-wide hooks come later.
+        bindings = (
+            ("Return",        self._on_shortcut_answer),    # Enter to answer/dial
+            ("Esc",           self._on_shortcut_hangup),    # Esc to hang up / reject
+            ("Ctrl+M",        self._on_shortcut_mute),
+            ("Ctrl+H",        self._on_shortcut_hold),
+            ("Ctrl+T",        self._on_shortcut_transfer),
+            ("Ctrl+D",        self._on_shortcut_dnd),
+        )
+        for seq, slot in bindings:
+            sc = QShortcut(QKeySequence(seq), self)
+            sc.setContext(Qt.WindowShortcut)
+            sc.activated.connect(slot)
+
+    def _on_shortcut_answer(self) -> None:
+        rec = self.calls.get(self._selected_call_id) if self._selected_call_id else None
+        if rec is not None and rec.state == CallState.INCOMING:
+            self._on_answer(rec.call_id)
+
+    def _on_shortcut_hangup(self) -> None:
+        if self._selected_call_id is not None:
+            self._on_hangup_requested()
+
+    def _on_shortcut_mute(self) -> None:
+        rec = self.calls.get(self._selected_call_id) if self._selected_call_id else None
+        if rec is None or rec.state not in (CallState.CONFIRMED, CallState.HELD):
+            return
+        # Flip the widget; its toggled signal does the work.
+        self.call_widget.mute_btn.toggle()
+
+    def _on_shortcut_hold(self) -> None:
+        rec = self.calls.get(self._selected_call_id) if self._selected_call_id else None
+        if rec is None:
+            return
+        if rec.state == CallState.CONFIRMED:
+            self._on_hold(rec.call_id)
+        elif rec.state == CallState.HELD:
+            self._on_resume(rec.call_id)
+
+    def _on_shortcut_transfer(self) -> None:
+        rec = self.calls.get(self._selected_call_id) if self._selected_call_id else None
+        if rec is not None and rec.state in (CallState.CONFIRMED, CallState.HELD):
+            self._on_transfer(rec.call_id)
+
+    def _on_shortcut_dnd(self) -> None:
+        from noc_beam.ui.tray import Presence
+
+        new = Presence.AVAILABLE if self.tray.presence == Presence.DND else Presence.DND
+        self.tray._set_presence(new)  # internal but stable
+        self.status.showMessage(f"Presence: {new.value}", 3000)
 
     # ------------------------------------------------------------------
     # Tray + lifecycle
