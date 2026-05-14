@@ -1,0 +1,144 @@
+/* NOC_Beam dark theme */
+
+QWidget {
+    background-color: #1E1F22;
+    color: #E4E6EB;
+    font-family: "Segoe UI", "Inter", sans-serif;
+    font-size: 10pt;
+}
+
+QMainWindow, QDialog {
+    background-color: #1B1C1F;
+}
+
+QToolBar {
+    background-color: #25272B;
+    border-bottom: 1px solid #303236;
+    padding: 4px;
+    spacing: 6px;
+}
+
+QToolBar QToolButton {
+    color: #E4E6EB;
+    background: transparent;
+    padding: 6px 12px;
+    border-radius: 4px;
+}
+QToolBar QToolButton:hover { background-color: #34373D; }
+QToolBar QToolButton:pressed { background-color: #3F434B; }
+
+QStatusBar {
+    background-color: #25272B;
+    color: #BFC4CC;
+    border-top: 1px solid #303236;
+}
+
+QPushButton {
+    background-color: #2B2D31;
+    color: #E4E6EB;
+    border: 1px solid #3B3E44;
+    border-radius: 6px;
+    padding: 6px 14px;
+    min-height: 28px;
+}
+QPushButton:hover { background-color: #34373D; border-color: #4A4F58; }
+QPushButton:pressed { background-color: #3F434B; }
+QPushButton:disabled { color: #6E727A; background-color: #25272B; }
+
+QPushButton#CallButton {
+    background-color: #2EA043;
+    border-color: #248A37;
+    color: white;
+    font-weight: 600;
+}
+QPushButton#CallButton:hover { background-color: #34B14A; }
+QPushButton#CallButton:disabled { background-color: #1F4A28; color: #98AFA1; }
+
+QPushButton#HangupButton {
+    background-color: #C9302C;
+    border-color: #A82622;
+    color: white;
+    font-weight: 600;
+}
+QPushButton#HangupButton:hover { background-color: #D43A36; }
+QPushButton#HangupButton:disabled { background-color: #4E2725; color: #B69997; }
+
+QPushButton#DialpadKey {
+    font-size: 16pt;
+    font-weight: 500;
+    background-color: #2B2D31;
+    border: 1px solid #3B3E44;
+}
+QPushButton#DialpadKey:hover { background-color: #34373D; }
+
+QLineEdit, QComboBox, QSpinBox, QTextEdit {
+    background-color: #16171A;
+    color: #E4E6EB;
+    border: 1px solid #3B3E44;
+    border-radius: 4px;
+    padding: 4px 8px;
+    selection-background-color: #3D6DDB;
+}
+QLineEdit#DialpadEntry { padding: 10px; font-weight: 500; }
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTextEdit:focus {
+    border-color: #5A85FF;
+}
+
+QListWidget, QTableWidget {
+    background-color: #16171A;
+    alternate-background-color: #1A1B1F;
+    border: 1px solid #303236;
+    border-radius: 4px;
+}
+QListWidget::item, QTableWidget::item { padding: 6px 8px; }
+QListWidget::item:selected, QTableWidget::item:selected {
+    background-color: #2F4979;
+    color: white;
+}
+
+QHeaderView::section {
+    background-color: #25272B;
+    color: #BFC4CC;
+    border: none;
+    border-right: 1px solid #303236;
+    padding: 6px 8px;
+    font-weight: 600;
+}
+
+QTabWidget::pane {
+    border: 1px solid #303236;
+    top: -1px;
+    background: #1B1C1F;
+}
+QTabBar::tab {
+    background: #25272B;
+    color: #BFC4CC;
+    padding: 8px 16px;
+    border: 1px solid #303236;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+QTabBar::tab:selected {
+    background: #1B1C1F;
+    color: #E4E6EB;
+    font-weight: 600;
+}
+
+QLabel#CallPeer { font-size: 16pt; font-weight: 600; padding: 8px 0; }
+QLabel#CallState { font-size: 11pt; color: #9AA0A6; }
+QLabel#CallCodec { font-size: 9pt; color: #6E727A; }
+
+QScrollBar:vertical {
+    background: #1B1C1F;
+    width: 12px;
+}
+QScrollBar::handle:vertical {
+    background: #3B3E44;
+    border-radius: 6px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover { background: #4A4F58; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+
+QMessageBox { background-color: #1E1F22; }

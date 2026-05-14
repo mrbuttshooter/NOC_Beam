@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.eggs/
+dist/
+build_output/
+
+# PyInstaller
+*.spec.bak
+build/work/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config / secrets
+*.local.json
+.env
+.env.*
+
+# Native build artifacts (PJSIP)
+third_party/pjproject/
+third_party/openssl/
+third_party/bcg729/
+*.lib
+*.pdb
+*.obj
+*.exp
+
+# Test/runtime logs
+*.log
+logs/

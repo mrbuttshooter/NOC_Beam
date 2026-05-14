@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "noc_beam"
+version = "0.1.0"
+description = "NOC_Beam - Professional SIP softphone for testing and daily use"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "Proprietary - Internal Use" }
+authors = [{ name = "NOC_Beam Team" }]
+
+dependencies = [
+    "PySide6>=6.6,<6.9",
+    "pywin32>=306; sys_platform == 'win32'",
+    "platformdirs>=4.0",
+]
+
+# pjsua2 is supplied either by the custom Windows build (see
+# build/build_pjsip_windows.md) which drops _pjsua2.pyd under
+# src/noc_beam/_native/pjsua2/, or by the optional 'sip' extra below for
+# experimentation on platforms where the upstream sdist can build.
+[project.optional-dependencies]
+sip = ["pjsua2"]
+dev = [
+    "pyinstaller>=6.4",
+    "pytest>=8.0",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.gui-scripts]
+NOC_Beam = "noc_beam.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["E501"]
