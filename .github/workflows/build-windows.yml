@@ -25,8 +25,9 @@ env:
   PYTHON_VERSION: "3.11"
   # ui-only: PyInstaller only, no PJSIP native build (~5 min, calls disabled).
   # full:    builds OpenSSL + BCG729 + PJSIP + pjsua2 binding (~45 min).
-  # Push events default to ui-only; switch via workflow_dispatch.
-  BUILD_MODE: ${{ github.event.inputs.build_mode || 'ui-only' }}
+  # TEMPORARILY defaulted to 'full' to validate the native pipeline end-to-end.
+  # Flip back to 'ui-only' once the full build is confirmed green.
+  BUILD_MODE: ${{ github.event.inputs.build_mode || 'full' }}
 
 jobs:
   # ------------------------------------------------------------------
@@ -128,11 +129,24 @@ jobs:
           }
           Push-Location openssl
           $prefix = (Resolve-Path ..).Path + "\openssl-install"
-          perl Configure VC-WIN64A no-shared no-tests --prefix=$prefix
-          nmake
-          if ($LASTEXITCODE -ne 0) { throw "OpenSSL nmake failed" }
-          nmake install_sw
-          if ($LASTEXITCODE -ne 0) { throw "OpenSSL install_sw failed" }
+          perl Configure VC-WIN64A no-shared no-tests --prefix=$prefix 2>&1 | Tee-Object -FilePath ..\openssl-configure.log
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::OpenSSL configure failed"
+            Get-Content ..\openssl-configure.log -Tail 80
+            throw "OpenSSL Configure failed"
+          }
+          nmake 2>&1 | Tee-Object -FilePath ..\openssl-nmake.log
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::group::openssl-nmake.log (last 200 lines)"
+            Get-Content ..\openssl-nmake.log -Tail 200
+            Write-Host "::endgroup::"
+            throw "OpenSSL nmake failed"
+          }
+          nmake install_sw 2>&1 | Tee-Object -FilePath ..\openssl-install.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content ..\openssl-install.log -Tail 80
+            throw "OpenSSL install_sw failed"
+          }
           Pop-Location
           Pop-Location
 
@@ -151,10 +165,16 @@ jobs:
           cmake -G "Visual Studio 17 2022" -A x64 `
                 -DCMAKE_INSTALL_PREFIX="$prefix" `
                 -DENABLE_SHARED=OFF `
-                -DENABLE_STATIC=ON ..
-          if ($LASTEXITCODE -ne 0) { throw "BCG729 cmake configure failed" }
-          cmake --build . --config Release --target install
-          if ($LASTEXITCODE -ne 0) { throw "BCG729 cmake build failed" }
+                -DENABLE_STATIC=ON .. 2>&1 | Tee-Object -FilePath ..\..\bcg729-configure.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content ..\..\bcg729-configure.log -Tail 80
+            throw "BCG729 cmake configure failed"
+          }
+          cmake --build . --config Release --target install 2>&1 | Tee-Object -FilePath ..\..\bcg729-build.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content ..\..\bcg729-build.log -Tail 200
+            throw "BCG729 cmake build failed"
+          }
           Pop-Location; Pop-Location; Pop-Location
 
       # ---------------- PJSIP ----------------
@@ -218,10 +238,23 @@ jobs:
       - name: Build pjsua2 Python extension
         if: env.BUILD_MODE == 'full' && steps.cache-native.outputs.cache-hit != 'true'
         run: |
+          # pjsip's swig python build invokes `python` from PATH; pin it
+          # to the setup-python interpreter so distutils picks up the
+          # matching include/lib paths.
+          $py = (Get-Command python).Source
+          Write-Host "Using Python: $py"
+          $env:PYTHON = $py
+
           Push-Location third_party\pjproject\pjsip-apps\src\swig
-          nmake python
-          if ($LASTEXITCODE -ne 0) { throw "swig python nmake failed" }
+          nmake python 2>&1 | Tee-Object -FilePath ..\..\..\..\swig-python.log
+          $swigExit = $LASTEXITCODE
           Pop-Location
+          if ($swigExit -ne 0) {
+            Write-Host "::group::swig-python.log (last 200 lines)"
+            Get-Content third_party\swig-python.log -Tail 200
+            Write-Host "::endgroup::"
+            throw "swig python nmake failed (exit $swigExit)"
+          }
 
           $dest = "src\noc_beam\_native\pjsua2"
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
@@ -276,5 +309,7 @@ jobs:
           name: build-logs
           path: |
             python-app/third_party/pjproject/build/output/**/*.log
-            python-app/third_party/openssl/*.log
+            python-app/third_party/*.log
+            python-app/third_party/pjproject/**/msbuild-*.log
+            python-app/msbuild-pjsip.log
           if-no-files-found: ignore
