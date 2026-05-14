@@ -1,13 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 72" width="360" height="72" fill="none">
-  
-  <g font-family="&#39;Cascadia Code&#39;, &#39;Cascadia Mono&#39;, ui-monospace, monospace" font-weight="600">
-    <text x="8" y="50" font-size="40" fill="#E6EDF3" letter-spacing="-1">NOC</text>
-    <text x="100" y="50" font-size="40" fill="#7FD3FF">_</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 72" width="280" height="72" fill="none">
+  <!-- NOC_Beam wordmark, "Hostname" variant.
+       Mono-only, fits a 44 px title bar at 18 px tall.
+       Use currentColor for the dark text so Qt can theme it. -->
+  <g font-family="'Cascadia Code', 'Cascadia Mono', ui-monospace, monospace" font-weight="500">
+    <text x="8" y="48" font-size="36" fill="currentColor" letter-spacing="-0.5">noc</text>
+    <text x="76" y="48" font-size="36" fill="#7FD3FF">_</text>
+    <text x="98" y="48" font-size="36" fill="currentColor" letter-spacing="-0.5">beam</text>
   </g>
-  <g font-family="&#39;Inter&#39;, &#39;Segoe UI&#39;, sans-serif" font-weight="600">
-    <text x="124" y="50" font-size="40" fill="#E6EDF3" letter-spacing="-0.5">Beam</text>
-  </g>
-  
-  <line x1="244" y1="32" x2="352" y2="32" stroke="#7FD3FF" stroke-width="2" stroke-linecap="round"></line>
-  <circle cx="352" cy="32" r="4" fill="#FFB86C"></circle>
+  <rect x="8" y="58" width="186" height="2" fill="#7FD3FF" opacity="0.35"/>
 </svg>
