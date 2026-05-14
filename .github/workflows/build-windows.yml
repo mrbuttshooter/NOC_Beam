@@ -177,8 +177,23 @@ jobs:
           $env:INCLUDE = "$env:OPENSSL_DIR\include;$env:BCG729_DIR\include;$env:INCLUDE"
           $env:LIB     = "$env:OPENSSL_DIR\lib;$env:BCG729_DIR\lib;$env:LIB"
 
-          msbuild pjproject-vs14.sln /p:Configuration=Release /p:Platform=x64 /m /v:m
-          if ($LASTEXITCODE -ne 0) { throw "PJSIP msbuild failed" }
+          # PJSIP 2.14.1 .vcxproj files target the v141 (VS2017) toolset which
+          # isn't installed on windows-latest — override to v143 (VS2022).
+          # Capture full build log so failures show real errors in the runner log.
+          msbuild pjproject-vs14.sln `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:PlatformToolset=v143 `
+            /p:WindowsTargetPlatformVersion=10.0 `
+            /m /v:m `
+            "/flp:logfile=msbuild-pjsip.log;verbosity=normal"
+          $pjsipExit = $LASTEXITCODE
+          if (Test-Path msbuild-pjsip.log) {
+            Write-Host "::group::msbuild-pjsip.log (last 200 lines)"
+            Get-Content msbuild-pjsip.log -Tail 200
+            Write-Host "::endgroup::"
+          }
+          if ($pjsipExit -ne 0) { throw "PJSIP msbuild failed (exit $pjsipExit)" }
 
           Pop-Location
           Pop-Location
