@@ -2,7 +2,38 @@
    Tokens lifted from the NOC_Beam Design System (May 2026).
    Palette: cool near-black 4-step ramp + Beam Cyan (RX) + Beam Amber (TX).
    Type:    Segoe UI / Inter for UI, Cascadia Mono for wire content.
-   No gradients. No shadows. Elevation by background step. */
+   No gradients. No shadows. Elevation by background step.
+
+   --------------------------------------------------------------------
+   Motion tokens (Python-consumed — Qt QSS cannot animate properties).
+   Mirror these in any QPropertyAnimation driving the UI. Cross-ref
+   tokens.css and motion.md.
+
+       DUR_INSTANT = 0     ms
+       DUR_FAST    = 80    ms   -- hover / press / focus
+       DUR_BASE    = 160   ms   -- tab + segment swaps, toggle
+       DUR_SLOW    = 240   ms   -- drawer slide, toast, modal
+       PULSE_LIVE  = 1400  ms   -- ● LIVE registration dot
+       PULSE_RING  = 1600  ms   -- incoming-call ring, x2 offset
+       EASE_OUT    = QEasingCurve BezierSpline (0.2, 0) (0, 1)  house curve
+       EASE_IN     = QEasingCurve BezierSpline (0.4, 0) (1, 1)
+
+   All looping animations honour a "reduced motion" toggle in Settings.
+
+   --------------------------------------------------------------------
+   Layout dimensions (Python-consumed). Match the v2 design canon.
+
+       TITLE_BAR_H      = 44 px
+       RAIL_W           = 64 px
+       DRAWER_W         = 360 px
+       TRAY_ICON_PX     = 16     -- sets the .ico floor
+       WORDMARK_PX      = 18     -- in the 44 px title bar
+
+   --------------------------------------------------------------------
+   High-contrast: a sibling `dark-hc.qss` mirrors this file with the
+   .hc palette from tokens.css. Settings → Appearance → High contrast
+   swaps the two via QApplication.setStyleSheet().
+*/
 
 
 /* ------------------------------------------------------------------

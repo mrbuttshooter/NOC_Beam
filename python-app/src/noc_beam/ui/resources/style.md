@@ -2,7 +2,9 @@
 
 Single source of truth for UI choices in this repo. Tokens live in
 `tokens.css` (CSS variables, for any web/HTML surface), and are mirrored
-into the Qt stylesheet `dark.qss`. Keep the two in sync.
+into the Qt stylesheet `dark.qss`. A sibling `dark-hc.qss` carries the
+high-contrast variant (toggled from Settings → Appearance → High
+contrast). Keep all three in sync.
 
 ## Colors
 
@@ -45,21 +47,53 @@ neutral.
 are small: 2px on most controls, 4px on dialpad keys + cards, 6px on
 dialogs + the dialpad entry. Nothing pill-shaped.
 
-## Layout rules
+## Layout rules (v2 composition)
 
-- Toolbar is fixed top, non-movable.
-- Status bar is fixed bottom, always visible — carries SIP registration
-  and endpoint state. It's chrome, not decoration.
-- Splitter is horizontal: left rail ≤ 360 px, right pane fills.
-- No floating panels, no overlays, no modal traffic outside actual
-  dialogs.
+The window is `title bar + icon rail + content + optional drawer`.
+v1's `QSplitter` + bottom `QStatusBar` are gone — rail status pill +
+per-view inline state replace them.
+
+| Region        | Dim           | Notes                                                       |
+|---------------|---------------|-------------------------------------------------------------|
+| Title bar     | 44 px tall    | wordmark (18 px) · active-account chip · ⌘K dial · controls |
+| Icon rail     | 64 px wide    | fixed; 5 destinations + status pill at the foot             |
+| Content       | flex          | `QStackedWidget` driven by the rail                         |
+| Trace drawer  | 360 px wide   | right side; slides in/out via `QPropertyAnimation`          |
+
+Rail destinations (NOC scope — Contacts, Voicemail, Conference are
+deliberately excluded; see `NOC_Beam/INTEGRATION.md`):
+
+1. Calls (default)
+2. Trace
+3. Accounts
+4. History
+5. Settings
+6. (planned) Diagnostics — OPTIONS probe · ICE/STUN · TLS · REGISTER
+   timing · RTCP-XR
+
+No floating panels, no overlays, no modal traffic outside actual
+dialogs. The drawer is the only resizable region.
 
 ## Motion
 
-- 80 ms ease-out on hover/press background swaps.
-- Pulse on the registration dot while `TRYING` (1.6 s, opacity 1 ↔ 0.35).
-- 1 px solid `#7FD3FF` focus outline at 2 px offset. Visible, not glowing.
-- Otherwise: no bounces, no springs, no parallax.
+Match `colors_and_type.css` motion tokens. Qt QSS cannot animate, so
+all motion is driven from Python via `QPropertyAnimation`; treat the
+durations + curves below as constants the views consume.
+
+| Token         | Value                            | Where it goes                            |
+|---------------|----------------------------------|------------------------------------------|
+| `DUR_FAST`    | 80 ms                            | hover / press / focus background swap    |
+| `DUR_BASE`    | 160 ms                           | tab + segment swaps, toggle knob         |
+| `DUR_SLOW`    | 240 ms                           | drawer slide, toast slide-in, modal in   |
+| `PULSE_LIVE`  | 1400 ms (loop, 1 ↔ 0.35)         | ● LIVE registration dot                  |
+| `PULSE_RING`  | 1600 ms (loop, 2× offset)        | incoming-call ring                       |
+| `EASE_OUT`    | `cubic-bezier(0.2, 0, 0, 1)`     | house curve — every reveal               |
+| `EASE_IN`     | `cubic-bezier(0.4, 0, 1, 1)`     | departures only                          |
+
+Loops honour a "reduced motion" toggle in Settings (Qt has no direct
+equivalent of `prefers-reduced-motion`). Focus is a 1 px solid
+`#7FD3FF` outline at 2 px offset — visible, never glowing. No bounces,
+no springs, no parallax. The SIP trace itself never animates.
 
 ## Content rules — non-negotiable
 
@@ -87,7 +121,12 @@ trace pane (`→` outgoing, `←` incoming).
 
 ## Token sources
 
-- `tokens.css` — CSS variables for any HTML/preview surface
-- `dark.qss`   — Qt stylesheet derived from the same tokens
+- `tokens.css`   — CSS variables for any HTML/preview surface; includes
+  `@media (forced-colors: active)` and an explicit `html.hc` block
+- `dark.qss`     — Qt stylesheet derived from the same tokens; carries
+  motion + layout constants in its header for Python to consume
+- `dark-hc.qss`  — high-contrast Qt stylesheet (pure black bg, white
+  fg/borders, yellow focus); swap-in target for Settings →
+  Appearance → High contrast
 - Brand colors `#7FD3FF` / `#FFB86C` originate in `sip/trace.py`'s
   direction indicators; the rest of the system is built around them.

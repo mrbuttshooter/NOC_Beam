@@ -1,0 +1,332 @@
+/* NOC_Beam — high-contrast dark theme.
+   Sibling of dark.qss. Toggled from Settings -> Appearance -> High contrast.
+   Mirrors the html.hc palette in tokens.css.
+
+   Rules of the room:
+     - Pure black backgrounds, pure white foreground / borders.
+     - Yellow focus ring (#FFFF00) so it never collides with --beam-cyan.
+     - Saturated cyan + amber are bumped to peak chroma so they read
+       on a true-black surface.
+     - No tints, no rgba(), no shadows, no gradients. Solid fills only.
+     - Layout dims and motion tokens are unchanged from dark.qss; do
+       not duplicate them here. */
+
+
+/* ------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------ */
+QWidget {
+    background-color: #000000;
+    color:            #FFFFFF;
+    font-family:      "Segoe UI", "Inter", sans-serif;
+    font-size:        13px;
+    selection-background-color: #00E5FF;
+    selection-color:  #000000;
+}
+
+QMainWindow, QDialog {
+    background-color: #000000;
+}
+
+
+/* ------------------------------------------------------------------
+   Toolbar
+   ------------------------------------------------------------------ */
+QToolBar {
+    background-color: #000000;
+    border-bottom: 1px solid #FFFFFF;
+    padding: 4px 6px;
+    spacing: 2px;
+}
+QToolBar QToolButton {
+    color: #FFFFFF;
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 5px 10px;
+    border-radius: 2px;
+}
+QToolBar QToolButton:hover {
+    background-color: #1A1A1A;
+    border-color: #FFFFFF;
+}
+QToolBar QToolButton:pressed { background-color: #2E2E2E; }
+QToolBar::separator { background: #FFFFFF; width: 1px; margin: 4px 4px; }
+
+
+/* ------------------------------------------------------------------
+   Status bar
+   ------------------------------------------------------------------ */
+QStatusBar {
+    background-color: #000000;
+    color: #FFFFFF;
+    border-top: 1px solid #FFFFFF;
+    font-size: 11px;
+}
+QStatusBar::item { border: none; }
+
+
+/* ------------------------------------------------------------------
+   Buttons
+   ------------------------------------------------------------------ */
+QPushButton {
+    background-color: #000000;
+    color: #FFFFFF;
+    border: 1px solid #FFFFFF;
+    border-radius: 2px;
+    padding: 7px 14px;
+    min-height: 28px;
+}
+QPushButton:hover {
+    background-color: #1A1A1A;
+    border-color: #FFFFFF;
+}
+QPushButton:pressed { background-color: #2E2E2E; }
+QPushButton:disabled { color: #888888; background-color: #000000; border-color: #888888; }
+QPushButton:focus {
+    border-color: #FFFF00;
+    outline: none;
+}
+
+/* Call / Hang up — semantic success/danger fills, peak chroma */
+QPushButton#CallButton {
+    background-color: #00FF7F;
+    border-color: #00FF7F;
+    color: #000000;
+    font-weight: 600;
+}
+QPushButton#CallButton:hover { background-color: #80FFBF; border-color: #80FFBF; }
+QPushButton#CallButton:disabled { background-color: #000000; color: #888888; border-color: #888888; }
+
+QPushButton#HangupButton {
+    background-color: #FF6B6B;
+    border-color: #FF6B6B;
+    color: #000000;
+    font-weight: 600;
+}
+QPushButton#HangupButton:hover { background-color: #FFB0B0; border-color: #FFB0B0; }
+QPushButton#HangupButton:disabled { background-color: #000000; color: #888888; border-color: #888888; }
+
+/* Dialpad keys */
+QPushButton#DialpadKey {
+    font-size: 18px;
+    font-weight: 500;
+    background-color: #000000;
+    border: 1px solid #FFFFFF;
+    border-radius: 4px;
+    min-height: 38px;
+}
+QPushButton#DialpadKey:hover { background-color: #1A1A1A; }
+QPushButton#DialpadKey:pressed { background-color: #2E2E2E; }
+
+
+/* ------------------------------------------------------------------
+   Inputs
+   ------------------------------------------------------------------ */
+QLineEdit, QComboBox, QSpinBox, QTextEdit, QPlainTextEdit {
+    background-color: #000000;
+    color: #FFFFFF;
+    border: 1px solid #FFFFFF;
+    border-radius: 2px;
+    padding: 5px 10px;
+    min-height: 26px;
+}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    border-color: #FFFF00;
+}
+QLineEdit:disabled, QComboBox:disabled { color: #888888; background-color: #000000; }
+
+QLineEdit#DialpadEntry {
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 18px;
+    text-align: center;
+    padding: 10px;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 18px;
+}
+QComboBox QAbstractItemView {
+    background: #000000;
+    border: 1px solid #FFFFFF;
+    color: #FFFFFF;
+    selection-background-color: #1A1A1A;
+    selection-color: #00E5FF;
+}
+
+
+/* ------------------------------------------------------------------
+   Lists & tables
+   ------------------------------------------------------------------ */
+QListWidget, QTableWidget, QTableView {
+    background-color: #000000;
+    alternate-background-color: #1A1A1A;
+    border: 1px solid #FFFFFF;
+    border-radius: 2px;
+    gridline-color: #FFFFFF;
+    outline: 0;
+}
+QListWidget::item, QTableView::item {
+    padding: 6px 10px;
+    border: none;
+}
+QListWidget::item:hover, QTableView::item:hover { background-color: #1A1A1A; }
+QListWidget::item:selected, QTableView::item:selected {
+    background-color: #1A1A1A;
+    color: #FFFFFF;
+    border-left: 2px solid #00E5FF;
+}
+
+QListWidget#AccountList { border-radius: 0; border: none; }
+QListWidget#AccountList::item {
+    padding: 8px 14px;
+    border-bottom: 1px solid #FFFFFF;
+}
+
+QListWidget#CallList {
+    border-radius: 2px;
+    background-color: #000000;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 12px;
+}
+QListWidget#CallList::item { padding: 5px 10px; }
+
+QHeaderView::section {
+    background-color: #000000;
+    color: #FFFFFF;
+    border: none;
+    border-right: 1px solid #FFFFFF;
+    border-bottom: 1px solid #FFFFFF;
+    padding: 6px 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10px;
+}
+
+
+/* ------------------------------------------------------------------
+   Tabs
+   ------------------------------------------------------------------ */
+QTabWidget::pane {
+    border: 1px solid #FFFFFF;
+    background: #000000;
+    top: -1px;
+}
+QTabBar { background: #000000; }
+QTabBar::tab {
+    background: transparent;
+    color: #FFFFFF;
+    padding: 8px 16px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-right: 2px;
+}
+QTabBar::tab:hover { color: #00E5FF; }
+QTabBar::tab:selected {
+    color: #FFFFFF;
+    border-bottom-color: #00E5FF;
+    background: #000000;
+}
+
+
+/* ------------------------------------------------------------------
+   Call widget
+   ------------------------------------------------------------------ */
+QLabel#CallPeer {
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 20px;
+    font-weight: 500;
+    color: #FFFFFF;
+    padding: 8px 0;
+}
+QLabel#CallState {
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 11px;
+    color: #FFFFFF;
+    padding: 2px 0;
+}
+QLabel#CallCodec {
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 11px;
+    color: #C8C8C8;
+}
+
+
+/* ------------------------------------------------------------------
+   Scrollbar
+   ------------------------------------------------------------------ */
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #FFFFFF;
+    border-radius: 5px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover { background: #00E5FF; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: #FFFFFF;
+    border-radius: 5px;
+    min-width: 30px;
+}
+QScrollBar::handle:horizontal:hover { background: #00E5FF; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+
+
+/* ------------------------------------------------------------------
+   Checkboxes
+   ------------------------------------------------------------------ */
+QCheckBox { spacing: 8px; color: #FFFFFF; }
+QCheckBox::indicator {
+    width: 14px;
+    height: 14px;
+    border: 1px solid #FFFFFF;
+    border-radius: 2px;
+    background: #000000;
+}
+QCheckBox::indicator:hover { border-color: #FFFF00; }
+QCheckBox::indicator:checked {
+    background: #00E5FF;
+    border-color: #00E5FF;
+    image: none;
+}
+
+
+/* ------------------------------------------------------------------
+   Splitter handle
+   ------------------------------------------------------------------ */
+QSplitter::handle { background: #FFFFFF; }
+QSplitter::handle:horizontal { width: 1px; }
+QSplitter::handle:vertical   { height: 1px; }
+
+
+/* ------------------------------------------------------------------
+   Dialogs / message boxes
+   ------------------------------------------------------------------ */
+QMessageBox { background-color: #000000; }
+QMessageBox QLabel { color: #FFFFFF; }
+
+
+/* ------------------------------------------------------------------
+   Tooltip
+   ------------------------------------------------------------------ */
+QToolTip {
+    background: #000000;
+    color: #FFFFFF;
+    border: 1px solid #FFFFFF;
+    padding: 4px 8px;
+    border-radius: 2px;
+}
