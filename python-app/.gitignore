@@ -8,9 +8,10 @@ venv/
 dist/
 build_output/
 
-# PyInstaller
+# PyInstaller (intermediate work dirs named after the spec)
 *.spec.bak
 build/work/
+build/noc_beam/
 
 # IDE
 .vscode/
