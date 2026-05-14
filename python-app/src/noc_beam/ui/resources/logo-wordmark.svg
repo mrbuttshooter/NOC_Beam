@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 72" width="360" height="72" fill="none">
+  
+  <g font-family="&#39;Cascadia Code&#39;, &#39;Cascadia Mono&#39;, ui-monospace, monospace" font-weight="600">
+    <text x="8" y="50" font-size="40" fill="#E6EDF3" letter-spacing="-1">NOC</text>
+    <text x="100" y="50" font-size="40" fill="#7FD3FF">_</text>
+  </g>
+  <g font-family="&#39;Inter&#39;, &#39;Segoe UI&#39;, sans-serif" font-weight="600">
+    <text x="124" y="50" font-size="40" fill="#E6EDF3" letter-spacing="-0.5">Beam</text>
+  </g>
+  
+  <line x1="244" y1="32" x2="352" y2="32" stroke="#7FD3FF" stroke-width="2" stroke-linecap="round"></line>
+  <circle cx="352" cy="32" r="4" fill="#FFB86C"></circle>
+</svg>
