@@ -10,11 +10,23 @@ on:
       - 'python-app/**'
       - '.github/workflows/build-windows.yml'
   workflow_dispatch:
+    inputs:
+      build_mode:
+        description: 'Build mode'
+        type: choice
+        options:
+          - ui-only
+          - full
+        default: ui-only
 
 env:
   PJSIP_TAG: "2.14.1"
   OPENSSL_TAG: "openssl-3.0.13"
   PYTHON_VERSION: "3.11"
+  # ui-only: PyInstaller only, no PJSIP native build (~5 min, calls disabled).
+  # full:    builds OpenSSL + BCG729 + PJSIP + pjsua2 binding (~45 min).
+  # Push events default to ui-only; switch via workflow_dispatch.
+  BUILD_MODE: ${{ github.event.inputs.build_mode || 'ui-only' }}
 
 jobs:
   # ------------------------------------------------------------------
@@ -61,11 +73,13 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Enable MSVC x64 environment
+        if: env.BUILD_MODE == 'full'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
       - name: Install build tools (NASM, SWIG, Strawberry Perl)
+        if: env.BUILD_MODE == 'full'
         shell: pwsh
         run: |
           choco install -y --no-progress nasm swig strawberryperl
@@ -77,6 +91,7 @@ jobs:
           }
 
       - name: Verify toolchain
+        if: env.BUILD_MODE == 'full'
         run: |
           Write-Host "=== cl.exe ==="
           cl 2>&1 | Select-Object -First 1
@@ -92,6 +107,7 @@ jobs:
           cmake --version | Select-Object -First 1
 
       - name: Cache native dependencies
+        if: env.BUILD_MODE == 'full'
         id: cache-native
         uses: actions/cache@v4
         with:
@@ -103,7 +119,7 @@ jobs:
 
       # ---------------- OpenSSL ----------------
       - name: Build OpenSSL
-        if: steps.cache-native.outputs.cache-hit != 'true'
+        if: env.BUILD_MODE == 'full' && steps.cache-native.outputs.cache-hit != 'true'
         run: |
           New-Item -ItemType Directory -Force -Path third_party | Out-Null
           Push-Location third_party
@@ -122,7 +138,7 @@ jobs:
 
       # ---------------- BCG729 ----------------
       - name: Build BCG729 (G.729 codec)
-        if: steps.cache-native.outputs.cache-hit != 'true'
+        if: env.BUILD_MODE == 'full' && steps.cache-native.outputs.cache-hit != 'true'
         run: |
           Push-Location third_party
           if (-not (Test-Path bcg729)) {
@@ -143,7 +159,7 @@ jobs:
 
       # ---------------- PJSIP ----------------
       - name: Build PJSIP
-        if: steps.cache-native.outputs.cache-hit != 'true'
+        if: env.BUILD_MODE == 'full' && steps.cache-native.outputs.cache-hit != 'true'
         run: |
           Push-Location third_party
           if (-not (Test-Path pjproject)) {
@@ -200,7 +216,7 @@ jobs:
 
       # ---------------- pjsua2 Python extension ----------------
       - name: Build pjsua2 Python extension
-        if: steps.cache-native.outputs.cache-hit != 'true'
+        if: env.BUILD_MODE == 'full' && steps.cache-native.outputs.cache-hit != 'true'
         run: |
           Push-Location third_party\pjproject\pjsip-apps\src\swig
           nmake python
@@ -224,8 +240,16 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Sanity check pjsua2 import
+        if: env.BUILD_MODE == 'full'
         run: |
           python -c "from noc_beam._native.pjsua2 import pjsua2 as pj; ep = pj.Endpoint(); ep.libCreate(); print('PJSIP version:', ep.libVersion().full); ep.libDestroy()"
+
+      - name: Confirm UI-only stub loads
+        if: env.BUILD_MODE != 'full'
+        run: |
+          python -c "from noc_beam.sip._pjsua2_loader import PJSUA2_AVAILABLE; print('pjsua2 available:', PJSUA2_AVAILABLE)"
+          Write-Host "Note: this is a UI-only build. The app launches but calls are disabled."
+          Write-Host "Re-run the workflow via workflow_dispatch with build_mode=full to get native PJSIP."
 
       - name: Build EXE with PyInstaller
         run: |
@@ -240,7 +264,7 @@ jobs:
       - name: Upload NOC_Beam.exe
         uses: actions/upload-artifact@v4
         with:
-          name: NOC_Beam-windows-x64
+          name: NOC_Beam-windows-x64-${{ env.BUILD_MODE }}
           path: python-app/dist/NOC_Beam.exe
           retention-days: 30
           if-no-files-found: error
