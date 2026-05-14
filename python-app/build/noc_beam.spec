@@ -9,8 +9,12 @@ from PyInstaller.utils.hooks import collect_submodules, collect_dynamic_libs, co
 
 REPO_ROOT = Path(SPECPATH).parent.resolve()
 SRC = REPO_ROOT / "src"
-ASSETS = REPO_ROOT / "assets"
-ICON = ASSETS / "icon.ico"
+RESOURCES = SRC / "noc_beam" / "ui" / "resources"
+# Icon now lives next to the other UI resources (Phase B). Fall back
+# to the legacy assets/ path for older trees.
+ICON = RESOURCES / "icon.ico"
+if not ICON.exists():
+    ICON = REPO_ROOT / "assets" / "icon.ico"
 
 # Bundle the custom pjsua2 native extension if present
 native_pkg = SRC / "noc_beam" / "_native" / "pjsua2"
@@ -25,10 +29,15 @@ if native_pkg.exists():
     for f in native_pkg.glob("*.py"):
         datas.append((str(f), "noc_beam/_native/pjsua2"))
 
-# QSS theme + icon
-datas.append((str(SRC / "noc_beam" / "ui" / "resources" / "dark.qss"),
-              "noc_beam/ui/resources"))
-if ICON.exists():
+# Bundle every UI resource alongside the package -- both stylesheets
+# (so the high-contrast toggle works), tokens, the wordmark + mark
+# SVGs, and the .ico itself for QIcon lookup. Anything new dropped
+# into ui/resources/ is automatically included.
+for f in RESOURCES.iterdir():
+    if f.is_file():
+        datas.append((str(f), "noc_beam/ui/resources"))
+
+if ICON.exists() and not any(d[0] == str(ICON) for d in datas):
     datas.append((str(ICON), "assets"))
 
 # PySide6 plugins are picked up automatically via PyInstaller's PySide6 hook.
