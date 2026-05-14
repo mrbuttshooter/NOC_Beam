@@ -115,8 +115,9 @@ jobs:
           path: |
             python-app/third_party/openssl-install
             python-app/third_party/bcg729-install
+            python-app/third_party/opus-install
             python-app/src/noc_beam/_native
-          key: native-${{ runner.os }}-${{ env.PJSIP_TAG }}-${{ env.OPENSSL_TAG }}-v3-${{ hashFiles('python-app/build/build_pjsip_windows.md') }}
+          key: native-${{ runner.os }}-${{ env.PJSIP_TAG }}-${{ env.OPENSSL_TAG }}-v4-${{ hashFiles('python-app/build/build_pjsip_windows.md') }}
 
       # ---------------- OpenSSL ----------------
       - name: Build OpenSSL
@@ -177,6 +178,34 @@ jobs:
           }
           Pop-Location; Pop-Location; Pop-Location
 
+      # ---------------- Opus ----------------
+      - name: Build Opus
+        if: env.BUILD_MODE == 'full' && steps.cache-native.outputs.cache-hit != 'true'
+        run: |
+          Push-Location third_party
+          if (-not (Test-Path opus)) {
+            git clone --depth 1 --branch v1.5.2 https://github.com/xiph/opus.git
+          }
+          Push-Location opus
+          New-Item -ItemType Directory -Force -Path build-win | Out-Null
+          Push-Location build-win
+          $prefix = (Resolve-Path ..\..).Path + "\opus-install"
+          cmake -G "Visual Studio 17 2022" -A x64 `
+                -DCMAKE_INSTALL_PREFIX="$prefix" `
+                -DBUILD_SHARED_LIBS=OFF `
+                -DOPUS_BUILD_TESTING=OFF `
+                -DOPUS_BUILD_PROGRAMS=OFF .. 2>&1 | Tee-Object -FilePath ..\..\opus-configure.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content ..\..\opus-configure.log -Tail 80
+            throw "Opus cmake configure failed"
+          }
+          cmake --build . --config Release --target install 2>&1 | Tee-Object -FilePath ..\..\opus-build.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content ..\..\opus-build.log -Tail 200
+            throw "Opus cmake build failed"
+          }
+          Pop-Location; Pop-Location; Pop-Location
+
       # ---------------- PJSIP ----------------
       - name: Build PJSIP
         if: env.BUILD_MODE == 'full' && steps.cache-native.outputs.cache-hit != 'true'
@@ -207,11 +236,39 @@ jobs:
 
           $env:OPENSSL_DIR = (Resolve-Path ..\openssl-install).Path
           $env:BCG729_DIR  = (Resolve-Path ..\bcg729-install).Path
+          $env:OPUS_DIR    = (Resolve-Path ..\opus-install).Path
           Write-Host "OPENSSL_DIR=$env:OPENSSL_DIR"
           Write-Host "BCG729_DIR =$env:BCG729_DIR"
+          Write-Host "OPUS_DIR   =$env:OPUS_DIR"
 
-          $env:INCLUDE = "$env:OPENSSL_DIR\include;$env:BCG729_DIR\include;$env:INCLUDE"
-          $env:LIB     = "$env:OPENSSL_DIR\lib;$env:BCG729_DIR\lib;$env:LIB"
+          $env:INCLUDE = "$env:OPENSSL_DIR\include;$env:BCG729_DIR\include;$env:OPUS_DIR\include;$env:INCLUDE"
+          $env:LIB     = "$env:OPENSSL_DIR\lib;$env:BCG729_DIR\lib;$env:OPUS_DIR\lib;$env:LIB"
+
+          # MSBuild does not consistently propagate %INCLUDE%/%LIB% to cl.exe
+          # for each .vcxproj — the previous run failed with five C1083s on
+          # OpenSSL/BCG729 headers even though both were installed. Inject the
+          # external paths via a Directory.Build.props at the pjproject root;
+          # MSBuild auto-imports it into every .vcxproj under that tree.
+          # NOTE: build the XML as a string array (here-strings can't live in
+          # YAML run: | blocks — the closing "@ must start at column 1).
+          $externIncludes = "$env:OPENSSL_DIR\include;$env:BCG729_DIR\include;$env:OPUS_DIR\include"
+          $externLibs     = "$env:OPENSSL_DIR\lib;$env:BCG729_DIR\lib;$env:OPUS_DIR\lib"
+          $propsLines = @(
+            '<Project>',
+            '  <ItemDefinitionGroup>',
+            '    <ClCompile>',
+            "      <AdditionalIncludeDirectories>$externIncludes;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>",
+            '    </ClCompile>',
+            '    <Link>',
+            "      <AdditionalLibraryDirectories>$externLibs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>",
+            '    </Link>',
+            '  </ItemDefinitionGroup>',
+            '</Project>'
+          )
+          Set-Content -Encoding UTF8 -Path Directory.Build.props -Value $propsLines
+          Write-Host "Wrote Directory.Build.props:"
+          Write-Host "  INCLUDE: $externIncludes"
+          Write-Host "  LIB:     $externLibs"
 
           # PJSIP 2.14.1 .vcxproj files target the v141 (VS2017) toolset which
           # isn't installed on windows-latest — override to v143 (VS2022).
