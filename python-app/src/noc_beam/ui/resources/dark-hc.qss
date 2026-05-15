@@ -996,3 +996,44 @@ QToolButton#TabBtn:checked {
     border-top-color: #FFFF00;
     color: #FFFF00;
 }
+QLineEdit#DialInput {
+    min-height: 32px;
+    max-height: 36px;
+    border-radius: 4px;
+}
+QPushButton#CallButton {
+    min-height: 32px;
+    max-height: 36px;
+    border-radius: 4px;
+    background-color: #00FF66;
+    color: #000000;
+}
+QWidget#DialPad QPushButton#DialPadButton {
+    min-height: 40px;
+    max-height: 48px;
+    border-radius: 4px;
+    background-color: #000000;
+    border: 1px solid #FFFFFF;
+}
+QWidget#DialPad QPushButton#DialPadButton:hover {
+    background-color: #1A1A1A;
+}
+QFrame#QuickDialRow {
+    border-bottom: 1px solid #FFFFFF;
+}
+QPushButton#HangupButton {
+    min-height: 32px;
+    border-radius: 4px;
+    background-color: #FF4D4D;
+    color: #000000;
+}
+QPushButton#CallControlButton {
+    min-height: 28px;
+    border-radius: 4px;
+    background-color: #000000;
+    border: 1px solid #FFFFFF;
+    color: #FFFFFF;
+}
+QPushButton#CallControlButton:hover {
+    background-color: #1A1A1A;
+}

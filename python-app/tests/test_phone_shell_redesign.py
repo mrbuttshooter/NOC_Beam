@@ -50,3 +50,20 @@ def test_bottom_tabs_are_compact_and_include_existing_pages(qt_app: QApplication
         assert tabs._buttons[int(Tab.TRACE)].text().startswith("Trace")
     finally:
         tabs.close()
+
+
+def test_dial_surface_has_compact_controls(
+    qt_app: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr("noc_beam.ui.phone_shell.QTimer.singleShot", lambda _ms, _fn: None)
+    shell = PhoneShell()
+    qt_app.processEvents()
+
+    try:
+        assert shell.dial_input.objectName() == "DialInput"
+        assert shell.call_btn.objectName() == "CallButton"
+        assert shell.call_btn.minimumHeight() <= 40
+        assert shell.findChild(type(shell.dialpad), "DialPad") is not None
+    finally:
+        shell.close()

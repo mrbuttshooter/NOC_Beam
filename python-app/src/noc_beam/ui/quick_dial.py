@@ -86,7 +86,7 @@ class RecentsRow(QFrame):
     def __init__(self, target: _DialTarget, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._target = target
-        self.setObjectName("RecentsRow")
+        self.setObjectName("QuickDialRow")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(target.uri)
         self.setAccessibleName(f"Call {target.label}")

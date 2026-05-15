@@ -48,7 +48,7 @@ class _KeyButton(QPushButton):
 
     def __init__(self, digit: str, caption: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setObjectName("DialpadKey")
+        self.setObjectName("DialPadButton")
         # Empty native text so QPushButton doesn't draw a duplicate label.
         self.setText("")
         self._digit = digit
@@ -122,6 +122,7 @@ class DialPad(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("DialPad")
 
         self.entry = QLineEdit()
         self.entry.setObjectName("DialpadEntry")
@@ -137,8 +138,8 @@ class DialPad(QWidget):
         grid.setSpacing(3)
         for i, (key, sub) in enumerate(_KEYS):
             btn = _KeyButton(key, sub, self)
-            btn.setMinimumSize(40, 32)
-            btn.setMaximumHeight(36)
+            btn.setMinimumSize(40, 40)
+            btn.setMaximumHeight(48)
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             btn.clicked.connect(lambda _=False, k=key: self._press(k))
             grid.addWidget(btn, i // 3, i % 3)
