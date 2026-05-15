@@ -32,6 +32,7 @@ class Tab(IntEnum):
     CONTACTS  = 1
     FAVORITES = 2
     HISTORY   = 3
+    TRACE     = 4
 
 
 _TABS: tuple[tuple[Tab, str, str, str], ...] = (
@@ -39,6 +40,7 @@ _TABS: tuple[tuple[Tab, str, str, str], ...] = (
     (Tab.CONTACTS,  "user",  "Contacts",  "Contacts and groups"),
     (Tab.FAVORITES, "star",  "Favorites", "Starred contacts"),
     (Tab.HISTORY,   "clock", "History",   "Call history"),
+    (Tab.TRACE,     "trace", "Trace",     "SIP signalling trace"),
 )
 
 
@@ -94,3 +96,25 @@ class BottomTabs(QFrame):
         if btn is not None and not btn.isChecked():
             btn.setChecked(True)
             self.tab_changed.emit(int(tab))
+
+    def set_badge(self, tab: int, count: int) -> None:
+        """Show a small unread-count badge on a tab. count<=0 clears it.
+        Implemented by appending the count to the button text inside a
+        unicode bullet so it reads as a chip without needing a custom
+        paintEvent. Intentionally simple."""
+        btn = self._buttons.get(int(tab))
+        if btn is None:
+            return
+        # Stash the original label once so we can reset it.
+        if not hasattr(btn, "_base_label"):
+            btn._base_label = btn.text()  # type: ignore[attr-defined]
+        base = btn._base_label  # type: ignore[attr-defined]
+        if count > 0:
+            shown = 9 if count > 9 else count
+            btn.setText(f"{base}  •{shown}")
+            btn.setProperty("badged", True)
+        else:
+            btn.setText(base)
+            btn.setProperty("badged", False)
+        btn.style().unpolish(btn)
+        btn.style().polish(btn)

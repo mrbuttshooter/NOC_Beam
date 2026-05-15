@@ -143,9 +143,9 @@ class PhoneShell(QMainWindow):
         self._menu_actions: list[tuple[str, list[tuple[str, callable]]]] = [
             ("Softphone", [
                 ("Add account...",            self._on_add_account),
-                ("Edit selected account...",  self._on_edit_account),
+                ("Edit active account...",    self._on_edit_account),
                 ("Account settings...",       self._on_account_settings),
-                ("Remove selected account...", self._on_remove_account),
+                ("Remove active account...",  self._on_remove_account),
                 ("---", None),
                 ("Settings...",               self._on_settings),
                 ("---", None),
@@ -186,10 +186,13 @@ class PhoneShell(QMainWindow):
 
         brand_row = QHBoxLayout(); brand_row.setSpacing(8)
         self.brand_mark = QLabel("N", top); self.brand_mark.setObjectName("BrandMark")
+        # Version moved out of the visible brand row -- it was reading like
+        # a leftover build artifact next to the wordmark. Surfaced via the
+        # brand-mark tooltip and the About dialog instead.
+        self.brand_mark.setToolTip(f"{__app_name__} {__version__}")
         self.brand_word = QLabel(__app_name__, top); self.brand_word.setObjectName("BrandWord")
-        self.brand_ver = QLabel(__version__, top); self.brand_ver.setObjectName("BrandVer")
         brand_row.addWidget(self.brand_mark); brand_row.addWidget(self.brand_word)
-        brand_row.addWidget(self.brand_ver); brand_row.addStretch(1)
+        brand_row.addStretch(1)
 
         # Hamburger menu (replaces the QMenuBar -- see _build_menu).
         # Three vertical groups under one button on the right of the
@@ -232,6 +235,12 @@ class PhoneShell(QMainWindow):
         top_l.addLayout(acct_row)
 
         self.audio = AudioStrip(top)
+        # Wire the audio-strip mute toggle so it actually mutes the
+        # active call's microphone (was previously a dangling signal).
+        self.audio.muted_changed.connect(self._on_audio_strip_mute)
+        # Volume slider drives the output-side audio level on the
+        # active call's media. No-op when there's no call.
+        self.audio.volume_changed.connect(self._on_audio_strip_volume)
         top_l.addWidget(self.audio)
 
         self.status_banner = QLabel("Starting...", top)
@@ -278,7 +287,51 @@ class PhoneShell(QMainWindow):
         self.call_widget.mute_toggled.connect(self._on_mute_toggled)
         self.call_widget.transfer_clicked.connect(self._on_transfer)
         self.call_widget.setVisible(False)
-        dpl.addWidget(self.call_widget); dpl.addWidget(self.dialpad, 1)
+        # Quick-dial tile strip fills the dead space below the compact
+        # keypad with one-tap shortcuts (favorites + recent peers).
+        from noc_beam.ui.quick_dial import QuickDialStrip
+        self.quick_dial = QuickDialStrip(self)
+        self.quick_dial.call_requested.connect(self._on_call_requested)
+
+        # First-run hero -- shown when accounts.json is empty so the
+        # very first thing a user sees is "Add your first SIP account",
+        # not a dial UI for an account they don't have yet.
+        self.first_run_hero = QFrame(self)
+        self.first_run_hero.setObjectName("FirstRunHero")
+        hero_l = QVBoxLayout(self.first_run_hero)
+        hero_l.setContentsMargins(24, 32, 24, 24)
+        hero_l.setSpacing(12)
+        hero_title = QLabel("Welcome to NOC_Beam")
+        hero_title.setObjectName("FirstRunTitle")
+        hero_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero_sub = QLabel(
+            "Add your SIP account to start placing and receiving calls."
+        )
+        hero_sub.setObjectName("FirstRunSub")
+        hero_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero_sub.setWordWrap(True)
+        hero_btn = QPushButton("+  Add SIP account")
+        hero_btn.setObjectName("PrimaryAction")
+        hero_btn.setMinimumHeight(40)
+        hero_btn.clicked.connect(self._on_add_account)
+        hero_help = QLabel(
+            "You can also use the menu (≡) → Add account."
+        )
+        hero_help.setObjectName("FirstRunHelp")
+        hero_help.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hero_help.setWordWrap(True)
+        hero_l.addStretch(1)
+        hero_l.addWidget(hero_title)
+        hero_l.addWidget(hero_sub)
+        hero_l.addWidget(hero_btn)
+        hero_l.addWidget(hero_help)
+        hero_l.addStretch(2)
+        self.first_run_hero.setVisible(False)
+
+        dpl.addWidget(self.call_widget)
+        dpl.addWidget(self.first_run_hero)
+        dpl.addWidget(self.dialpad)
+        dpl.addWidget(self.quick_dial, 1)
 
         # Contacts + Favorites are Bria-parity tabs (the primary 4 in
         # Bria are Dialpad / Contacts / Favorites / History). NOC-only
@@ -287,6 +340,8 @@ class PhoneShell(QMainWindow):
         self.contacts_view.call_requested.connect(self._on_call_requested)
         self.favorites_view = FavoritesView(self)
         self.contacts_view.contact_saved.connect(self.favorites_view.reload)
+        # Keep the Quick Dial strip in sync with contact star/edit/delete.
+        self.contacts_view.contact_saved.connect(lambda *_: self.quick_dial.reload())
         self.favorites_view.call_requested.connect(self._on_call_requested)
         self.history_view = HistoryView(self)
         self.history_view.redial_requested.connect(self._on_call_requested)
@@ -303,9 +358,21 @@ class PhoneShell(QMainWindow):
         self.stack.addWidget(self.contacts_view)       # 1 CONTACTS
         self.stack.addWidget(self.favorites_view)      # 2 FAVORITES
         self.stack.addWidget(self.history_view)        # 3 HISTORY
+        self.stack.addWidget(self.trace_view)          # 4 TRACE
 
         self.bottom_tabs = BottomTabs(self)
         self.bottom_tabs.tab_changed.connect(self.stack.setCurrentIndex)
+        # Missed-call badge: history view announces the unread missed
+        # count whenever it reloads; clicking the History tab marks
+        # everything seen and clears the badge.
+        self.history_view.missed_count_changed.connect(
+            lambda n: self.bottom_tabs.set_badge(int(Tab.HISTORY), n)
+        )
+
+        def _on_tab_changed(tab_id: int) -> None:
+            if tab_id == int(Tab.HISTORY):
+                self.history_view.mark_all_seen()
+        self.bottom_tabs.tab_changed.connect(_on_tab_changed)
 
         central = QWidget(self)
         # autoFillBackground only -- do NOT setStyleSheet here. Inline
@@ -338,7 +405,11 @@ class PhoneShell(QMainWindow):
         self.tray.quit_requested.connect(self._on_quit)
 
     def _set_status(self, text, level="muted", link_text="", link_action=""):
-        self.status_banner.setText(text)
+        # Prepend a coloured dot glyph so the registration / endpoint
+        # state is scannable at a glance instead of relying on text colour
+        # alone (which a stressed user can miss).
+        dot = {"ok": "●", "warn": "●", "danger": "●", "muted": "○"}.get(level, "○")
+        self.status_banner.setText(f"{dot}  {text}")
         self.status_banner.setProperty("level", level)
         self.status_banner.style().unpolish(self.status_banner)
         self.status_banner.style().polish(self.status_banner)
@@ -364,12 +435,26 @@ class PhoneShell(QMainWindow):
         self.accounts_view.populate(self.accounts)
         menu = QMenu(self.account_chip)
         enabled = [a for a in self.accounts if a.enabled]
+        # First-run hero swap: when there are no accounts we hide the
+        # dialer surfaces and show a single "Add account" CTA, so the
+        # boss-demo cold-launch isn't a dialer for an account the user
+        # hasn't configured yet.
+        no_accounts = not self.accounts
+        if hasattr(self, "first_run_hero"):
+            self.first_run_hero.setVisible(no_accounts)
+            self.dialpad.setVisible(not no_accounts)
+            self.quick_dial.setVisible(not no_accounts)
+            self.dial_input.setEnabled(not no_accounts)
+            self.call_btn.setEnabled(not no_accounts)
         if not enabled:
             empty = menu.addAction("No accounts"); empty.setEnabled(False)
             menu.addSeparator()
             menu.addAction("Add account...", self._on_add_account)
             self._active_account_id = ""
-            self.account_chip.setText("No account  v")
+            self.account_chip.setText("○  No account  ⌄")
+            self.account_chip.setProperty("health", "muted")
+            self.account_chip.style().unpolish(self.account_chip)
+            self.account_chip.style().polish(self.account_chip)
             self._set_status("No SIP account configured", "warn", "Add account", "add-account")
         else:
             for acc in enabled:
@@ -388,7 +473,23 @@ class PhoneShell(QMainWindow):
 
     def _set_active_account(self, account_id, label):
         self._active_account_id = account_id
-        self.account_chip.setText(f"{label}  v")
+        # Compose chip text with a leading registration-health dot. The
+        # actual code comes from registration_changed events; until we
+        # have one we render the muted "no info yet" dot.
+        code = getattr(self, "_reg_state", {}).get(account_id, 0)
+        if 200 <= code < 300:
+            dot = "●"
+            health = "ok"
+        elif code >= 400:
+            dot = "●"
+            health = "danger"
+        else:
+            dot = "○"
+            health = "muted"
+        self.account_chip.setText(f"{dot}  {label}  ⌄")
+        self.account_chip.setProperty("health", health)
+        self.account_chip.style().unpolish(self.account_chip)
+        self.account_chip.style().polish(self.account_chip)
 
     def _add_account_to_endpoint(self, cfg):
         try: SipEndpoint.instance().add_account(cfg)
@@ -481,6 +582,10 @@ class PhoneShell(QMainWindow):
         acc = next((a for a in self.accounts if a.id == account_id), None)
         label = acc.display_name if acc and acc.display_name else (acc.username if acc else account_id)
         self._reg_state[account_id] = code
+        # If the changed account is the one currently shown in the chip,
+        # refresh the chip so the health dot tracks the new code.
+        if account_id == self._active_account_id and acc is not None:
+            self._set_active_account(account_id, label)
         if 200 <= code < 300:
             self._set_status(f"Registered: {label}", "ok")
         elif code in (401, 403, 407, 423):
@@ -519,6 +624,16 @@ class PhoneShell(QMainWindow):
         if self.calls.get(call_id) is None:
             self.calls.register(CallRecord(call_id=call_id, account_id=account_id, direction="out"))
         self.calls.update_state(call_id, new_state, code, reason)
+        # Pull the remote URI off the live SipCall and stash it on the
+        # record so the CDR snapshot taken on DISCONNECTED carries the
+        # peer (otherwise History shows "-" for every call).
+        try:
+            live = SipEndpoint.instance().find_call(call_id)
+            remote = getattr(live, "remote_uri", "") if live is not None else ""
+            if remote:
+                self.calls.update_remote(call_id, remote)
+        except Exception:
+            log.exception("update_remote failed")
         if new_state in (CallState.CONFIRMED, CallState.DISCONNECTED, CallState.EARLY):
             self.ringer.stop()
 
@@ -535,8 +650,12 @@ class PhoneShell(QMainWindow):
     def _maybe_write_cdr(self, call_id):
         snap = self._last_snapshots.pop(call_id, None)
         if snap is None: return
-        try: append_entry(snap); self.history_view.reload()
-        except Exception: log.exception("Failed to append CDR entry")
+        try:
+            append_entry(snap)
+            self.history_view.reload()
+            self.quick_dial.reload()
+        except Exception:
+            log.exception("Failed to append CDR entry")
 
     def _select_call(self, call_id):
         self._selected_call_id = call_id
@@ -646,11 +765,34 @@ class PhoneShell(QMainWindow):
                 self.calls.update_state(self._selected_call_id, CallState.CONFIRMED)
         except Exception: log.exception("resume failed")
 
-    def _on_transfer(self, _call_id):
-        QMessageBox.information(
-            self, "Transfer",
-            "Open the wide dashboard (View > Open wide dashboard) to manage transfers.",
+    def _on_transfer(self, call_id):
+        """Blind-transfer the active call to a user-supplied target.
+
+        Asks for a SIP URI or number; if the user types a bare number we
+        normalise it against the active account's domain. Sends a REFER
+        and stays on the line until the remote completes the dialog.
+        """
+        from PySide6.QtWidgets import QInputDialog
+        call = self._selected_pjsua_call()
+        if call is None:
+            QMessageBox.information(self, "Transfer", "No active call to transfer.")
+            return
+        target, ok = QInputDialog.getText(
+            self,
+            "Blind transfer",
+            "Forward this call to (SIP URI or number):",
         )
+        if not ok or not target.strip():
+            return
+        target = target.strip()
+        try:
+            SipEndpoint.instance().blind_transfer(
+                call, target, account_id=self._active_account_id
+            )
+            self._set_status(f"Transferring to {target}…", "muted")
+        except Exception as exc:
+            log.exception("blind transfer failed")
+            QMessageBox.warning(self, "Transfer failed", str(exc))
 
     def _on_mute_toggled(self, _call_id, muted):
         call = self._selected_pjsua_call()
@@ -659,6 +801,55 @@ class PhoneShell(QMainWindow):
             SipEndpoint.instance().set_call_mute(call, muted)
             self.calls.set_mute(self._selected_call_id, muted)
         except Exception: log.exception("mute toggle failed")
+        # Keep the top-strip speaker icon in sync with the in-call
+        # Mute button so the user has one consistent mute state.
+        try:
+            self.audio.set_muted(muted)
+        except Exception:
+            pass
+
+    def _on_audio_strip_mute(self, muted: bool) -> None:
+        """Top-strip speaker icon → mute/unmute mic on the active call.
+        No-op if there's no live call (the toggle still tracks state)."""
+        call = self._selected_pjsua_call()
+        if call is None or self._selected_call_id is None:
+            return
+        try:
+            SipEndpoint.instance().set_call_mute(call, muted)
+            self.calls.set_mute(self._selected_call_id, muted)
+            # Mirror the in-call CallWidget Mute button so both UIs agree.
+            self.call_widget.mute_btn.blockSignals(True)
+            self.call_widget.mute_btn.setChecked(muted)
+            self.call_widget.mute_btn.blockSignals(False)
+        except Exception:
+            log.exception("audio-strip mute failed")
+
+    def _on_audio_strip_volume(self, value: int) -> None:
+        """Top-strip volume → adjust output level on active call media.
+        Stored in settings so future calls inherit the setting."""
+        try:
+            self.settings.audio.master_volume_pct = int(value)
+        except Exception:
+            pass
+        call = self._selected_pjsua_call()
+        if call is None:
+            return
+        try:
+            from noc_beam.sip._pjsua2_loader import PJSUA2_AVAILABLE
+            if not PJSUA2_AVAILABLE:
+                return
+            info = call.getInfo()
+            for mi in info.media:
+                # Audio media that is active (type=1, status=1)
+                if mi.type != 1 or mi.status != 1:
+                    continue
+                aud = call.getAudioMedia(mi.index)
+                # adjustRxLevel: 1.0 = unity, 0..2.0 typical range.
+                # Map 0..100 percent → 0.0..1.5 (giving headroom).
+                level = max(0.0, min(1.5, value / 66.6))
+                aud.adjustRxLevel(level)
+        except Exception:
+            log.exception("audio-strip volume adjust failed")
 
     def _on_digit_pressed(self, digit):
         # When in a call, digits are DTMF tones routed via the SIP endpoint.
@@ -804,6 +995,7 @@ class PhoneShell(QMainWindow):
             ("Ctrl+2",  lambda: self.bottom_tabs.select(int(Tab.CONTACTS))),
             ("Ctrl+3",  lambda: self.bottom_tabs.select(int(Tab.FAVORITES))),
             ("Ctrl+4",  lambda: self.bottom_tabs.select(int(Tab.HISTORY))),
+            ("Ctrl+5",  lambda: self.bottom_tabs.select(int(Tab.TRACE))),
             ("Ctrl+K",  lambda: self.dial_input.setFocus(Qt.FocusReason.ShortcutFocusReason)),
         ):
             sc = QShortcut(QKeySequence(seq), self)

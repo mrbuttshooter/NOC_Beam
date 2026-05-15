@@ -61,7 +61,9 @@ class _KeyButton(QPushButton):
             self.setAccessibleDescription(f"Dialpad key {digit}")
 
     def sizeHint(self) -> QSize:  # noqa: N802
-        return QSize(60, 60)
+        # Compact mode: keypad is mostly here for in-call DTMF -- the
+        # primary dial path is keyboard typing into the dial input above.
+        return QSize(40, 32)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         # Let the style draw bg + border + hover state via QSS.
@@ -84,23 +86,25 @@ class _KeyButton(QPushButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         # Big digit
         digit_font = QFont(self.font())
-        digit_font.setPointSize(20)
+        digit_font.setPointSize(15)
         digit_font.setWeight(QFont.Weight.Normal)
         painter.setFont(digit_font)
-        digit_rect = self.rect().adjusted(0, 4, 0, -14 if self._caption else 0)
+        digit_rect = self.rect().adjusted(0, 1, 0, -10 if self._caption else 0)
         painter.drawText(
             digit_rect,
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
             self._digit,
         )
-        # Caption (small caps under)
+        # Caption (small caps under) — make it visibly subordinate to
+        # the digit so the keypad doesn't read like equal-weight data.
         if self._caption:
             cap_font = QFont(self.font())
-            cap_font.setPointSize(7)
-            cap_font.setWeight(QFont.Weight.Bold)
+            cap_font.setPointSize(6)
+            cap_font.setWeight(QFont.Weight.DemiBold)
+            painter.setPen(self.palette().mid().color())
             cap_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 110)
             painter.setFont(cap_font)
-            cap_rect = self.rect().adjusted(0, 0, 0, -4)
+            cap_rect = self.rect().adjusted(0, 0, 0, -2)
             painter.drawText(
                 cap_rect,
                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
@@ -130,11 +134,12 @@ class DialPad(QWidget):
         self.entry.returnPressed.connect(self._on_call)
 
         grid = QGridLayout()
-        grid.setSpacing(6)
+        grid.setSpacing(3)
         for i, (key, sub) in enumerate(_KEYS):
             btn = _KeyButton(key, sub, self)
-            btn.setMinimumSize(60, 60)
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            btn.setMinimumSize(40, 32)
+            btn.setMaximumHeight(36)
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             btn.clicked.connect(lambda _=False, k=key: self._press(k))
             grid.addWidget(btn, i // 3, i % 3)
 

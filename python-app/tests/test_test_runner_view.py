@@ -293,7 +293,11 @@ def test_phone_shell_add_account_from_clean_start_saves_and_selects(
         assert added == [new_account]
         assert shell.accounts == [new_account]
         assert shell._active_account_id == "new-acct"
-        assert shell.account_chip.text() == "NOC Lab  v"
+        # Chip text now carries a leading registration-health dot and a
+        # smaller chevron glyph -- the assertion checks the substring so
+        # cosmetic dot/chevron tweaks don't have to round-trip through
+        # this test.
+        assert "NOC Lab" in shell.account_chip.text()
     finally:
         shell._really_quitting = True
         shell.close()
@@ -380,7 +384,8 @@ def test_phone_shell_add_account_save_failure_keeps_account_out_of_memory(
         assert warnings[0][0] == "Account save failed"
         assert "accounts.json" in warnings[0][1]
         assert "disk denied" in warnings[0][1]
-        assert shell.status_banner.text() == "Account save failed"
+        # Status banner now leads with a dot glyph; substring check.
+        assert "Account save failed" in shell.status_banner.text()
     finally:
         shell._really_quitting = True
         shell.close()
@@ -551,6 +556,7 @@ def test_phone_shell_primary_controls_have_accessible_names(
             "Contacts and groups",
             "Starred contacts",
             "Call history",
+            "SIP signalling trace",
         }
 
         dialpad_names = {

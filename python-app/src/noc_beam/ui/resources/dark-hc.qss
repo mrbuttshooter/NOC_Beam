@@ -108,12 +108,13 @@ QPushButton#HangupButton:disabled { background-color: #000000; color: #888888; b
 
 /* Dialpad keys */
 QPushButton#DialpadKey {
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 500;
     background-color: #000000;
     border: 1px solid #FFFFFF;
     border-radius: 4px;
-    min-height: 38px;
+    min-height: 30px;
+    max-height: 36px;
 }
 QPushButton#DialpadKey:hover { background-color: #1A1A1A; }
 QPushButton#DialpadKey:pressed { background-color: #2E2E2E; }
@@ -826,4 +827,75 @@ QTextEdit#DiagResults {
     padding: 8px 10px;
     font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
     font-size: 11px;
+}
+
+/* ---- History row list (HC) --------------------------------------- */
+QScrollArea#HistoryScroll { background-color: #000000; border: none; }
+QFrame#HistoryRow {
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid #FFFFFF;
+}
+QFrame#HistoryRow:hover { background-color: #1A1A1A; }
+QLabel#HistoryRowArrow {
+    color: #FFFFFF;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 14px;
+    font-weight: 700;
+}
+QFrame#HistoryRow[result="missed"] QLabel#HistoryRowArrow { color: #FF6B6B; }
+QFrame#HistoryRow[result="failed"] QLabel#HistoryRowArrow { color: #FFD700; }
+QLabel#HistoryRowPeer { color: #FFFFFF; font-size: 13px; font-weight: 700; }
+QLabel#HistoryRowMeta {
+    color: #C8C8C8;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 10px;
+}
+QLabel#CdrDetailPeer {
+    color: #FFFFFF;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 15px;
+    font-weight: 700;
+}
+QLabel#CdrDetailDirection { color: #C8C8C8; font-size: 11px; font-weight: 600; }
+QLabel#CdrDetailValue {
+    color: #FFFFFF;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+}
+
+QFrame#QuickDialStrip {
+    background-color: #000000;
+    border-top: 1px solid #FFFFFF;
+}
+QLabel#QuickDialHeader {
+    color: #FFFFFF;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+}
+QLabel#QuickDialEmpty { color: #C8C8C8; font-size: 11px; padding: 16px 12px; }
+QToolButton#QuickDialTile {
+    background-color: #000000;
+    border: 1px solid #FFFFFF;
+    border-radius: 6px;
+}
+QToolButton#QuickDialTile:hover {
+    background-color: #1A1A1A;
+    border-color: #00E5FF;
+}
+QLabel#QuickDialName { color: #FFFFFF; font-size: 11px; font-weight: 700; }
+QLabel#QuickDialSub {
+    color: #C8C8C8;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 9px;
+}
+QLabel#QuickDialPlaceholder {
+    color: #888888;
+    background-color: #000000;
+    border: 1px dashed #888888;
+    border-radius: 6px;
+    font-size: 18px;
 }

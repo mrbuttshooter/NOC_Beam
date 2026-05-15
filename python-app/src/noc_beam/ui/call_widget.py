@@ -5,6 +5,7 @@ import time
 
 from PySide6.QtCore import QTimer, Signal
 from PySide6.QtWidgets import (
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -24,6 +25,8 @@ class CallWidget(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("CallWidget")
+        self.setProperty("state", "idle")
 
         self.call_id = -1
         self._on_hold = False
@@ -45,19 +48,28 @@ class CallWidget(QWidget):
         self._duration_timer.setInterval(1000)
         self._duration_timer.timeout.connect(self._tick_duration)
 
+        # Semantic colour hierarchy: Answer is green (CallButton style),
+        # Reject and Hang up are red (HangupButton style). Hold/Mute/
+        # Transfer are neutral. A panicked user sees the right colour
+        # immediately -- critical for the rare-but-stressful incoming
+        # call surface.
         self.answer_btn = QPushButton("Answer")
+        self.answer_btn.setObjectName("CallButton")
         self.reject_btn = QPushButton("Reject")
+        self.reject_btn.setObjectName("HangupButton")
         self.hangup_btn = QPushButton("Hang up")
+        self.hangup_btn.setObjectName("HangupButton")
         self.hold_btn = QPushButton("Hold")
+        self.hold_btn.setObjectName("InCallBtn")
         self.mute_btn = QPushButton("Mute")
+        self.mute_btn.setObjectName("InCallBtn")
         self.mute_btn.setCheckable(True)
         self.transfer_btn = QPushButton("Transfer")
-        # Pin a minimum width so the labels never get clipped to garbage like
-        # "ng" / "loh" when the parent layout squeezes the row. 72 px fits
-        # every label including "Transfer" with the existing button padding.
+        self.transfer_btn.setObjectName("InCallBtn")
         for _b in (self.answer_btn, self.reject_btn, self.hangup_btn,
                    self.hold_btn, self.mute_btn, self.transfer_btn):
             _b.setMinimumWidth(72)
+            _b.setMinimumHeight(36)
 
         self.answer_btn.clicked.connect(lambda: self.answer_clicked.emit(self.call_id))
         self.reject_btn.clicked.connect(lambda: self.reject_clicked.emit(self.call_id))
@@ -66,10 +78,18 @@ class CallWidget(QWidget):
         self.mute_btn.toggled.connect(lambda b: self.mute_toggled.emit(self.call_id, b))
         self.transfer_btn.clicked.connect(lambda: self.transfer_clicked.emit(self.call_id))
 
-        btns = QHBoxLayout()
-        for b in (self.answer_btn, self.reject_btn, self.hangup_btn,
-                  self.hold_btn, self.mute_btn, self.transfer_btn):
-            btns.addWidget(b)
+        # 3x2 grid: top row is call lifecycle (Answer / Reject / Hang up),
+        # bottom row is in-call (Hold / Mute / Transfer). Fits the narrow
+        # phone shell without clipping the labels.
+        btns = QGridLayout()
+        btns.setHorizontalSpacing(4)
+        btns.setVerticalSpacing(4)
+        btns.addWidget(self.answer_btn,   0, 0)
+        btns.addWidget(self.reject_btn,   0, 1)
+        btns.addWidget(self.hangup_btn,   0, 2)
+        btns.addWidget(self.hold_btn,     1, 0)
+        btns.addWidget(self.mute_btn,     1, 1)
+        btns.addWidget(self.transfer_btn, 1, 2)
 
         meta = QHBoxLayout()
         meta.addWidget(self.codec_label)
@@ -82,6 +102,7 @@ class CallWidget(QWidget):
         layout.addWidget(self.state_label)
         layout.addLayout(meta)
         layout.addLayout(btns)
+        layout.addStretch(0)
 
         self.show_idle()
 
@@ -97,6 +118,14 @@ class CallWidget(QWidget):
         for b in (self.answer_btn, self.reject_btn, self.hangup_btn,
                   self.hold_btn, self.mute_btn, self.transfer_btn):
             b.setEnabled(False)
+        self._set_state("idle")
+
+    def _set_state(self, state: str) -> None:
+        """Toggle the dynamic `state` property and re-polish so QSS
+        attribute selectors update without restart."""
+        self.setProperty("state", state)
+        self.style().unpolish(self)
+        self.style().polish(self)
 
     def show_outgoing(self, call_id: int, target: str) -> None:
         self.call_id = call_id
@@ -108,23 +137,37 @@ class CallWidget(QWidget):
         self.hangup_btn.setEnabled(True)
         self.hold_btn.setEnabled(False)
         self.mute_btn.setEnabled(False)
+        self._set_state("outgoing")
 
     def show_incoming(self, call_id: int, remote: str) -> None:
         self.call_id = call_id
         self.peer_label.setText(f"← {remote}")
-        self.state_label.setText("Incoming")
+        self.state_label.setText("INCOMING CALL")
         self.codec_label.setText("")
         self.answer_btn.setEnabled(True)
         self.reject_btn.setEnabled(True)
         self.hangup_btn.setEnabled(True)
         self.hold_btn.setEnabled(False)
         self.mute_btn.setEnabled(False)
+        # Visual urgency: tag the widget so QSS can paint a coloured
+        # border / background and bump the peer label size for incoming.
+        self._set_state("incoming")
 
     def update_state(self, state_name: str, code: int, reason: str) -> None:
         suffix = f" ({code} {reason})" if code else ""
         self.state_label.setText(f"{state_name}{suffix}")
         self._on_hold = state_name == "HELD"
         self.hold_btn.setText("Resume" if self._on_hold else "Hold")
+        # Drive the urgency banner state so QSS can stop the incoming
+        # treatment as soon as we move past INCOMING.
+        if state_name == "INCOMING":
+            self._set_state("incoming")
+        elif state_name in ("CONFIRMED", "HELD"):
+            self._set_state("active")
+        elif state_name == "DISCONNECTED":
+            self._set_state("idle")
+        else:
+            self._set_state("outgoing")
         in_call = state_name in ("CONFIRMED", "HELD")
         # Hold/resume only valid in CONFIRMED or HELD.
         self.hold_btn.setEnabled(in_call)

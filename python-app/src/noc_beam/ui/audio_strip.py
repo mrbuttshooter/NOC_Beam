@@ -16,14 +16,16 @@ Public API:
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
+    QLabel,
     QMenu,
     QSlider,
     QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -72,17 +74,26 @@ class AudioStrip(QFrame):
         self.spk_btn.setToolTip("Mute output")
         self.spk_btn.toggled.connect(self._on_muted_toggled)
 
-        # --- Volume slider with orange fill -------------------------
-        self.slider = QSlider(Qt.Orientation.Horizontal, self)
+        # --- Volume control: a button that opens a popover with the slider.
+        # The slider used to live full-width in the strip and dominated the
+        # top of the app like a media-player widget; tucking it into a popover
+        # restores the audio strip to its proper status-bar role.
+        self.vol_btn = QToolButton(self)
+        self.vol_btn.setObjectName("AudioBtn")
+        self.vol_btn.setText("75%")
+        self.vol_btn.setToolTip("Output volume")
+        self.vol_btn.clicked.connect(self._toggle_volume_popover)
+
+        self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setObjectName("VolumeSlider")
         self.slider.setRange(0, 100)
         self.slider.setValue(75)
-        self.slider.valueChanged.connect(self.volume_changed.emit)
+        self.slider.valueChanged.connect(self._on_volume_changed)
 
         # --- Output dropdown (chevron on the right) ----------------
         self.out_menu_btn = QToolButton(self)
         self.out_menu_btn.setObjectName("AudioBtn")
-        self.out_menu_btn.setText("v")  # placeholder caret -- swap to chevron icon in I.3 polish
+        self.out_menu_btn.setText("Out")
         self.out_menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.out_menu_btn.setToolTip("Output device")
 
@@ -91,8 +102,12 @@ class AudioStrip(QFrame):
         layout.setSpacing(8)
         layout.addWidget(self.mic_btn)
         layout.addWidget(self.spk_btn)
-        layout.addWidget(self.slider, 1)
+        layout.addWidget(self.vol_btn)
+        layout.addStretch(1)
         layout.addWidget(self.out_menu_btn)
+
+        # Volume popover (created lazily, hidden by default)
+        self._vol_popover: QFrame | None = None
 
     # ------------------------------------------------------------------
     def set_input_devices(self, devices: list[tuple[object, str]]) -> None:
@@ -128,6 +143,32 @@ class AudioStrip(QFrame):
         self.slider.blockSignals(True)
         self.slider.setValue(v)
         self.slider.blockSignals(False)
+        self.vol_btn.setText(f"{v}%")
+
+    def _on_volume_changed(self, value: int) -> None:
+        self.vol_btn.setText(f"{value}%")
+        self.volume_changed.emit(value)
+
+    def _toggle_volume_popover(self) -> None:
+        if self._vol_popover is None:
+            pop = QFrame(self, Qt.WindowType.Popup)
+            pop.setObjectName("VolumePopover")
+            v = QVBoxLayout(pop)
+            v.setContentsMargins(10, 8, 10, 8)
+            v.setSpacing(4)
+            label = QLabel("Output volume")
+            label.setObjectName("VolumePopoverLabel")
+            v.addWidget(label)
+            self.slider.setMinimumWidth(160)
+            v.addWidget(self.slider)
+            self._vol_popover = pop
+        if self._vol_popover.isVisible():
+            self._vol_popover.hide()
+            return
+        # Anchor below the volume button.
+        anchor = self.vol_btn.mapToGlobal(QPoint(0, self.vol_btn.height()))
+        self._vol_popover.move(anchor)
+        self._vol_popover.show()
 
     def set_muted(self, muted: bool) -> None:
         self._muted = bool(muted)
