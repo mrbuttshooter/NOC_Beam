@@ -60,7 +60,7 @@ def test_paired_mismatched_lengths_uses_shorter_side() -> None:
 
 def test_fan_out_uses_first_caller_for_all_targets() -> None:
     spec = make_spec(
-        callers=["1001", "1002", "1003"],
+        callers=["1001"],
         targets=["2001", "2002", "2003", "2004", "2005"],
         mode="fan-out",
     )
@@ -76,8 +76,8 @@ def test_fan_out_uses_first_caller_for_all_targets() -> None:
 
 def test_fan_in_uses_first_target_for_all_callers() -> None:
     spec = make_spec(
-        callers=["1001", "1002", "1003"],
-        targets=["2001", "2002"],
+        callers=["1001", "1002", "1003", "1004", "1005"],
+        targets=["2001"],
         mode="fan-in",
     )
 
@@ -85,6 +85,8 @@ def test_fan_in_uses_first_target_for_all_callers() -> None:
         plan.TestCall(1, "1001", "2001"),
         plan.TestCall(2, "1002", "2001"),
         plan.TestCall(3, "1003", "2001"),
+        plan.TestCall(4, "1004", "2001"),
+        plan.TestCall(5, "1005", "2001"),
     ]
 
 
