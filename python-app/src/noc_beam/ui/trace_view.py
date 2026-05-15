@@ -29,7 +29,6 @@ from logging.handlers import RotatingFileHandler
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -38,6 +37,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -175,13 +175,19 @@ class TraceView(QWidget):
         super().__init__(parent)
 
         # ---- Toolbar widgets (kept on this widget so TracePage can
-        # re-parent them into a polished toolbar). Behaviour is the same
-        # as the prior QTextEdit version.
-        self.chk_rx = QCheckBox("RX")
+        # re-parent them into a polished toolbar). chk_rx / chk_tx are
+        # QToolButton(checkable) instead of QCheckBox so the chip
+        # styling lands cleanly -- QCheckBox's indicator fights every
+        # `width: 0` rule even with `image: none`.
+        self.chk_rx = QToolButton()
+        self.chk_rx.setText("RX")
+        self.chk_rx.setCheckable(True)
         self.chk_rx.setChecked(True)
         self.chk_rx.setObjectName("TraceDirToggle")
         self.chk_rx.setProperty("dir", "rx")
-        self.chk_tx = QCheckBox("TX")
+        self.chk_tx = QToolButton()
+        self.chk_tx.setText("TX")
+        self.chk_tx.setCheckable(True)
         self.chk_tx.setChecked(True)
         self.chk_tx.setObjectName("TraceDirToggle")
         self.chk_tx.setProperty("dir", "tx")

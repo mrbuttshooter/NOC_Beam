@@ -13,7 +13,9 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QPushButton,
+    QStackedLayout,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -69,9 +71,24 @@ class HistoryView(QWidget):
         controls.addWidget(self._clear_btn)
         controls.addStretch(1)
 
+        # Empty-state placeholder shown when there are no CDR rows.
+        self._empty_label = QLabel(
+            "No call history yet.\n\n"
+            "Placed and received calls will appear here\n"
+            "with their direction, peer, and duration."
+        )
+        self._empty_label.setObjectName("ViewEmpty")
+        self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_label.setWordWrap(True)
+
+        # Stack the empty state with the table so we swap, not overlap.
+        self._stack = QStackedLayout()
+        self._stack.addWidget(self._empty_label)
+        self._stack.addWidget(self._table)
+
         layout = QVBoxLayout(self)
         layout.addLayout(controls)
-        layout.addWidget(self._table, 1)
+        layout.addLayout(self._stack, 1)
 
         self.reload()
 
@@ -90,6 +107,8 @@ class HistoryView(QWidget):
                 item = QTableWidgetItem(text)
                 item.setData(Qt.UserRole, entry.peer_uri)
                 self._table.setItem(row, col, item)
+        # Swap empty-state vs table based on row count.
+        self._stack.setCurrentIndex(1 if entries else 0)
 
     def _on_double_click(self, item: QTableWidgetItem) -> None:
         peer = item.data(Qt.UserRole)

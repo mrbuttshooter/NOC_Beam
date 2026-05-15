@@ -381,3 +381,305 @@ QToolTip {
 QSplitter::handle { background: #ECEEF1; }
 QMessageBox { background-color: #FFFFFF; }
 QMessageBox QLabel { color: #1F2933; }
+
+
+/* ==================================================================
+   Phase J -- light-theme equivalents of selectors that were only in
+   dark.qss. Without these blocks the trace toolbar checkboxes render
+   as default Win 11 blue checkboxes, the diagnostics results area
+   becomes a black rectangle in the light dialog, the accounts master
+   pane overflows the narrow shell, etc.
+   ================================================================== */
+
+
+/* ---- Tabs (light) -- used by Settings + Diagnostics tabs ---------- */
+QTabWidget::pane {
+    border: 1px solid #ECEEF1;
+    background: #FFFFFF;
+    top: -1px;
+}
+QTabBar { background: #FFFFFF; }
+QTabBar::tab {
+    background: transparent;
+    color: #57606A;
+    padding: 8px 14px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-right: 2px;
+}
+QTabBar::tab:hover { color: #1F2933; }
+QTabBar::tab:selected {
+    color: #E85D04;
+    border-bottom-color: #E85D04;
+    background: #FFFFFF;
+    font-weight: 600;
+}
+
+
+/* ---- Trace destination toolbar + preset chips -------------------- */
+QFrame#TraceToolbar {
+    background-color: #FFFFFF;
+    border: none;
+    border-bottom: 1px solid #ECEEF1;
+}
+QFrame#TraceChipBar {
+    background-color: #F5F6F8;
+    border: none;
+    border-bottom: 1px solid #ECEEF1;
+}
+QToolButton#TraceChip {
+    background-color: #FFFFFF;
+    color: #57606A;
+    border: 1px solid #C9CDD3;
+    border-radius: 12px;
+    padding: 4px 10px;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    min-height: 22px;
+}
+QToolButton#TraceChip:hover {
+    background-color: #F5F6F8;
+    border-color: #94A0AD;
+    color: #1F2933;
+}
+QToolButton#TraceChip:checked {
+    background-color: #FFE0CC;
+    border-color: #E85D04;
+    color: #C24B00;
+}
+
+/* RX / TX chip-style toggles. QToolButton instead of QCheckBox so we
+   don't fight the QCheckBox::indicator rendering. */
+QToolButton#TraceDirToggle {
+    color: #94A0AD;
+    background-color: #FFFFFF;
+    border: 1px solid #C9CDD3;
+    border-radius: 12px;
+    padding: 3px 12px;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    min-height: 20px;
+    min-width: 38px;
+}
+QToolButton#TraceDirToggle:hover { border-color: #94A0AD; color: #57606A; }
+QToolButton#TraceDirToggle:focus { outline: none; }
+QToolButton#TraceDirToggle[dir="rx"]:checked {
+    color: #2A8DC4;
+    background-color: #E8F2FA;
+    border-color: #2A8DC4;
+}
+QToolButton#TraceDirToggle[dir="tx"]:checked {
+    color: #C24B00;
+    background-color: #FFE0CC;
+    border-color: #E85D04;
+}
+QLineEdit#TraceFilter {
+    background-color: #ECEEF1;
+    color: #1F2933;
+    border: 1px solid #ECEEF1;
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    min-height: 22px;
+}
+QLineEdit#TraceFilter:focus {
+    background-color: #FFFFFF;
+    border-color: #E85D04;
+}
+
+
+/* ---- Trace row list (Wireshark-style) --------------------------- */
+QScrollArea#TraceScroll { background-color: #FFFFFF; border: none; }
+QFrame#TraceRowList    { background-color: #FFFFFF; border: none; }
+
+QLabel#TraceEmpty {
+    color: #94A0AD;
+    font-size: 13px;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    line-height: 1.6;
+    padding: 40px 24px;
+}
+
+QFrame#TraceRow {
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid #ECEEF1;
+    border-left: 3px solid transparent;
+}
+QFrame#TraceRow:hover { background-color: #F5F6F8; }
+QFrame#TraceRow[dir="rx"]    { border-left: 3px solid #2A8DC4; }
+QFrame#TraceRow[dir="tx"]    { border-left: 3px solid #E85D04; }
+QFrame#TraceRow[dir="error"] {
+    border-left: 3px solid #D33841;
+    background-color: #FDF1F2;
+}
+
+QLabel#TraceRowTime {
+    color: #94A0AD;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+    font-weight: 600;
+}
+QLabel#TraceRowDir {
+    color: #57606A;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.10em;
+    padding: 0 4px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+}
+QLabel#TraceRowDir[dir="rx"]    { color: #2A8DC4; border-color: rgba(42, 141, 196, 0.32); }
+QLabel#TraceRowDir[dir="tx"]    { color: #C24B00; border-color: rgba(232, 93, 4, 0.32); }
+QLabel#TraceRowDir[dir="error"] { color: #D33841; border-color: rgba(211, 56, 65, 0.32); }
+QLabel#TraceRowSummary {
+    color: #1F2933;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    font-weight: 600;
+}
+QLabel#TraceRowPeer {
+    color: #94A0AD;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+}
+QTextEdit#TraceRowBody {
+    background-color: #F5F6F8;
+    color: #1F2933;
+    border: none;
+    border-top: 1px solid #ECEEF1;
+    border-radius: 0;
+    padding: 8px 14px;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+}
+
+
+/* ---- View / accounts surfaces (header titles, hints) ------------ */
+QLabel#ViewTitle {
+    color: #1F2933;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    padding: 0;
+    margin: 0;
+}
+QLabel#ViewCount {
+    color: #94A0AD;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+}
+QLabel#ViewHint {
+    color: #94A0AD;
+    font-size: 12px;
+    line-height: 1.5;
+}
+QLabel#ViewEmpty {
+    color: #94A0AD;
+    font-size: 13px;
+    qproperty-alignment: AlignCenter;
+    padding: 40px 24px;
+}
+
+
+/* ---- Accounts master panel (light) ------------------------------ */
+QFrame#AcctMaster {
+    background-color: #FFFFFF;
+    border: none;
+    border-right: 1px solid #ECEEF1;
+}
+QFrame#AcctDetail {
+    background-color: #FFFFFF;
+    border: none;
+}
+QLineEdit#AcctSearch {
+    background-color: #ECEEF1;
+    color: #1F2933;
+    border: 1px solid #ECEEF1;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+    min-height: 26px;
+}
+QLineEdit#AcctSearch:focus {
+    background-color: #FFFFFF;
+    border-color: #E85D04;
+}
+
+QFrame#AcctRow {
+    background-color: transparent;
+    border: none;
+    border-left: 3px solid transparent;
+    border-bottom: 1px solid #ECEEF1;
+    padding: 10px 12px;
+}
+QFrame#AcctRow:hover { background-color: #F5F6F8; }
+QFrame#AcctRow[state="focused"] {
+    background-color: #FFE0CC;
+    border-left: 3px solid #E85D04;
+}
+QFrame#AcctRow[state="error"] { background-color: #FDF1F2; }
+
+QLabel#AcctRowName  { color: #1F2933; font-size: 13px; font-weight: 600; }
+QLabel#AcctRowUri   {
+    color: #94A0AD;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+}
+QLabel#AcctRowMeta  {
+    color: #94A0AD;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+}
+
+
+/* ---- Diagnostics surfaces (panel hints + results pane) ---------- */
+QLabel#DiagHint {
+    color: #94A0AD;
+    font-size: 12px;
+    line-height: 1.5;
+}
+QLabel#DiagValue {
+    color: #1F2933;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 12px;
+}
+QTextEdit#DiagResults {
+    background-color: #F5F6F8;
+    color: #1F2933;
+    border: 1px solid #ECEEF1;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+}
+
+QFrame#StatCard {
+    background-color: #F5F6F8;
+    border: 1px solid #ECEEF1;
+    border-radius: 4px;
+    padding: 12px 14px;
+}
+QLabel#StatLabel {
+    color: #94A0AD;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+QLabel#StatValue {
+    color: #1F2933;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 16px;
+    font-weight: 600;
+}

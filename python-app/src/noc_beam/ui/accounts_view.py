@@ -126,8 +126,11 @@ class AccountsView(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("AcctMaster")
-        self.setFixedWidth(380)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        # Don't pin a fixed width -- the wide MainWindow already gives
+        # us 380 px of horizontal real estate, but the narrow PhoneShell
+        # is 340 px. Filling whatever is available avoids overflow on
+        # the narrow shell and keeps the wide shell looking the same.
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self._rows: list[AcctRow] = []
         self._selected_id: str | None = None
@@ -176,6 +179,18 @@ class AccountsView(QWidget):
         scroll.setWidget(self._rows_holder)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
+        # Empty-state hint shown when no accounts exist. Lives inside the
+        # rows holder so it disappears the moment populate() inserts rows.
+        self._empty_label = QLabel(
+            "No accounts yet.\n\nClick “+ Add account” above to register\n"
+            "your first SIP endpoint.",
+            self._rows_holder,
+        )
+        self._empty_label.setObjectName("ViewEmpty")
+        self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_label.setWordWrap(True)
+        self._rows_layout.insertWidget(0, self._empty_label)
+
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -190,6 +205,8 @@ class AccountsView(QWidget):
         for row in self._rows:
             row.deleteLater()
         self._rows = []
+        # Toggle empty-state visibility based on whether anything's there.
+        self._empty_label.setVisible(not accounts)
         # Insert before the trailing stretch (last item).
         insert_at = self._rows_layout.count() - 1
         for cfg in accounts:
