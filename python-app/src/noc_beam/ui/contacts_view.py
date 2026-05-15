@@ -54,7 +54,7 @@ def _group_avatar(letter: str, color_hex: str = "#E85D04", px: int = 28) -> QPix
 
 def _open_modal(dlg: QDialog) -> bool:
     runner = getattr(dlg, "exec")
-    return runner() == dlg.Accepted
+    return int(runner()) == int(QDialog.DialogCode.Accepted)
 
 
 class ContactDialog(QDialog):

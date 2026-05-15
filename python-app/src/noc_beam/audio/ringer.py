@@ -86,7 +86,14 @@ class Ringer:
             path = ensure_default_ringtone()
             self._effect = QSoundEffect()
             self._effect.setSource(QUrl.fromLocalFile(str(path)))
-            self._effect.setLoopCount(QSoundEffect.Infinite)
+            # Loop forever. PySide6 6.7+ wraps Infinite in an enum class
+            # but QSoundEffect.setLoopCount expects a plain int -- use the
+            # enum's .value so we work on every PySide6.
+            try:
+                infinite = QSoundEffect.Loop.Infinite.value  # PySide6 6.7+
+            except AttributeError:
+                infinite = QSoundEffect.Infinite             # PySide6 <= 6.6
+            self._effect.setLoopCount(infinite)
             self._effect.setVolume(0.7)
             self._available = True
         except Exception:

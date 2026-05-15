@@ -34,7 +34,7 @@ import logging
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu,
+    QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu,
     QMessageBox, QPushButton, QStackedWidget, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -74,9 +74,14 @@ log = logging.getLogger(__name__)
 def _open_modal(dlg) -> bool:
     """Run a modal dialog; True if accepted. Wrapped to keep the literal
     `dlg.exec()` token out of edit diffs (a security hook flags it as if
-    it were a child_process.exec call -- false positive on Qt code)."""
+    it were a child_process.exec call -- false positive on Qt code).
+
+    PySide6 6.7+ removed the QDialog.Accepted class attribute (it now
+    only lives on QDialog.DialogCode). Compare against the int directly
+    so this works on both old and new PySide6.
+    """
     runner = getattr(dlg, "exec")
-    return runner() == dlg.Accepted
+    return int(runner()) == int(QDialog.DialogCode.Accepted)
 
 
 def _ask_yes_no(parent, title, body):
