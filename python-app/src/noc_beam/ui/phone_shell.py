@@ -182,6 +182,12 @@ class PhoneShell(QMainWindow):
         self.dialpad.call_requested.connect(self._on_call_requested)
         self.dialpad.hangup_requested.connect(self._on_hangup_requested)
         self.dialpad.digit_pressed.connect(self._on_digit_pressed)
+        # Hide DialPad's internal entry + Call/Hangup buttons -- the
+        # PhoneShell's top strip owns those affordances. The keypad
+        # below is purely the 3x4 numeric grid.
+        self.dialpad.entry.setVisible(False)
+        self.dialpad.call_btn.setVisible(False)
+        self.dialpad.hangup_btn.setVisible(False)
         dialpad_page = QWidget(self)
         dpl = QVBoxLayout(dialpad_page); dpl.setContentsMargins(8, 8, 8, 8); dpl.setSpacing(6)
         self.call_widget = CallWidget()
@@ -513,8 +519,13 @@ class PhoneShell(QMainWindow):
         except Exception: log.exception("mute toggle failed")
 
     def _on_digit_pressed(self, digit):
+        # When in a call, digits are DTMF tones routed via the SIP endpoint.
+        # When idle, dialpad presses build up the dial string in the top
+        # input so the user can tap the keypad and press Call.
         call = self._selected_pjsua_call()
-        if call is None: return
+        if call is None:
+            self.dial_input.setText(self.dial_input.text() + digit)
+            return
         rec = self.calls.get(self._selected_call_id) if self._selected_call_id else None
         acc_id = rec.account_id if rec else self._active_account_id
         acc_cfg = next((a for a in self.accounts if a.id == acc_id), None)
