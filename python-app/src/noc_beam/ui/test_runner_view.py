@@ -1,0 +1,347 @@
+from __future__ import annotations
+
+import csv
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QGridLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from noc_beam.config.store import AccountConfig
+from noc_beam.testing.plan import TestCall as PlanCall
+from noc_beam.testing.plan import TestSpec as PlanSpec
+from noc_beam.testing.plan import expand, normalise_lines
+from noc_beam.testing.runner import TestResult as RunnerResult
+from noc_beam.testing.runner import TestRunner as Runner
+
+
+CSV_HEADER = [
+    "test_run_id",
+    "started_at",
+    "from_account",
+    "to_uri",
+    "result",
+    "sip_code",
+    "sip_reason",
+    "rtt_ms",
+    "duration_s",
+    "notes",
+]
+
+__test__ = False
+
+
+class TestRunnerView(QMainWindow):
+    def __init__(self, accounts: list[AccountConfig], parent=None) -> None:
+        super().__init__(parent)
+        self.accounts = accounts
+        self.results: list[RunnerResult] = []
+        self._runner: Runner | None = None
+        self._row_by_call_index: dict[int, int] = {}
+
+        self.setWindowTitle("NOC_Beam test runner")
+        self.resize(900, 620)
+
+        self.callers_edit = QTextEdit()
+        self.callers_edit.setAcceptRichText(False)
+        self.targets_edit = QTextEdit()
+        self.targets_edit.setAcceptRichText(False)
+
+        self.mode_combo = QComboBox()
+        for label, value in (
+            ("Matrix", "matrix"),
+            ("Paired", "paired"),
+            ("Fan-out", "fan-out"),
+            ("Fan-in", "fan-in"),
+        ):
+            self.mode_combo.addItem(label, value)
+
+        self.pass_combo = QComboBox()
+        for label, value in (
+            ("Reachability", "reachability"),
+            ("Full call", "full-call"),
+        ):
+            self.pass_combo.addItem(label, value)
+
+        self.parallel_spin = QSpinBox()
+        self.parallel_spin.setRange(1, 16)
+        self.parallel_spin.setValue(4)
+
+        self.hold_spin = QSpinBox()
+        self.hold_spin.setRange(0, 3600)
+        self.hold_spin.setValue(5)
+        self.hold_spin.setSuffix(" s")
+
+        self.timeout_spin = QSpinBox()
+        self.timeout_spin.setRange(1, 3600)
+        self.timeout_spin.setValue(30)
+        self.timeout_spin.setSuffix(" s")
+
+        self.run_btn = QPushButton("Run 0 calls")
+        self.table = QTableWidget(0, 8)
+        self.table.setHorizontalHeaderLabels(
+            ["#", "FROM", "TO", "RESULT", "CODE", "RTT", "TIME", "notes"]
+        )
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.table.horizontalHeader().setSectionResizeMode(
+            7, QHeaderView.ResizeMode.Stretch
+        )
+
+        self.summary_label = QLabel("0 passed · 0 failed · 0 running")
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setEnabled(False)
+        self.export_btn = QPushButton("Export CSV")
+        self.export_btn.setEnabled(False)
+
+        self._build_ui()
+        self._connect_ui()
+        self._refresh_hold_enabled()
+        self._refresh_plan_preview()
+        self._refresh_summary()
+
+    def _build_ui(self) -> None:
+        central = QWidget(self)
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
+
+        paste_grid = QGridLayout()
+        paste_grid.setColumnStretch(0, 1)
+        paste_grid.setColumnStretch(1, 1)
+        paste_grid.addWidget(QLabel("CALLERS"), 0, 0)
+        paste_grid.addWidget(QLabel("TARGETS"), 0, 1)
+        paste_grid.addWidget(self.callers_edit, 1, 0)
+        paste_grid.addWidget(self.targets_edit, 1, 1)
+        layout.addLayout(paste_grid, 1)
+
+        controls = QHBoxLayout()
+        controls.setSpacing(8)
+        self._add_labeled_control(controls, "Mode", self.mode_combo)
+        self._add_labeled_control(controls, "Pass", self.pass_combo)
+        self._add_labeled_control(controls, "Parallel", self.parallel_spin)
+        self._add_labeled_control(controls, "Hold", self.hold_spin)
+        self._add_labeled_control(controls, "Timeout", self.timeout_spin)
+        controls.addStretch(1)
+        layout.addLayout(controls)
+
+        run_row = QHBoxLayout()
+        run_row.addStretch(1)
+        run_row.addWidget(self.run_btn)
+        layout.addLayout(run_row)
+
+        layout.addWidget(self.table, 3)
+
+        footer = QHBoxLayout()
+        footer.addWidget(self.summary_label)
+        footer.addStretch(1)
+        footer.addWidget(self.cancel_btn)
+        footer.addWidget(self.export_btn)
+        layout.addLayout(footer)
+
+        self.setCentralWidget(central)
+
+    @staticmethod
+    def _add_labeled_control(layout: QHBoxLayout, label: str, widget: QWidget) -> None:
+        layout.addWidget(QLabel(label))
+        layout.addWidget(widget)
+
+    def _connect_ui(self) -> None:
+        self.callers_edit.textChanged.connect(self._refresh_plan_preview)
+        self.targets_edit.textChanged.connect(self._refresh_plan_preview)
+        self.mode_combo.currentIndexChanged.connect(self._refresh_plan_preview)
+        self.pass_combo.currentIndexChanged.connect(self._refresh_hold_enabled)
+        self.pass_combo.currentIndexChanged.connect(self._refresh_plan_preview)
+        self.parallel_spin.valueChanged.connect(self._refresh_plan_preview)
+        self.hold_spin.valueChanged.connect(self._refresh_plan_preview)
+        self.timeout_spin.valueChanged.connect(self._refresh_plan_preview)
+        self.run_btn.clicked.connect(self._on_run_clicked)
+        self.cancel_btn.clicked.connect(self._on_cancel_clicked)
+        self.export_btn.clicked.connect(self._on_export_clicked)
+
+    def _spec_from_ui(self) -> PlanSpec:
+        return PlanSpec(
+            callers=normalise_lines(self.callers_edit.toPlainText()),
+            targets=normalise_lines(self.targets_edit.toPlainText()),
+            mode=self.mode_combo.currentData(),
+            pass_criterion=self.pass_combo.currentData(),
+            parallel=self.parallel_spin.value(),
+            hold_seconds=float(self.hold_spin.value()),
+            timeout_seconds=float(self.timeout_spin.value()),
+        )
+
+    def _refresh_plan_preview(self) -> None:
+        count = len(expand(self._spec_from_ui()))
+        self.run_btn.setText(f"Run {count} calls")
+        self.run_btn.setEnabled(count > 0 and self._runner is None)
+
+    def _refresh_hold_enabled(self) -> None:
+        self.hold_spin.setEnabled(self.pass_combo.currentData() == "full-call")
+
+    def _on_run_clicked(self) -> None:
+        spec = self._spec_from_ui()
+        calls = expand(spec)
+        if not calls or self._runner is not None:
+            self._refresh_plan_preview()
+            return
+
+        self.results = []
+        self._row_by_call_index = {}
+        self.table.setRowCount(0)
+        for call in calls:
+            self._append_call_row(call)
+
+        self.export_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(True)
+        self._refresh_summary()
+
+        self._runner = Runner(spec, self.accounts, self)
+        self._runner.call_started.connect(self._on_call_started)
+        self._runner.call_completed.connect(self._on_call_completed)
+        self._runner.run_complete.connect(self._on_run_complete)
+        self._refresh_plan_preview()
+        self._runner.start()
+
+    def _on_call_started(self, call_index: int) -> None:
+        row = self._row_by_call_index.get(call_index)
+        if row is not None:
+            self._set_text(row, 3, "running")
+        self._refresh_summary()
+
+    def _on_call_completed(self, result: RunnerResult) -> None:
+        self.results.append(result)
+        row = self._row_by_call_index.get(result.call.index)
+        if row is None:
+            row = self._append_call_row(result.call)
+        self._populate_result_row(row, result)
+        self.export_btn.setEnabled(True)
+        self._refresh_summary()
+
+    def _on_run_complete(self, results: list[RunnerResult]) -> None:
+        self.results = list(results)
+        self._runner = None
+        self.cancel_btn.setEnabled(False)
+        self.export_btn.setEnabled(bool(self.results))
+        self._refresh_plan_preview()
+        self._refresh_summary()
+
+    def _on_cancel_clicked(self) -> None:
+        if self._runner is not None:
+            self._runner.cancel()
+
+    def _on_export_clicked(self) -> None:
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export CSV",
+            "",
+            "CSV files (*.csv);;All files (*)",
+        )
+        if filename:
+            self.export_csv(Path(filename))
+
+    def export_csv(self, path: Path) -> None:
+        with path.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.writer(handle, lineterminator="\n")
+            writer.writerow(CSV_HEADER)
+            for result in self.results:
+                started = self._started_at_datetime(result.started_at)
+                writer.writerow(
+                    [
+                        f"nb-{started:%Y%m%d-%H%M%S}-{result.call.index:03d}",
+                        self._format_started_at(started),
+                        result.from_account,
+                        result.to_uri,
+                        result.result,
+                        "" if result.sip_code is None else result.sip_code,
+                        result.sip_reason,
+                        "" if result.rtt_ms is None else int(result.rtt_ms),
+                        f"{result.duration_s:.1f}",
+                        result.notes,
+                    ]
+                )
+
+    def _append_call_row(self, call: PlanCall) -> int:
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        self._row_by_call_index[call.index] = row
+        for column, text in enumerate(
+            [
+                str(call.index),
+                call.caller_number,
+                call.target_number,
+                "queued",
+                "",
+                "",
+                "",
+                "",
+            ]
+        ):
+            self._set_text(row, column, text)
+        return row
+
+    def _populate_result_row(self, row: int, result: RunnerResult) -> None:
+        code = "" if result.sip_code is None else str(result.sip_code)
+        if result.sip_reason:
+            code = f"{code} {result.sip_reason}".strip()
+        rtt = "" if result.rtt_ms is None else f"{int(result.rtt_ms)} ms"
+        values = [
+            str(result.call.index),
+            result.from_account,
+            result.to_uri,
+            result.result,
+            code,
+            rtt,
+            f"{result.duration_s:.1f} s",
+            result.notes,
+        ]
+        for column, value in enumerate(values):
+            self._set_text(row, column, value)
+
+    def _refresh_summary(self) -> None:
+        passed = sum(1 for result in self.results if result.result == "PASS")
+        failed = sum(1 for result in self.results if result.result == "FAIL")
+        running = 0
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 3)
+            if item is not None and item.text() == "running":
+                running += 1
+        self.summary_label.setText(f"{passed} passed · {failed} failed · {running} running")
+
+    def _set_text(self, row: int, column: int, text: str) -> None:
+        item = self.table.item(row, column)
+        if item is None:
+            item = QTableWidgetItem()
+            self.table.setItem(row, column, item)
+        item.setText(text)
+
+    @staticmethod
+    def _started_at_datetime(value: Any) -> datetime:
+        if isinstance(value, datetime):
+            dt = value
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            return dt.astimezone(UTC)
+        return datetime.fromtimestamp(float(value), UTC)
+
+    @staticmethod
+    def _format_started_at(value: datetime) -> str:
+        return value.isoformat().replace("+00:00", "Z")
