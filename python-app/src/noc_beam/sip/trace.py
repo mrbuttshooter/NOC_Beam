@@ -23,8 +23,11 @@ log = logging.getLogger(__name__)
 _SIP_START = re.compile(
     r"^(INVITE|REGISTER|ACK|BYE|CANCEL|OPTIONS|SUBSCRIBE|NOTIFY|REFER|MESSAGE|PUBLISH|INFO|UPDATE|PRACK)\s+sip[s]?:|^SIP/2\.0\s+\d{3}"
 )
-_DIR_RX = re.compile(r"\.RX\s+(\d+)\s+bytes\s+packet from\s+(\S+)")
-_DIR_TX = re.compile(r"TX\s+(\d+)\s+bytes\s+packet to\s+(\S+)")
+# PJSIP 2.10+ dropped the literal "packet" word in some builds. Match
+# both the historical "RX 451 bytes packet from UDP 1.2.3.4:5060"
+# format and the newer "RX 451 bytes from UDP 1.2.3.4:5060" form.
+_DIR_RX = re.compile(r"\.?RX\s+(\d+)\s+bytes(?:\s+packet)?\s+from\s+(\S+)")
+_DIR_TX = re.compile(r"\.?TX\s+(\d+)\s+bytes(?:\s+packet)?\s+to\s+(\S+)")
 
 
 # pjsua2's LogConfig.writer setter is type-checked at the SWIG layer:
@@ -78,6 +81,17 @@ class TraceLogWriter(_LogWriterBase):
             self._direction = "TX"
             self._peer = m_tx.group(2)
             self._capturing = True
+            return
+
+        # Direction header missing? Fall back to detecting a SIP request
+        # or status line directly. PJSIP builds without the canonical
+        # "RX/TX N bytes from/to" preamble (or where the preamble was
+        # logged at a different level) still emit the message body.
+        if not self._capturing and _SIP_START.match(line):
+            self._direction = "?"
+            self._peer = "?"
+            self._capturing = True
+            self._buf.append(line)
             return
 
         if not self._capturing:

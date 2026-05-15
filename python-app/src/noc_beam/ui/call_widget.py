@@ -52,6 +52,12 @@ class CallWidget(QWidget):
         self.mute_btn = QPushButton("Mute")
         self.mute_btn.setCheckable(True)
         self.transfer_btn = QPushButton("Transfer")
+        # Pin a minimum width so the labels never get clipped to garbage like
+        # "ng" / "loh" when the parent layout squeezes the row. 72 px fits
+        # every label including "Transfer" with the existing button padding.
+        for _b in (self.answer_btn, self.reject_btn, self.hangup_btn,
+                   self.hold_btn, self.mute_btn, self.transfer_btn):
+            _b.setMinimumWidth(72)
 
         self.answer_btn.clicked.connect(lambda: self.answer_clicked.emit(self.call_id))
         self.reject_btn.clicked.connect(lambda: self.reject_clicked.emit(self.call_id))

@@ -145,7 +145,7 @@ def load_settings() -> GlobalSettings:
     if not path.exists():
         return GlobalSettings()
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
         audio = AudioSettings(**raw.get("audio", {}))
         codecs = CodecSettings(**raw.get("codecs", {}))
         appearance = AppearanceSettings(**raw.get("appearance", {}))
@@ -182,7 +182,7 @@ def load_accounts() -> list[AccountConfig]:
     if not path.exists():
         return []
     try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
         return [AccountConfig.from_storable(item) for item in raw]
     except Exception:
         log.exception("Failed to load accounts")

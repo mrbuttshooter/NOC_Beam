@@ -57,8 +57,18 @@ class HistoryView(QWidget):
         self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table.setSortingEnabled(False)
         header = self._table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeToContents)
-        header.setStretchLastSection(True)
+        # Pin minimum widths per column so "Duration" doesn't show as
+        # "DU..." in the narrow phone shell. Peer URIs vary wildly in
+        # length so we let that one stretch to fill leftover width.
+        header.setSectionResizeMode(0, QHeaderView.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.Interactive)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.Interactive)
+        header.setSectionResizeMode(4, QHeaderView.Interactive)
+        self._table.setColumnWidth(0, 132)  # When (yyyy-mm-dd hh:mm:ss)
+        self._table.setColumnWidth(1, 78)   # Direction (-> failed)
+        self._table.setColumnWidth(3, 64)   # Duration (mm:ss)
+        self._table.setColumnWidth(4, 96)   # Result (200 OK)
         self._table.itemDoubleClicked.connect(self._on_double_click)
 
         self._reload_btn = QPushButton("Reload")

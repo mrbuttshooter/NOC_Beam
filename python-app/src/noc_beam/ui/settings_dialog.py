@@ -118,11 +118,30 @@ class SettingsDialog(QDialog):
     def _build_appearance_tab(self) -> QWidget:
         w = QWidget()
         form = QFormLayout(w)
+
+        # Theme picker -- light is the Bria-style default the phone shell
+        # ships with, dark is the original NOC dashboard look. The
+        # high-contrast toggle below is a separate axis that overrides
+        # whichever theme is selected here.
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Light (Bria-style)", "light")
+        self.theme_combo.addItem("Dark (NOC dashboard)", "dark")
+        current_theme = getattr(self._settings.appearance, "theme", "light")
+        idx = self.theme_combo.findData(current_theme)
+        if idx >= 0:
+            self.theme_combo.setCurrentIndex(idx)
+        theme_hint = QLabel(
+            "Applied immediately on Apply -- no restart needed."
+        )
+        theme_hint.setObjectName("ViewHint")
+        theme_hint.setWordWrap(True)
+
         self.high_contrast_chk = QCheckBox("Use high-contrast theme")
         self.high_contrast_chk.setChecked(self._settings.appearance.high_contrast)
         hc_hint = QLabel(
             "Pure-black background, white foreground/borders, yellow focus. "
-            "Use when running on the on-call NOC desk or under bright glare."
+            "Use when running on the on-call NOC desk or under bright glare. "
+            "Overrides the theme picker above when enabled."
         )
         hc_hint.setObjectName("ViewHint")
         hc_hint.setWordWrap(True)
@@ -136,6 +155,8 @@ class SettingsDialog(QDialog):
         rm_hint.setObjectName("ViewHint")
         rm_hint.setWordWrap(True)
 
+        form.addRow("Theme", self.theme_combo)
+        form.addRow(theme_hint)
         form.addRow(self.high_contrast_chk)
         form.addRow(hc_hint)
         form.addRow(self.reduced_motion_chk)
@@ -181,6 +202,7 @@ class SettingsDialog(QDialog):
         settings.log_level = self.log_level.value()
         settings.appearance.high_contrast = self.high_contrast_chk.isChecked()
         settings.appearance.reduced_motion = self.reduced_motion_chk.isChecked()
+        settings.appearance.theme = self.theme_combo.currentData() or "light"
 
         new_priorities: dict[str, int] = {}
         codec_map: dict[str, int] = {}

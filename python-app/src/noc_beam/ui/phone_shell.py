@@ -725,14 +725,40 @@ class PhoneShell(QMainWindow):
     def _on_open_accounts(self):
         # Same pattern as _on_open_trace: lift the accounts_view into a
         # standalone window for power-user multi-account management.
+        # Master pane on the left (accounts_view), detail pane on the right
+        # (accounts_detail) wired through selected_account_changed.
         if not hasattr(self, "_accounts_window"):
-            from PySide6.QtWidgets import QMainWindow
+            from PySide6.QtWidgets import QMainWindow, QSplitter
+            from noc_beam.ui.accounts_detail import AccountDetail
+
             self._accounts_window = QMainWindow()
             self._accounts_window.setWindowTitle("NOC_Beam accounts")
-            self._accounts_window.resize(800, 560)
-            self._accounts_window.setCentralWidget(self.accounts_view)
+            self._accounts_window.resize(1100, 600)
+
+            self._accounts_detail = AccountDetail()
+            splitter = QSplitter(Qt.Orientation.Horizontal)
+            splitter.addWidget(self.accounts_view)
+            splitter.addWidget(self._accounts_detail)
+            splitter.setStretchFactor(0, 0)
+            splitter.setStretchFactor(1, 1)
+            splitter.setSizes([380, 720])
+            self._accounts_window.setCentralWidget(splitter)
+
+            self.accounts_view.selected_account_changed.connect(
+                self._on_accounts_window_selection
+            )
         self._accounts_window.show()
         self._accounts_window.raise_(); self._accounts_window.activateWindow()
+
+    def _on_accounts_window_selection(self, account_id: str) -> None:
+        if not account_id:
+            self._accounts_detail.show_empty()
+            return
+        cfg = next((a for a in self.accounts if a.id == account_id), None)
+        if cfg is None:
+            self._accounts_detail.show_empty()
+        else:
+            self._accounts_detail.show_account(cfg)
 
     def _on_open_test_runner(self):
         from noc_beam.ui.test_runner_view import TestRunnerView
