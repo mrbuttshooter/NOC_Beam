@@ -75,6 +75,14 @@ function Assert-PythonExecutable([string]$Executable) {
     Write-Host "Python executable found: $pythonVersion" -ForegroundColor Green
 }
 
+function Invoke-External([string]$Description, [scriptblock]$Command) {
+    & $Command
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "Command failed with exit code ${exitCode}: $Description"
+    }
+}
+
 function Invoke-VcCmd([string]$cmd) {
     # Runs a command inside the MSVC x64 environment.
     cmd /c "`"$VcVars`" && $cmd"
@@ -237,21 +245,24 @@ if (-not $SkipNativeBuild -and -not (Test-Path "$NativeOut\_pjsua2.pyd")) {
 # ------------------------------------------------------------------
 if (-not (Test-Path $VenvDir)) {
     Write-Header "Creating virtualenv at $VenvDir"
-    & $PythonExe -m venv $VenvDir
+    Invoke-External "Create virtualenv using $PythonExe" { & $PythonExe -m venv $VenvDir }
 }
 
 $Py = Join-Path $VenvDir "Scripts\python.exe"
 Write-Header "Installing Python dependencies"
-& $Py -m pip install --upgrade pip
-& $Py -m pip install -e "$RepoRoot[dev]"
+Invoke-External "Upgrade pip in $VenvDir" { & $Py -m pip install --upgrade pip }
+Invoke-External "Install project dependencies from $RepoRoot[dev]" { & $Py -m pip install -e "$RepoRoot[dev]" }
 
 # ------------------------------------------------------------------
 # 3. PyInstaller
 # ------------------------------------------------------------------
 Write-Header "Running PyInstaller"
 Push-Location $RepoRoot
-& $Py -m PyInstaller --clean --noconfirm build\noc_beam.spec
-Pop-Location
+try {
+    Invoke-External "Run PyInstaller for build\noc_beam.spec" { & $Py -m PyInstaller --clean --noconfirm build\noc_beam.spec }
+} finally {
+    Pop-Location
+}
 
 if (Test-Path "$RepoRoot\dist\NOC_Beam.exe") {
     Write-Header "SUCCESS"
