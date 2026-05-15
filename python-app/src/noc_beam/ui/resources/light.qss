@@ -58,15 +58,16 @@ QFrame#TopStrip {
 }
 
 QLabel#BrandMark {
+    /* Rounded square (4 px), Bria-style -- not a full circle. */
     background-color: #E85D04;
     color: #FFFFFF;
-    border-radius: 14px;
+    border-radius: 4px;
     min-width: 28px;
     min-height: 28px;
     max-width: 28px;
     max-height: 28px;
     qproperty-alignment: AlignCenter;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 700;
     letter-spacing: 0;
 }
@@ -668,6 +669,66 @@ QFrame#StatCard {
     border: 1px solid #ECEEF1;
     border-radius: 4px;
     padding: 12px 14px;
+}
+
+
+/* ---- Contacts + Favorites tabs (Bria-parity) -------------------- */
+QWidget#ContactsView, QWidget#FavoritesView {
+    background-color: #FFFFFF;
+}
+QFrame#ContactsBody { background-color: #FFFFFF; border: none; }
+QScrollArea#ContactsScroll { background-color: #FFFFFF; border: none; }
+
+QLineEdit#ContactsSearch {
+    background-color: #ECEEF1;
+    color: #1F2933;
+    border: 1px solid #ECEEF1;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 24px;
+}
+QLineEdit#ContactsSearch:focus {
+    background-color: #FFFFFF;
+    border-color: #E85D04;
+}
+
+QToolButton#ContactsActionBtn {
+    background: transparent;
+    color: #57606A;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px;
+    min-width: 28px;
+    min-height: 28px;
+}
+QToolButton#ContactsActionBtn:hover {
+    background-color: #ECEEF1;
+    color: #1F2933;
+}
+
+QFrame#ContactGroupRow {
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid #ECEEF1;
+}
+QFrame#ContactGroupRow:hover { background-color: #F5F6F8; }
+QLabel#GroupName {
+    color: #1F2933;
+    font-size: 13px;
+    font-weight: 500;
+}
+QLabel#GroupCount {
+    color: #94A0AD;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+}
+QToolButton#GroupChevron {
+    background: transparent;
+    border: none;
+    padding: 0;
+    min-width: 16px;
+    min-height: 16px;
 }
 QLabel#StatLabel {
     color: #94A0AD;

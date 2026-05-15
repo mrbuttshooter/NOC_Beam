@@ -56,7 +56,9 @@ from noc_beam.ui.accounts_view import AccountsView
 from noc_beam.ui.audio_strip import AudioStrip
 from noc_beam.ui.bottom_tabs import BottomTabs, Tab
 from noc_beam.ui.call_widget import CallWidget
+from noc_beam.ui.contacts_view import ContactsView
 from noc_beam.ui.dialpad import DialPad
+from noc_beam.ui.favorites_view import FavoritesView
 from noc_beam.ui.history_view import HistoryView
 from noc_beam.ui.settings_dialog import SettingsDialog
 from noc_beam.ui.trace_view import TraceView
@@ -128,6 +130,8 @@ class PhoneShell(QMainWindow):
         quit_act.setShortcut(QKeySequence("Ctrl+Q"))
 
         view = mb.addMenu("&View")
+        view.addAction("NOC Trace...", self._on_open_trace)
+        view.addAction("NOC Accounts...", self._on_open_accounts)
         view.addAction("Diagnostics...", self._on_diagnostics)
         view.addSeparator()
         view.addAction("Open wide dashboard...", self._on_open_wide)
@@ -201,18 +205,26 @@ class PhoneShell(QMainWindow):
         self.call_widget.setVisible(False)
         dpl.addWidget(self.call_widget); dpl.addWidget(self.dialpad, 1)
 
-        self.trace_view = TraceView(self)
-        self.accounts_view = AccountsView(self)
-        self.accounts_view.add_clicked.connect(self._on_add_account)
-        self.accounts_view.setMaximumWidth(16777215)
+        # Contacts + Favorites are Bria-parity tabs (the primary 4 in
+        # Bria are Dialpad / Contacts / Favorites / History). NOC-only
+        # surfaces (Trace, Accounts) live behind the View menu now.
+        self.contacts_view = ContactsView(self)
+        self.favorites_view = FavoritesView(self)
         self.history_view = HistoryView(self)
         self.history_view.redial_requested.connect(self._on_call_requested)
 
+        # Trace + Accounts are constructed for the View-menu windows;
+        # they're not in the stack but we keep references so signals
+        # (sip_message, etc.) wire once and stay live.
+        self.trace_view = TraceView(self)
+        self.accounts_view = AccountsView(self)
+        self.accounts_view.add_clicked.connect(self._on_add_account)
+
         self.stack = QStackedWidget(self)
-        self.stack.addWidget(dialpad_page)
-        self.stack.addWidget(self.trace_view)
-        self.stack.addWidget(self.accounts_view)
-        self.stack.addWidget(self.history_view)
+        self.stack.addWidget(dialpad_page)             # 0 DIALPAD
+        self.stack.addWidget(self.contacts_view)       # 1 CONTACTS
+        self.stack.addWidget(self.favorites_view)      # 2 FAVORITES
+        self.stack.addWidget(self.history_view)        # 3 HISTORY
 
         self.bottom_tabs = BottomTabs(self)
         self.bottom_tabs.tab_changed.connect(self.stack.setCurrentIndex)
@@ -553,6 +565,29 @@ class PhoneShell(QMainWindow):
         self._diagnostics_window.show()
         self._diagnostics_window.raise_(); self._diagnostics_window.activateWindow()
 
+    def _on_open_trace(self):
+        # Reparent the trace_view into a standalone QMainWindow on demand.
+        if not hasattr(self, "_trace_window"):
+            from PySide6.QtWidgets import QMainWindow
+            self._trace_window = QMainWindow()
+            self._trace_window.setWindowTitle("NOC_Beam SIP trace")
+            self._trace_window.resize(900, 600)
+            self._trace_window.setCentralWidget(self.trace_view)
+        self._trace_window.show()
+        self._trace_window.raise_(); self._trace_window.activateWindow()
+
+    def _on_open_accounts(self):
+        # Same pattern as _on_open_trace: lift the accounts_view into a
+        # standalone window for power-user multi-account management.
+        if not hasattr(self, "_accounts_window"):
+            from PySide6.QtWidgets import QMainWindow
+            self._accounts_window = QMainWindow()
+            self._accounts_window.setWindowTitle("NOC_Beam accounts")
+            self._accounts_window.resize(800, 560)
+            self._accounts_window.setCentralWidget(self.accounts_view)
+        self._accounts_window.show()
+        self._accounts_window.raise_(); self._accounts_window.activateWindow()
+
     def _on_open_wide(self):
         from noc_beam.ui.main_window import MainWindow
         if not hasattr(self, "_wide_window"):
@@ -573,8 +608,8 @@ class PhoneShell(QMainWindow):
             ("Return",  self._on_dial_input_enter),
             ("Esc",     self._on_hangup_requested),
             ("Ctrl+1",  lambda: self.bottom_tabs.select(int(Tab.DIALPAD))),
-            ("Ctrl+2",  lambda: self.bottom_tabs.select(int(Tab.TRACE))),
-            ("Ctrl+3",  lambda: self.bottom_tabs.select(int(Tab.ACCOUNTS))),
+            ("Ctrl+2",  lambda: self.bottom_tabs.select(int(Tab.CONTACTS))),
+            ("Ctrl+3",  lambda: self.bottom_tabs.select(int(Tab.FAVORITES))),
             ("Ctrl+4",  lambda: self.bottom_tabs.select(int(Tab.HISTORY))),
             ("Ctrl+K",  lambda: self.dial_input.setFocus(Qt.FocusReason.ShortcutFocusReason)),
         ):

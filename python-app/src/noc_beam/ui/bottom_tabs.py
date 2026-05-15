@@ -1,15 +1,15 @@
-"""Bottom tab bar -- Bria-style 4-icon navigation.
+"""Bottom tab bar -- Bria-parity 4-icon navigation.
 
-Four icon buttons across the bottom of the phone shell. Active button
-gets the orange accent + a 2 px top border. Clicking emits
-`tab_changed(int)` so the shell can swap the content area. Tabs are
-exclusive (radio).
+Four icon buttons across the bottom of the phone shell, mapped 1:1
+to Bria's tab structure: Dialpad / Contacts / Favorites / History.
+Active button gets the orange accent + a 2 px top border. Clicking
+emits `tab_changed(int)` so the shell can swap the content area.
 
-Tab indices:
-    0  Dialpad / Calls   (default)
-    1  Trace
-    2  Accounts
-    3  History
+NOC-specific surfaces (SIP trace, accounts management, diagnostics)
+are NOT in the bottom tabs -- they live behind the View menu, opened
+in their own windows. Keeps the main window visually identical to
+Bria for users who only need the softphone, and gives NOC engineers
+the deeper tools without crowding the primary UI.
 """
 from __future__ import annotations
 
@@ -28,17 +28,17 @@ from noc_beam.ui.rail_icons import rail_icon
 
 
 class Tab(IntEnum):
-    DIALPAD  = 0
-    TRACE    = 1
-    ACCOUNTS = 2
-    HISTORY  = 3
+    DIALPAD   = 0
+    CONTACTS  = 1
+    FAVORITES = 2
+    HISTORY   = 3
 
 
 _TABS: tuple[tuple[Tab, str, str, str], ...] = (
-    (Tab.DIALPAD,  "grid",     "Dial",     "Dialpad"),
-    (Tab.TRACE,    "list",     "Trace",    "SIP trace"),
-    (Tab.ACCOUNTS, "user",     "Accounts", "Accounts"),
-    (Tab.HISTORY,  "clock",    "History",  "Call history"),
+    (Tab.DIALPAD,   "grid",  "Dial",      "Dialpad"),
+    (Tab.CONTACTS,  "user",  "Contacts",  "Contacts and groups"),
+    (Tab.FAVORITES, "star",  "Favorites", "Starred contacts"),
+    (Tab.HISTORY,   "clock", "History",   "Call history"),
 )
 
 
