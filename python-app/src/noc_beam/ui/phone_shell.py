@@ -876,8 +876,15 @@ class PhoneShell(QMainWindow):
             log.exception("audio-strip speaker (device) mute failed")
 
     def _on_audio_strip_volume(self, value: int) -> None:
-        """Top-strip volume → adjust output level on active call media.
-        Stored in settings so future calls inherit the setting."""
+        """Top-strip OUTPUT slider → scale remote audio coming TO us.
+
+        Note on pjsua2 directionality (this is counter-intuitive):
+        for a CALL audio media, adjustTxLevel scales audio the call
+        port TRANSMITS to the conference bridge — that's audio sourced
+        from remote RTP, i.e. what we *hear*. Inverse from device
+        media. Earlier wiring used adjustRxLevel which is the mic
+        knob; that's why the controls felt swapped to the user.
+        """
         try:
             self.settings.audio.master_volume_pct = int(value)
         except Exception:
@@ -891,16 +898,13 @@ class PhoneShell(QMainWindow):
                 return
             info = call.getInfo()
             for mi in info.media:
-                # Audio media that is active (type=1, status=1)
                 if mi.type != 1 or mi.status != 1:
                     continue
                 aud = call.getAudioMedia(mi.index)
-                # adjustRxLevel: 1.0 = unity, 0..2.0 typical range.
-                # Map 0..100 percent → 0.0..1.5 (giving headroom).
                 level = max(0.0, min(1.5, value / 66.6))
-                aud.adjustRxLevel(level)
+                aud.adjustTxLevel(level)  # scale remote → us (speaker)
         except Exception:
-            log.exception("audio-strip volume adjust failed")
+            log.exception("audio-strip output volume adjust failed")
 
     def _on_audio_strip_mic_mute(self, muted: bool) -> None:
         """Top-strip mic icon → silence the capture DEVICE.
@@ -940,8 +944,13 @@ class PhoneShell(QMainWindow):
             pass
 
     def _on_audio_strip_mic_volume(self, value: int) -> None:
-        """Top-strip mic gain → adjustTxLevel on the active call.
-        adjustTxLevel scales capture → call: 1.0 unity, 0 mutes."""
+        """Top-strip MIC slider → scale our voice going TO the remote.
+
+        For a CALL audio media, adjustRxLevel scales what the call port
+        RECEIVES from the bridge (= our capture audio routed in via
+        startTransmit) before it gets sent over RTP. So this is the
+        mic-side gain knob.
+        """
         call = self._selected_pjsua_call()
         if call is None:
             return
@@ -955,7 +964,7 @@ class PhoneShell(QMainWindow):
                     continue
                 aud = call.getAudioMedia(mi.index)
                 level = max(0.0, min(1.5, value / 66.6))
-                aud.adjustTxLevel(level)
+                aud.adjustRxLevel(level)  # scale us → remote (mic)
         except Exception:
             log.exception("audio-strip mic volume adjust failed")
 
@@ -977,23 +986,28 @@ class PhoneShell(QMainWindow):
             if not PJSUA2_AVAILABLE:
                 return
             info = call.getInfo()
-            tx = rx = 0
+            tx_level = rx_level = 0
             for mi in info.media:
                 if mi.type != 1 or mi.status != 1:
                     continue
                 aud = call.getAudioMedia(mi.index)
                 # PJSIP gives raw 0..255 amplitude.
+                # Same directionality inversion as the gain sliders:
+                #   call.getRxLevel() = audio coming IN to the call
+                #     port from the bridge (our mic) = TX direction
+                #   call.getTxLevel() = audio the call port sends OUT
+                #     to the bridge (remote audio) = RX direction
                 try:
-                    rx = max(rx, int(aud.getRxLevel() / 2.55))
+                    tx_level = int(aud.getRxLevel() / 2.55)
                 except Exception:
                     pass
                 try:
-                    tx = max(tx, int(aud.getTxLevel() / 2.55))
+                    rx_level = int(aud.getTxLevel() / 2.55)
                 except Exception:
                     pass
                 break
-            self.audio.set_tx_level(tx)
-            self.audio.set_rx_level(rx)
+            self.audio.set_tx_level(tx_level)
+            self.audio.set_rx_level(rx_level)
         except Exception:
             # Polling must never raise into the event loop.
             pass

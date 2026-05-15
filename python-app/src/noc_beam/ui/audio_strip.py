@@ -175,11 +175,12 @@ class AudioStrip(QFrame):
         meters_row = QHBoxLayout()
         meters_row.setContentsMargins(0, 0, 0, 0)
         meters_row.setSpacing(6)
-        meters_row.addWidget(tx_label)
-        meters_row.addWidget(self.tx_bar)
-        meters_row.addSpacing(8)
+        # RX (incoming audio) on the left, TX (outgoing mic) on the right.
         meters_row.addWidget(rx_label)
         meters_row.addWidget(self.rx_bar)
+        meters_row.addSpacing(8)
+        meters_row.addWidget(tx_label)
+        meters_row.addWidget(self.tx_bar)
         meters_row.addStretch(1)
 
         layout = QVBoxLayout(self)
