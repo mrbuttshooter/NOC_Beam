@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from noc_beam.config.history import CdrEntry, clear_history, load_history
 from noc_beam.ui.cdr_detail_dialog import CdrDetailDialog
+from noc_beam.ui.components import SipCodeBadge
 
 
 def _fmt_when(ts: float) -> str:
@@ -116,12 +117,15 @@ class HistoryRow(QFrame):
         self._call_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._call_btn.setEnabled(bool(entry.peer_uri))
         self._call_btn.clicked.connect(self._emit_redial)
+        code = entry.end_code if entry.end_code else (200 if entry.was_answered else None)
+        badge = SipCodeBadge(code, entry.end_reason, self)
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(8, 6, 8, 6)
         outer.setSpacing(8)
         outer.addWidget(arrow_lbl, 0, Qt.AlignmentFlag.AlignTop)
         outer.addLayout(text_col, 1)
+        outer.addWidget(badge, 0, Qt.AlignmentFlag.AlignVCenter)
         outer.addWidget(self._call_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
     def _emit_redial(self) -> None:

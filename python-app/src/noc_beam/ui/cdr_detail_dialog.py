@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from noc_beam.config.history import CdrEntry
+from noc_beam.ui.components import StatusPill
 
 
 def _fmt_ts(ts: float | None) -> str:
@@ -57,6 +58,7 @@ class CdrDetailDialog(QDialog):
     def __init__(self, entry: CdrEntry, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._entry = entry
+        self.setObjectName("CdrDetailDialog")
         self.setWindowTitle("Call detail")
         self.setMinimumWidth(420)
 
@@ -65,8 +67,13 @@ class CdrDetailDialog(QDialog):
         peer_lbl.setObjectName("CdrDetailPeer")
         peer_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
-        direction_lbl = QLabel(_direction_label(entry))
-        direction_lbl.setObjectName("CdrDetailDirection")
+        if entry.was_answered:
+            level = "ok"
+        elif entry.direction == "in":
+            level = "danger"
+        else:
+            level = "warn"
+        direction_lbl = StatusPill(_direction_label(entry), level, self)
 
         # Field grid
         form = QFormLayout()

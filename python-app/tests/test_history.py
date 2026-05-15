@@ -7,6 +7,14 @@ import pytest
 
 from noc_beam.config import history
 
+QtWidgets = pytest.importorskip("PySide6.QtWidgets")
+QApplication = QtWidgets.QApplication
+_APP = QApplication.instance()
+if _APP is None:
+    _APP = QApplication([])
+
+from noc_beam.ui.history_view import HistoryRow  # noqa: E402
+
 
 @pytest.fixture(autouse=True)
 def isolated_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -77,3 +85,26 @@ def test_clear_removes_file() -> None:
 def test_malformed_file_resets_gracefully(tmp_path: Path) -> None:
     history.history_file().write_text("{this is not json", encoding="utf-8")
     assert history.load_history() == []
+
+
+def test_history_row_uses_result_badge_and_action_column() -> None:
+    entry = history.CdrEntry(
+        call_id=1,
+        account_id="acc-1",
+        peer_uri="sip:alice@example.com",
+        direction="out",
+        started_at=1.0,
+        connected_at=2.0,
+        ended_at=8.0,
+        end_code=200,
+        end_reason="OK",
+        codec="PCMU",
+    )
+    row = HistoryRow(entry, 0)
+
+    try:
+        assert row.objectName() == "HistoryRow"
+        assert row.findChild(QtWidgets.QLabel, "SipCodeBadge") is not None
+        assert row.findChild(QtWidgets.QToolButton, "HistoryRowCall") is not None
+    finally:
+        row.close()

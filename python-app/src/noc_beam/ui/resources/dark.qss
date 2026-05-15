@@ -1204,3 +1204,6 @@ QFrame#DenseRowActions {
     background-color: transparent;
     border: none;
 }
+QFrame#HistoryRow[result="missed"], QFrame#HistoryRow[result="failed"] {
+    background-color: #2A1115;
+}
