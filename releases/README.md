@@ -11,6 +11,7 @@ Built `.exe` artifacts for boss / field testing.
 
 | File | Built from | SHA-256 | Native PJSIP | Size |
 |---|---|---|---|---|
+| `NOC_Beam-5613e0e.exe` | `5613e0e` (fix(ui): pull last inline style into QSS — includes account-persistence fix from `e38b2d8`) | `e38319095b95612df201a459107b91432aaa679ffcb4e2a89b8862c0bf8fe88e` | yes (bundled `_pjsua2.pyd`) | 59.6 MB |
 | `NOC_Beam-d358d16.exe` | `d358d16` (fix: deepen native sip smoke and stun wiring) | `0e10e69e8ef3cd58bfd73f300ba516210c5f1c1d7dd6fa4aa95ca3a92d21ec5f` | yes (bundled `_pjsua2.pyd`) | 55.5 MB |
 
 ## How to run
