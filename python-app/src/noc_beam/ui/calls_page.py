@@ -1,23 +1,30 @@
-"""Calls destination -- idle hero + active call view + multi-call view.
+"""Calls destination -- LCD panel + dialpad + state-driven bottom section.
 
-Three layouts in a `QStackedLayout`:
-  - Idle  : hero block (Ready / No active calls / active account meta) + dialpad
-  - Active: compact call list on top + the existing CallWidget below + dialpad
-  - Multi : same as active for now (Tier-3 swaps in callstrips)
+Composition (Direction α: LCD + Console):
 
-The active state is driven from the outside via `set_state()`. MainWindow
-calls it from the existing call_added / call_removed handlers based on the
-CallManager record count -- 0 = idle, 1 = active, >=2 = multi.
+  +---------------------------------------------------------------+
+  |  LCDPanel  --  always visible, always reads current state     |
+  |  cyan-glow chassis with REGISTRATION / TRANSPORT / MEDIA /    |
+  |  QUALITY LEDs in the four corners                             |
+  +---------------------------------------------------------------+
+  |                                                               |
+  |  Dialpad        |   Bottom section (state-driven)            |
+  |  (always there, |   - IDLE  : "Press a key to dial" hint     |
+  |   for DTMF      |   - ACTIVE: CallWidget action row          |
+  |   while in a    |   - MULTI : call list + CallWidget         |
+  |   call)         |                                             |
+  +---------------------------------------------------------------+
 
-The dialpad and call_widget are passed in by MainWindow (they keep the
-existing slots wired). This module only owns the hero block + the
-QStackedLayout layout.
+Outside drives state via set_state(IDLE/ACTIVE/MULTI). MainWindow keeps
+calling _sync_calls_state from the call manager events, so the page
+stays in sync without any new wiring.
 """
 from __future__ import annotations
 
+import time
 from typing import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -28,7 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from noc_beam.ui.rail_icons import rail_icon
+from noc_beam.ui.lcd_panel import LCDPanel
 
 
 # State indices -- public so MainWindow can read them as constants.
@@ -37,66 +44,8 @@ ACTIVE = 1
 MULTI = 2
 
 
-class _Hero(QFrame):
-    """Idle-state hero card: Ready glyph + title + meta line."""
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setObjectName("CallsHero")
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setMinimumHeight(132)
-
-        # Render the check via QSvgRenderer instead of a unicode glyph so the
-        # icon stays sharp at any DPI and won't get auto-emoji-ed by Windows.
-        self.glyph = QLabel(self)
-        self.glyph.setObjectName("HeroGlyph")
-        self.glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.glyph.setPixmap(rail_icon("check", color="#66D19E", px=28).pixmap(28, 28))
-
-        self.state_label = QLabel("READY", self)
-        self.state_label.setObjectName("HeroState")
-
-        self.title = QLabel("No active calls", self)
-        self.title.setObjectName("HeroTitle")
-
-        self.meta = QLabel("", self)
-        self.meta.setObjectName("HeroMeta")
-        self.meta.setText("")  # populated by set_meta
-
-        body = QVBoxLayout()
-        body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(4)
-        body.addWidget(self.state_label)
-        body.addWidget(self.title)
-        body.addWidget(self.meta)
-        body.addStretch(1)
-
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(26, 22, 26, 22)
-        outer.setSpacing(22)
-        outer.addWidget(self.glyph, 0, Qt.AlignmentFlag.AlignTop)
-        outer.addLayout(body, 1)
-
-    def set_meta(self, account_label: str | None, codec: str | None) -> None:
-        """Render the muted mono line under the title."""
-        bits: list[str] = []
-        if account_label:
-            bits.append(account_label)
-        else:
-            bits.append("no account")
-        if codec:
-            bits.append(codec)
-        self.meta.setText("  ·  ".join(bits))
-
-
 class CallsPage(QWidget):
-    """Idle / active / multi states for the Calls destination.
-
-    Composition: each state is its own QWidget inside a QStackedLayout.
-    The dialpad lives in a fixed right column shared across all states
-    (MainWindow only constructs one dialpad; this page re-parents it on
-    demand if the layout needs to move it).
-    """
+    """Always-on LCD on top, dialpad + state-swapped bottom section."""
 
     def __init__(
         self,
@@ -111,9 +60,22 @@ class CallsPage(QWidget):
         self._call_widget = call_widget
         self._meta_provider: Callable[[], tuple[str | None, str | None]] | None = None
 
-        # Right-column dialpad holder is shared visual furniture; re-used
-        # across the three state layouts via reparenting. Wrapping it in a
-        # holder widget makes the reparent atomic.
+        # The constant centerpiece.
+        self.lcd = LCDPanel(self)
+        self.lcd.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+
+        # Active-call duration timer -- ticks every second while ACTIVE
+        # so the LCD's MM:SS counter stays live without MainWindow having
+        # to push updates on every tick.
+        self._active_started_at: float | None = None
+        self._active_label: str = ""
+        self._active_codec: str | None = None
+        self._active_clock: int | None = None
+        self._tick_timer = QTimer(self)
+        self._tick_timer.setInterval(1000)
+        self._tick_timer.timeout.connect(self._tick_duration)
+
+        # Dialpad holder -- shared furniture, lives in the bottom row.
         self._dialpad_holder = QWidget(self)
         dl = QVBoxLayout(self._dialpad_holder)
         dl.setContentsMargins(0, 0, 0, 0)
@@ -122,59 +84,59 @@ class CallsPage(QWidget):
         dl.addStretch(1)
         self._dialpad_holder.setMaximumWidth(320)
 
-        # Hero (idle) widget.
-        self.hero = _Hero(self)
-
-        # Build the three pages.
-        self._idle_page = self._build_idle_page()
-        self._active_page = self._build_active_page()
-        # Multi shares the active layout for Tier-2; Tier-3 will replace.
-        self._multi_page = self._active_page
-
-        self._stack = QStackedLayout(self)
+        # Bottom-section pages.
+        self._idle_section = self._build_idle_section()
+        self._active_section = self._build_active_section()
+        # Multi reuses active for now (Tier-3 wires real callstrips).
+        self._stack = QStackedLayout()
         self._stack.setContentsMargins(0, 0, 0, 0)
-        self._stack.addWidget(self._idle_page)
-        self._stack.addWidget(self._active_page)
-        # Multi index intentionally points at the same widget instance as
-        # active -- QStackedLayout supports duplicates by index.
-        # Placeholder kept so the index map matches the IDLE/ACTIVE/MULTI
-        # constants above without a separate mapping.
-        self._stack.addWidget(QWidget())  # MULTI = 2 -- swapped in set_state
+        self._stack.addWidget(self._idle_section)
+        self._stack.addWidget(self._active_section)
+        self._stack.addWidget(QWidget())  # placeholder for MULTI
+
+        # Compose: LCD on top, dialpad + state-section below.
+        bottom_row = QHBoxLayout()
+        bottom_row.setContentsMargins(0, 0, 0, 0)
+        bottom_row.setSpacing(20)
+        bottom_row.addWidget(self._dialpad_holder)
+        bottom_wrap = QWidget(self)
+        bottom_wrap_l = QVBoxLayout(bottom_wrap)
+        bottom_wrap_l.setContentsMargins(0, 0, 0, 0)
+        bottom_wrap_l.addLayout(self._stack)
+        bottom_row.addWidget(bottom_wrap, 1)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(20, 20, 20, 20)
+        outer.setSpacing(20)
+        outer.addWidget(self.lcd)
+        outer.addLayout(bottom_row, 1)
 
         self._state = IDLE
 
     # ------------------------------------------------------------------
-    def _build_idle_page(self) -> QWidget:
+    def _build_idle_section(self) -> QWidget:
+        """When idle, the bottom section is a quiet hint about the dialpad."""
         page = QWidget()
-        outer = QHBoxLayout(page)
-        outer.setContentsMargins(20, 20, 20, 20)
-        outer.setSpacing(20)
-
-        left = QVBoxLayout()
-        left.setContentsMargins(0, 0, 0, 0)
-        left.setSpacing(16)
-        left.addWidget(self.hero)
-        left.addStretch(1)
-        outer.addLayout(left, 1)
-
-        # Right column gets the dialpad holder (parent-swap each time we
-        # build a layout -- only one of the three layouts is parented at
-        # a time so there's no aliasing).
-        outer.addWidget(self._dialpad_holder)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 8, 0, 0)
+        layout.setSpacing(6)
+        title = QLabel("Press a key, paste a URI, or use the dialpad")
+        title.setObjectName("CallsHint")
+        sub = QLabel("Ctrl+K focuses the dial bar. Enter places the call.")
+        sub.setObjectName("CallsHintSub")
+        layout.addWidget(title)
+        layout.addWidget(sub)
+        layout.addStretch(1)
         return page
 
-    def _build_active_page(self) -> QWidget:
+    def _build_active_section(self) -> QWidget:
+        """During a call -- show the action row from the existing CallWidget."""
         page = QWidget()
-        outer = QHBoxLayout(page)
-        outer.setContentsMargins(20, 20, 20, 20)
-        outer.setSpacing(20)
-
-        left = QVBoxLayout()
-        left.setContentsMargins(0, 0, 0, 0)
-        left.setSpacing(8)
-        left.addWidget(self._call_list)
-        left.addWidget(self._call_widget, 1)
-        outer.addLayout(left, 1)
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        layout.addWidget(self._call_list)
+        layout.addWidget(self._call_widget, 1)
         return page
 
     # ------------------------------------------------------------------
@@ -182,27 +144,88 @@ class CallsPage(QWidget):
         self, provider: Callable[[], tuple[str | None, str | None]]
     ) -> None:
         """MainWindow supplies a callback returning (account_label, codec)
-        for the idle hero meta line. Called whenever set_state(IDLE)."""
+        for the idle LCD readout."""
         self._meta_provider = provider
 
     def set_state(self, state: int) -> None:
         if state not in (IDLE, ACTIVE, MULTI):
             return
         self._state = state
-        # Move the dialpad holder into the right slot before swapping pages.
-        # Idle keeps the dialpad in its right column; active hides it (the
-        # user is in a call, the dialpad collapses to make room).
         if state == IDLE:
-            self._idle_page.layout().addWidget(self._dialpad_holder)
             self._dialpad_holder.show()
-            if self._meta_provider is not None:
-                acc, codec = self._meta_provider()
-                self.hero.set_meta(acc, codec)
+            self._tick_timer.stop()
+            self._active_started_at = None
+            acc, codec = (self._meta_provider() if self._meta_provider else (None, None))
+            self.lcd.set_idle(acc, codec)
+            # Best-effort transport LED inferred from typical NOC config: TLS
+            # is the recommended default; stay muted until we actually know.
+            self.lcd.set_transport_led("")
+            self.lcd.set_media_led("off")
+            self.lcd.set_quality_led(None)
         else:
-            # Hide dialpad; active call surface gets the full width.
-            self._dialpad_holder.hide()
+            self._dialpad_holder.show()  # keep dialpad accessible for DTMF
         self._stack.setCurrentIndex(state)
 
     @property
     def state(self) -> int:
         return self._state
+
+    # ------------------------------------------------------------------
+    # Active-call LCD updates -- MainWindow calls these as state changes.
+    # ------------------------------------------------------------------
+    def lcd_show_dialing(self, target: str, codec: str | None) -> None:
+        self._active_label = target
+        self._active_codec = codec
+        self._active_started_at = None
+        self._tick_timer.stop()
+        self.lcd.set_dialing(target, codec)
+
+    def lcd_show_incoming(self, caller_uri: str) -> None:
+        self._active_label = caller_uri
+        self._active_started_at = None
+        self._tick_timer.stop()
+        self.lcd.set_incoming(caller_uri)
+
+    def lcd_show_active(
+        self,
+        call_label: str,
+        state_text: str,
+        connected_at: float | None,
+        codec: str | None,
+        clock_hz: int | None,
+        rtt_ms: float | None,
+        mos: float | None,
+    ) -> None:
+        self._active_label = call_label
+        self._active_codec = codec
+        self._active_clock = clock_hz
+        self._active_started_at = connected_at
+        if connected_at is not None:
+            duration = max(0, time.time() - connected_at)
+            if not self._tick_timer.isActive():
+                self._tick_timer.start()
+        else:
+            duration = 0
+            self._tick_timer.stop()
+        self.lcd.set_active(call_label, state_text, duration, codec, clock_hz, rtt_ms, mos)
+
+    def lcd_update_quality(self, mos: float, loss_pct: float, rtt_ms: float) -> None:
+        # Live RTT/MOS refresh while a call is up; rebuild the active row.
+        if self._active_started_at is None:
+            return
+        duration = max(0, time.time() - self._active_started_at)
+        self.lcd.set_active(
+            self._active_label,
+            "ACTIVE",
+            duration,
+            self._active_codec,
+            self._active_clock,
+            rtt_ms,
+            mos,
+        )
+
+    def _tick_duration(self) -> None:
+        if self._active_started_at is None:
+            return
+        duration = int(max(0, time.time() - self._active_started_at))
+        self.lcd.duration_label.setText(f"{duration // 60:02d}:{duration % 60:02d}")

@@ -444,6 +444,44 @@ class MainWindow(QMainWindow):
                 "warn" if code in (401, 403, 407, 423) else "danger"
             )
             self.title_bar.set_chip_status(level)
+        # Per-account LCD LED: when this is the active account, mirror to
+        # the LCD chassis registration corner-LED.
+        if account_id == self.title_bar.active_account_id:
+            led_level = "ok" if 200 <= code < 300 else (
+                "warn" if code in (401, 403, 407, 423) else "danger"
+            )
+            self.calls_page.lcd.set_registration_led(led_level)
+        # Light the Accounts rail destination so the operator sees account
+        # health without having to click into Accounts.
+        self._refresh_rail_indicators()
+
+    def _refresh_rail_indicators(self) -> None:
+        """Drive the per-destination corner LEDs.
+
+        Calls    -- green when any call is active.
+        Accounts -- green if all enabled accounts are 2xx, amber if
+                    some/auth-failing, red if none, off if no accounts.
+        """
+        # Calls indicator: lit while any call is active.
+        active_count = len(self.calls.all())
+        self.rail.set_indicator(int(Dest.CALLS), "ok" if active_count > 0 else None)
+
+        # Accounts indicator: aggregate registration health.
+        enabled = [a for a in self.accounts if a.enabled]
+        if not enabled:
+            self.rail.set_indicator(int(Dest.ACCOUNTS), None)
+            return
+        codes = [self._reg_state.get(a.id, 0) for a in enabled]
+        registered = sum(1 for c in codes if 200 <= c < 300)
+        auth_fail = sum(1 for c in codes if c in (401, 403, 407, 423))
+        if registered == len(enabled):
+            self.rail.set_indicator(int(Dest.ACCOUNTS), "ok")
+        elif registered == 0 and auth_fail == 0:
+            self.rail.set_indicator(int(Dest.ACCOUNTS), "danger")
+        elif auth_fail > 0:
+            self.rail.set_indicator(int(Dest.ACCOUNTS), "warn")
+        else:
+            self.rail.set_indicator(int(Dest.ACCOUNTS), "warn")
 
     def _account_label(self, account_id: str) -> str:
         acc = next((a for a in self.accounts if a.id == account_id), None)
@@ -465,6 +503,7 @@ class MainWindow(QMainWindow):
         self.calls.update_state(call_id, CallState.INCOMING)
         self._select_call(call_id)
         self.call_widget.show_incoming(call_id, remote)
+        self.calls_page.lcd_show_incoming(remote or "Unknown caller")
         self.rail.select(int(Dest.CALLS))
         if not self.drawer.is_open():
             self.drawer.open()
@@ -495,6 +534,7 @@ class MainWindow(QMainWindow):
                         jitter_ms: float, rtt_ms: float) -> None:
         if call_id == self._selected_call_id:
             self.call_widget.update_quality(mos, loss)
+            self.calls_page.lcd_update_quality(mos, loss, rtt_ms)
 
     def _on_call_ended(self, call_id: int) -> None:
         self._maybe_write_cdr(call_id)
@@ -524,17 +564,39 @@ class MainWindow(QMainWindow):
             return
         if rec.direction == "in" and rec.state == CallState.INCOMING:
             self.call_widget.show_incoming(call_id, rec.remote_uri)
+            self.calls_page.lcd_show_incoming(rec.remote_uri or "Unknown caller")
         else:
             self.call_widget.show_outgoing(call_id, rec.remote_uri or "…")
+            label = rec.remote_uri or "…"
+            if rec.state in (CallState.CALLING, CallState.EARLY):
+                self.calls_page.lcd_show_dialing(label, rec.codec)
+            else:
+                self.calls_page.lcd_show_active(
+                    label,
+                    rec.state.value,
+                    rec.connected_at,
+                    rec.codec,
+                    rec.clock_rate,
+                    None,  # rtt unknown here; quality_changed updates it
+                    None,
+                )
         self.call_widget.update_state(rec.state.value, rec.last_code, rec.last_reason)
         if rec.codec:
             self.call_widget.update_media(rec.codec, rec.clock_rate, rec.channels)
+            # Media transport: SRTP if the account uses srtp, plain otherwise.
+            acc = next((a for a in self.accounts if a.id == rec.account_id), None)
+            if acc is not None:
+                self.calls_page.lcd.set_transport_led(acc.transport)
+                self.calls_page.lcd.set_media_led(
+                    "srtp" if acc.srtp != "disabled" else "plain"
+                )
 
     def _on_call_record_added(self, call_id: int) -> None:
         if self._selected_call_id is None:
             self._select_call(call_id)
         self.dialpad.set_in_call(True)
         self._sync_calls_state()
+        self._refresh_rail_indicators()
 
     def _on_call_record_updated(self, call_id: int) -> None:
         rec = self.calls.get(call_id)
@@ -573,6 +635,7 @@ class MainWindow(QMainWindow):
                 if self.drawer.is_open():
                     self.drawer.close()
         self._sync_calls_state()
+        self._refresh_rail_indicators()
 
     # ------------------------------------------------------------------
     # Dialpad / call_widget actions
