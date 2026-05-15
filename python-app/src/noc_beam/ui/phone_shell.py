@@ -255,6 +255,7 @@ class PhoneShell(QMainWindow):
         # Bria are Dialpad / Contacts / Favorites / History). NOC-only
         # surfaces (Trace, Accounts) live behind the View menu now.
         self.contacts_view = ContactsView(self)
+        self.contacts_view.call_requested.connect(self._on_call_requested)
         self.favorites_view = FavoritesView(self)
         self.history_view = HistoryView(self)
         self.history_view.redial_requested.connect(self._on_call_requested)
