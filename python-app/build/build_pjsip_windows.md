@@ -6,7 +6,9 @@ This recipe produces a custom `pjsua2` Python extension for Windows x64 with:
 - **OpenSSL** (for SIP/TLS transport)
 - **libSRTP** (for media encryption — bundled in PJSIP)
 - **Opus** (wideband audio codec — bundled in PJSIP)
-- **WASAPI** audio backend (low-latency Windows audio)
+- **WMME** Windows audio backend. The automated build disables WASAPI for
+  PJSIP 2.14.1 because that target leaves unresolved symbols on current
+  VS2022 builds.
 
 It must be run on a Windows 10/11 x64 host. Estimated time: 30–60 min on the
 first run, 5 min on rebuilds.
@@ -24,13 +26,8 @@ winget install --id Git.Git
 winget install --id Python.Python.3.11
 winget install --id Kitware.CMake
 winget install --id NASM.NASM
-```
-
-You also need **SWIG 4.x** for the Python bindings:
-
-```powershell
-choco install swig
-# or download from https://www.swig.org/download.html and add to PATH
+winget install --id SWIG.SWIG
+winget install --id StrawberryPerl.StrawberryPerl
 ```
 
 Verify:
@@ -38,6 +35,7 @@ Verify:
 ```powershell
 cl       # MSVC compiler
 python --version    # 3.11.x
+perl -v
 swig -version       # 4.x
 nasm -v             # for OpenSSL asm
 cmake --version
@@ -81,14 +79,30 @@ cmake --build . --config Release --target install
 cd ..\..
 ```
 
-## 4. Clone PJSIP
+## 4. Build Opus
+
+```powershell
+git clone --depth 1 --branch v1.5.2 https://github.com/xiph/opus.git
+cd opus
+mkdir build-win
+cd build-win
+cmake -G "Visual Studio 17 2022" -A x64 `
+      -DCMAKE_INSTALL_PREFIX=..\..\opus-install `
+      -DBUILD_SHARED_LIBS=OFF `
+      -DOPUS_BUILD_TESTING=OFF `
+      -DOPUS_BUILD_PROGRAMS=OFF ..
+cmake --build . --config Release --target install
+cd ..\..
+```
+
+## 5. Clone PJSIP
 
 ```powershell
 git clone --depth 1 --branch 2.14.1 https://github.com/pjsip/pjproject.git
 cd pjproject
 ```
 
-### 4a. Create config_site.h
+### 5a. Create config_site.h
 
 Create `pjlib\include\pj\config_site.h`:
 
@@ -98,7 +112,6 @@ Create `pjlib\include\pj\config_site.h`:
 #define PJMEDIA_HAS_SRTP            1
 #define PJMEDIA_HAS_BCG729          1
 #define PJMEDIA_HAS_OPUS_CODEC      1
-#define PJMEDIA_AUDIO_DEV_HAS_WASAPI 1
 #define PJMEDIA_AUDIO_DEV_HAS_WMME  1
 #define PJ_ENABLE_EXTRA_CHECK       1
 #define PJSUA_MAX_ACC               32
@@ -106,7 +119,7 @@ Create `pjlib\include\pj\config_site.h`:
 #include <pj/config_site_sample.h>
 ```
 
-### 4b. Configure include/lib paths
+### 5b. Configure include/lib paths
 
 PJSIP looks up OpenSSL and BCG729 via environment variables. From the
 `pjproject\` directory:
@@ -114,24 +127,28 @@ PJSIP looks up OpenSSL and BCG729 via environment variables. From the
 ```powershell
 $env:OPENSSL_DIR    = (Resolve-Path ..\openssl-install).Path
 $env:BCG729_DIR     = (Resolve-Path ..\bcg729-install).Path
+$env:OPUS_DIR       = (Resolve-Path ..\opus-install).Path
 
-# Tell MSVC where to find them
-$env:INCLUDE = "$env:OPENSSL_DIR\include;$env:BCG729_DIR\include;$env:INCLUDE"
-$env:LIB     = "$env:OPENSSL_DIR\lib;$env:BCG729_DIR\lib;$env:LIB"
+# Tell MSVC where to find them. The automated script also writes these paths
+# into Directory.Build.props because MSBuild does not always propagate
+# INCLUDE/LIB to every child project.
+$env:INCLUDE = "$env:OPENSSL_DIR\include;$env:BCG729_DIR\include;$env:OPUS_DIR\include;$env:INCLUDE"
+$env:LIB     = "$env:OPENSSL_DIR\lib;$env:BCG729_DIR\lib;$env:OPUS_DIR\lib;$env:LIB"
 ```
 
-### 4c. Build PJSIP
+### 5c. Build PJSIP
 
 Open `pjproject-vs14.sln` in Visual Studio (or use msbuild from the command
-line). Set configuration to **Release**, platform **x64**.
+line). Set configuration to **Release**, platform **x64**. On VS2022 hosts,
+override the old v141 project files to v143:
 
 ```powershell
-msbuild pjproject-vs14.sln /p:Configuration=Release /p:Platform=x64 /m
+msbuild pjproject-vs14.sln /t:pjsua2_lib /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0 /m
 ```
 
 This produces `lib\*.lib` for all PJSIP components.
 
-## 5. Build the pjsua2 Python extension
+## 6. Build the pjsua2 Python extension
 
 ```powershell
 cd pjsip-apps\src\swig
@@ -148,7 +165,7 @@ copy python\_pjsua2.pyd $dest\
 copy python\pjsua2.py    $dest\
 ```
 
-## 6. Sanity check
+## 7. Sanity check
 
 ```powershell
 cd ..\..\..\..\..\

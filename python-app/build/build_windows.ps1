@@ -22,7 +22,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ThirdParty = Join-Path $RepoRoot "third_party"
 $VenvDir = Join-Path $RepoRoot ".venv"
-$VcVars = "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+$VcVars = $null
 
 function Write-Header($msg) {
     Write-Host ""
@@ -33,11 +33,52 @@ function Test-Command($Name) {
     Get-Command $Name -ErrorAction SilentlyContinue
 }
 
+function Add-ToolPathIfExists([string]$PathPattern) {
+    $matches = Resolve-Path $PathPattern -ErrorAction SilentlyContinue
+    foreach ($match in $matches) {
+        $toolPath = $match.Path
+        if ((Test-Path $toolPath) -and ($env:PATH -notlike "*$toolPath*")) {
+            $env:PATH = "$toolPath;$env:PATH"
+        }
+    }
+}
+
+function Add-KnownNativeToolPaths {
+    Add-ToolPathIfExists "C:\Program Files\CMake\bin"
+    Add-ToolPathIfExists "$env:LOCALAPPDATA\bin\NASM"
+    Add-ToolPathIfExists "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\SWIG.SWIG_*\swigwin-*"
+    Add-ToolPathIfExists "C:\Strawberry\perl\bin"
+}
+
+function Find-VcVars {
+    $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path $vswhere) {
+        $installPath = & $vswhere -latest -products Microsoft.VisualStudio.Product.BuildTools -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+        if ($LASTEXITCODE -eq 0 -and $installPath) {
+            $candidate = Join-Path $installPath "VC\Auxiliary\Build\vcvars64.bat"
+            if (Test-Path $candidate) {
+                return $candidate
+            }
+        }
+    }
+
+    $fallbacks = @(
+        "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
+        "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+    )
+    foreach ($candidate in $fallbacks) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
 function Assert-NativePrerequisites {
     $missing = @()
 
-    if (-not (Test-Path $VcVars)) {
-        $missing += "VS 2022 Build Tools vcvars64.bat not found at '$VcVars'. Install hint: use Visual Studio Installer and select 'Desktop development with C++', or run winget install --id Microsoft.VisualStudio.2022.BuildTools -e."
+    if (-not $script:VcVars) {
+        $missing += "VS 2022 Build Tools vcvars64.bat not found. Install hint: use Visual Studio Installer and select 'Desktop development with C++', or run winget install --id Microsoft.VisualStudio.2022.BuildTools -e."
     }
 
     $requiredCommands = @(
@@ -59,6 +100,7 @@ function Assert-NativePrerequisites {
     }
 
     Write-Host "Native build prerequisites found: VS vcvars64.bat, git, cmake, nasm, swig, perl." -ForegroundColor Green
+    Write-Host "Using MSVC environment: $script:VcVars" -ForegroundColor Green
 }
 
 function Assert-PythonExecutable([string]$Executable) {
@@ -88,6 +130,9 @@ function Invoke-VcCmd([string]$cmd) {
     cmd /c "`"$VcVars`" && $cmd"
     if ($LASTEXITCODE -ne 0) { throw "Command failed: $cmd" }
 }
+
+Add-KnownNativeToolPaths
+$script:VcVars = Find-VcVars
 
 if ($PreflightOnly) {
     Write-Header "Running build preflight"
