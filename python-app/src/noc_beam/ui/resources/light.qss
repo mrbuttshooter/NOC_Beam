@@ -833,6 +833,44 @@ QToolButton#GroupChevron {
     min-width: 16px;
     min-height: 16px;
 }
+QFrame#ContactRow, QFrame#FavoriteRow {
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid #ECEEF1;
+}
+QFrame#ContactRow:hover, QFrame#FavoriteRow:hover {
+    background-color: #F5F6F8;
+}
+QLabel#ContactFavorite {
+    color: #E85D04;
+    font-size: 13px;
+    font-weight: 700;
+}
+QLabel#ContactName {
+    color: #1F2933;
+    font-size: 13px;
+    font-weight: 500;
+}
+QLabel#ContactNumber {
+    color: #94A0AD;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 11px;
+}
+QToolButton#ContactRowActionBtn {
+    background: transparent;
+    color: #57606A;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px;
+    min-width: 24px;
+    min-height: 24px;
+}
+QToolButton#ContactRowActionBtn:hover {
+    background-color: #ECEEF1;
+    border-color: #C9CDD3;
+    color: #1F2933;
+}
+QToolButton#ContactRowActionBtn::menu-indicator { image: none; width: 0; }
 QLabel#StatLabel {
     color: #94A0AD;
     font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;

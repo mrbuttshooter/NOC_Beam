@@ -53,6 +53,12 @@ class _KeyButton(QPushButton):
         self.setText("")
         self._digit = digit
         self._caption = caption
+        label = f"Dial {digit}" if digit not in ("*", "#") else f"Dial {digit} key"
+        self.setAccessibleName(label)
+        if caption:
+            self.setAccessibleDescription(f"Dialpad key {digit}, letters {caption}")
+        else:
+            self.setAccessibleDescription(f"Dialpad key {digit}")
 
     def sizeHint(self) -> QSize:  # noqa: N802
         return QSize(60, 60)
@@ -116,6 +122,7 @@ class DialPad(QWidget):
         self.entry = QLineEdit()
         self.entry.setObjectName("DialpadEntry")
         self.entry.setPlaceholderText("Enter number or SIP URI")
+        self.entry.setAccessibleName("Dial target")
         self.entry.setAlignment(Qt.AlignCenter)
         f = QFont()
         f.setPointSize(18)
@@ -134,10 +141,12 @@ class DialPad(QWidget):
         actions = QHBoxLayout()
         self.call_btn = QPushButton("Call")
         self.call_btn.setObjectName("CallButton")
+        self.call_btn.setAccessibleName("Place call")
         self.call_btn.setMinimumHeight(44)
         self.call_btn.clicked.connect(self._on_call)
         self.hangup_btn = QPushButton("Hang up")
         self.hangup_btn.setObjectName("HangupButton")
+        self.hangup_btn.setAccessibleName("Hang up call")
         self.hangup_btn.setMinimumHeight(44)
         self.hangup_btn.clicked.connect(self.hangup_requested.emit)
         self.hangup_btn.setEnabled(False)

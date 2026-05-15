@@ -75,6 +75,8 @@ class BottomTabs(QFrame):
             btn.setIconSize(QSize(18, 18))
             btn.setText(short_label)
             btn.setToolTip(tip)
+            btn.setAccessibleName(tip)
+            btn.setAccessibleDescription(f"Switches to {tip}. Shortcut Ctrl+{int(tab) + 1}.")
             btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
             btn.setAutoExclusive(True)
             self._group.addButton(btn, int(tab))

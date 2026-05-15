@@ -11,6 +11,7 @@ QtWidgets = pytest.importorskip("PySide6.QtWidgets")
 QtGui = pytest.importorskip("PySide6.QtGui")
 QtCore = pytest.importorskip("PySide6.QtCore")
 QApplication = QtWidgets.QApplication
+QToolButton = QtWidgets.QToolButton
 QCloseEvent = QtGui.QCloseEvent
 Qt = QtCore.Qt
 _APP = QApplication.instance()
@@ -305,6 +306,59 @@ def test_phone_shell_always_on_top_action_toggles_window_flag(
         action.setChecked(False)
         assert not bool(shell.windowFlags() & Qt.WindowType.WindowStaysOnTopHint)
         assert not shell._always_on_top
+    finally:
+        shell._really_quitting = True
+        shell.close()
+
+
+def test_phone_shell_primary_controls_have_accessible_names(
+    qt_app: QApplication,
+    monkeypatch,
+) -> None:
+    class FakeRinger:
+        def start(self) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+    class FakeTimer:
+        @staticmethod
+        def singleShot(_msec, _callback) -> None:
+            pass
+
+    monkeypatch.setattr(phone_shell_module, "load_settings", GlobalSettings)
+    monkeypatch.setattr(phone_shell_module, "load_accounts", lambda: [])
+    monkeypatch.setattr(phone_shell_module, "Ringer", FakeRinger)
+    monkeypatch.setattr(phone_shell_module, "QTimer", FakeTimer)
+    monkeypatch.setattr(PhoneShell, "_start_sip", lambda _self: None)
+
+    shell = PhoneShell()
+
+    try:
+        assert shell.menu_btn.accessibleName() == "Application menu"
+        assert shell.account_chip.accessibleName() == "Active SIP account"
+        assert shell.status_banner.accessibleName() == "SIP status"
+        assert shell.dial_input.accessibleName() == "Dial target"
+        assert shell.call_btn.accessibleName() == "Place call"
+
+        tab_names = {
+            button.accessibleName()
+            for button in shell.bottom_tabs.findChildren(QToolButton)
+        }
+        assert tab_names == {
+            "Dialpad",
+            "Contacts and groups",
+            "Starred contacts",
+            "Call history",
+        }
+
+        dialpad_names = {
+            button.accessibleName()
+            for button in shell.dialpad.findChildren(QtWidgets.QPushButton)
+        }
+        assert "Dial 5" in dialpad_names
+        assert "Dial # key" in dialpad_names
     finally:
         shell._really_quitting = True
         shell.close()
