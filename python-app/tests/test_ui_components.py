@@ -12,7 +12,12 @@ _APP = QApplication.instance()
 if _APP is None:
     _APP = QApplication([])
 
-from noc_beam.ui.components import FooterActionBar, SipCodeBadge, StatusPill  # noqa: E402
+from noc_beam.ui.components import (  # noqa: E402
+    DenseListRow,
+    FooterActionBar,
+    SipCodeBadge,
+    StatusPill,
+)
 
 
 @pytest.fixture
@@ -51,3 +56,14 @@ def test_footer_action_bar_keeps_primary_last(qt_app: QApplication):
     assert buttons[-1] is bar.primary_button
 
     bar.close()
+
+
+def test_dense_list_row_has_fixed_action_column(qt_app: QApplication):
+    row = DenseListRow(title="Alice", subtitle="sip:alice@example.com", marker="*")
+
+    assert row.objectName() == "DenseListRow"
+    assert row.title_label.text() == "Alice"
+    assert row.subtitle_label.text() == "sip:alice@example.com"
+    assert row.marker_label.text() == "*"
+
+    row.close()

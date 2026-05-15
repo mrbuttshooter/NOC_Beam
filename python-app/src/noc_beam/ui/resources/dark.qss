@@ -1181,3 +1181,26 @@ QPushButton#CallControlButton {
 QPushButton#CallControlButton:hover {
     background-color: #1F252E;
 }
+QFrame#DenseListRow {
+    border-bottom: 1px solid #3B4654;
+    background-color: transparent;
+}
+QFrame#DenseListRow:hover {
+    background-color: #1F252E;
+}
+QLabel#DenseRowMarker {
+    font-size: 13px;
+    color: #FF8A3D;
+}
+QLabel#DenseRowTitle {
+    font-size: 13px;
+    font-weight: 600;
+}
+QLabel#DenseRowSubtitle {
+    font-size: 11px;
+    color: #B7C0CC;
+}
+QFrame#DenseRowActions {
+    background-color: transparent;
+    border: none;
+}

@@ -22,19 +22,19 @@ class FavoriteRow(QFrame):
 
     def __init__(self, contact: Contact, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setObjectName("FavoriteRow")
+        self.setObjectName("DenseListRow")
         self.contact = contact
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         marker = QLabel("*", self)
-        marker.setObjectName("ContactFavorite")
-        marker.setFixedWidth(14)
+        marker.setObjectName("DenseRowMarker")
+        marker.setFixedWidth(20)
         marker.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         name_lbl = QLabel(contact.name, self)
-        name_lbl.setObjectName("ContactName")
+        name_lbl.setObjectName("DenseRowTitle")
         number_lbl = QLabel(contact.number, self)
-        number_lbl.setObjectName("ContactNumber")
+        number_lbl.setObjectName("DenseRowSubtitle")
 
         text_col = QVBoxLayout()
         text_col.setContentsMargins(0, 0, 0, 0)
@@ -43,7 +43,7 @@ class FavoriteRow(QFrame):
         text_col.addWidget(number_lbl)
 
         call_btn = QToolButton(self)
-        call_btn.setObjectName("ContactRowActionBtn")
+        call_btn.setObjectName("IconActionButton")
         call_btn.setIcon(rail_icon("calls", color="#2DA44E", px=16))
         call_btn.setIconSize(QSize(16, 16))
         call_btn.setToolTip("Call")

@@ -170,19 +170,19 @@ class ContactRow(QFrame):
 
     def __init__(self, contact: Contact, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setObjectName("ContactRow")
+        self.setObjectName("DenseListRow")
         self.contact = contact
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         marker = QLabel("*" if contact.favorite else "", self)
-        marker.setObjectName("ContactFavorite")
-        marker.setFixedWidth(14)
+        marker.setObjectName("DenseRowMarker")
+        marker.setFixedWidth(20)
         marker.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         name_lbl = QLabel(contact.name, self)
-        name_lbl.setObjectName("ContactName")
+        name_lbl.setObjectName("DenseRowTitle")
         number_lbl = QLabel(contact.number, self)
-        number_lbl.setObjectName("ContactNumber")
+        number_lbl.setObjectName("DenseRowSubtitle")
 
         text_col = QVBoxLayout()
         text_col.setContentsMargins(0, 0, 0, 0)
@@ -191,21 +191,21 @@ class ContactRow(QFrame):
         text_col.addWidget(number_lbl)
 
         call_btn = QToolButton(self)
-        call_btn.setObjectName("ContactRowActionBtn")
+        call_btn.setObjectName("IconActionButton")
         call_btn.setIcon(rail_icon("calls", color="#2DA44E", px=16))
         call_btn.setIconSize(QSize(16, 16))
         call_btn.setToolTip("Call")
         call_btn.clicked.connect(lambda: self.call_requested.emit(self.contact.number))
 
         edit_btn = QToolButton(self)
-        edit_btn.setObjectName("ContactRowActionBtn")
+        edit_btn.setObjectName("IconActionButton")
         edit_btn.setIcon(rail_icon("settings", color="#57606A", px=16))
         edit_btn.setIconSize(QSize(16, 16))
         edit_btn.setToolTip("Edit")
         edit_btn.clicked.connect(lambda: self.edit_requested.emit(self.contact.id))
 
         delete_btn = QToolButton(self)
-        delete_btn.setObjectName("ContactRowActionBtn")
+        delete_btn.setObjectName("IconActionButton")
         delete_btn.setIcon(rail_icon("close", color="#CF222E", px=16))
         delete_btn.setIconSize(QSize(16, 16))
         delete_btn.setToolTip("Delete")

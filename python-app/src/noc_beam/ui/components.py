@@ -115,3 +115,43 @@ class FooterActionBar(QFrame):
         layout.addStretch(1)
         layout.addWidget(self.secondary_button)
         layout.addWidget(self.primary_button)
+
+
+class DenseListRow(QFrame):
+    def __init__(
+        self,
+        title: str,
+        subtitle: str = "",
+        marker: str = "",
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("DenseListRow")
+        self.marker_label = QLabel(marker, self)
+        self.marker_label.setObjectName("DenseRowMarker")
+        self.marker_label.setFixedWidth(20)
+        self.marker_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.title_label = QLabel(title, self)
+        self.title_label.setObjectName("DenseRowTitle")
+        self.subtitle_label = QLabel(subtitle, self)
+        self.subtitle_label.setObjectName("DenseRowSubtitle")
+
+        text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 0, 0, 0)
+        text_col.setSpacing(1)
+        text_col.addWidget(self.title_label)
+        text_col.addWidget(self.subtitle_label)
+
+        self.action_holder = QFrame(self)
+        self.action_holder.setObjectName("DenseRowActions")
+        self.action_layout = QHBoxLayout(self.action_holder)
+        self.action_layout.setContentsMargins(0, 0, 0, 0)
+        self.action_layout.setSpacing(4)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(8)
+        layout.addWidget(self.marker_label)
+        layout.addLayout(text_col, 1)
+        layout.addWidget(self.action_holder)
