@@ -285,6 +285,9 @@ QLabel#CallAvatar {
 QFrame#CallCard[state="incoming"] QLabel#CallAvatar { background-color: #D33841; }
 QFrame#CallCard[state="outgoing"] QLabel#CallAvatar { background-color: #E85D04; }
 QFrame#CallCard[state="idle"]     QLabel#CallAvatar { background-color: #C9CDD3; }
+/* Explicit override for active so Qt's QSS engine doesn't carry the
+   prior idle/outgoing background through state transitions. */
+QFrame#CallCard[state="active"]   QLabel#CallAvatar { background-color: #2EBD5C; }
 
 /* Peer block: headline number / SIP user up top, secondary name below.
    Use the system UI font, not mono -- mono on a contact name reads
