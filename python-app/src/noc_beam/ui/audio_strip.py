@@ -102,9 +102,12 @@ class AudioStrip(QFrame):
         self.spk_dev_btn.setToolTip("Output device")
 
         # --- Mic volume button + popover ----------------------------
+        # Just the number (e.g. "75") -- the mic icon to the left is
+        # already the visual signifier.
         self.mic_vol_btn = QToolButton(self)
         self.mic_vol_btn.setObjectName("AudioBtn")
-        self.mic_vol_btn.setText("MIC 75")
+        self.mic_vol_btn.setText("75")
+        self.mic_vol_btn.setMinimumWidth(32)
         self.mic_vol_btn.setToolTip("Microphone gain")
         self.mic_vol_btn.clicked.connect(self._toggle_mic_popover)
 
@@ -117,7 +120,8 @@ class AudioStrip(QFrame):
         # --- Output volume button + popover -------------------------
         self.vol_btn = QToolButton(self)
         self.vol_btn.setObjectName("AudioBtn")
-        self.vol_btn.setText("OUT 75")
+        self.vol_btn.setText("75")
+        self.vol_btn.setMinimumWidth(32)
         self.vol_btn.setToolTip("Output volume")
         self.vol_btn.clicked.connect(self._toggle_volume_popover)
 
@@ -126,6 +130,10 @@ class AudioStrip(QFrame):
         self.slider.setRange(0, 100)
         self.slider.setValue(75)
         self.slider.valueChanged.connect(self._on_volume_changed)
+
+        # Last non-zero gain so muting → "0" can be undone back to it.
+        self._mic_volume_pre_mute = 75
+        self._volume_pre_mute = 75
 
         # Legacy attribute kept for any callers expecting an
         # `out_menu_btn`. The new chevron above (`spk_dev_btn`) replaces
@@ -153,13 +161,14 @@ class AudioStrip(QFrame):
         controls_row = QHBoxLayout()
         controls_row.setContentsMargins(0, 0, 0, 0)
         controls_row.setSpacing(2)
+        # Mic group: [icon] [chevron] [number]
         controls_row.addWidget(self.mic_btn)
         controls_row.addWidget(self.mic_dev_btn)
-        controls_row.addSpacing(6)
+        controls_row.addWidget(self.mic_vol_btn)
+        controls_row.addSpacing(12)
+        # Speaker group: [icon] [chevron] [number]
         controls_row.addWidget(self.spk_btn)
         controls_row.addWidget(self.spk_dev_btn)
-        controls_row.addSpacing(8)
-        controls_row.addWidget(self.mic_vol_btn)
         controls_row.addWidget(self.vol_btn)
         controls_row.addStretch(1)
 
@@ -227,21 +236,29 @@ class AudioStrip(QFrame):
         self.slider.blockSignals(True)
         self.slider.setValue(v)
         self.slider.blockSignals(False)
-        self.vol_btn.setText(f"OUT {v}")
+        if v > 0:
+            self._volume_pre_mute = v
+        self.vol_btn.setText(str(v))
 
     def set_mic_volume(self, value: int) -> None:
         v = max(0, min(100, int(value)))
         self.mic_slider.blockSignals(True)
         self.mic_slider.setValue(v)
         self.mic_slider.blockSignals(False)
-        self.mic_vol_btn.setText(f"MIC {v}")
+        if v > 0:
+            self._mic_volume_pre_mute = v
+        self.mic_vol_btn.setText(str(v))
 
     def _on_volume_changed(self, value: int) -> None:
-        self.vol_btn.setText(f"OUT {value}")
+        if value > 0:
+            self._volume_pre_mute = value
+        self.vol_btn.setText(str(value))
         self.volume_changed.emit(value)
 
     def _on_mic_volume_changed(self, value: int) -> None:
-        self.mic_vol_btn.setText(f"MIC {value}")
+        if value > 0:
+            self._mic_volume_pre_mute = value
+        self.mic_vol_btn.setText(str(value))
         self.mic_volume_changed.emit(value)
 
     def _toggle_volume_popover(self) -> None:
@@ -291,6 +308,12 @@ class AudioStrip(QFrame):
         self.spk_btn.setChecked(self._muted)
         self.spk_btn.blockSignals(False)
         self.slider.setEnabled(not self._muted)
+        # Mirror the gain label: muted shows "0"; unmuted restores the
+        # last non-zero value the user had dialed.
+        if self._muted:
+            self.vol_btn.setText("0")
+        else:
+            self.vol_btn.setText(str(self._volume_pre_mute))
 
     def set_mic_muted(self, muted: bool) -> None:
         self._mic_muted = bool(muted)
@@ -298,13 +321,33 @@ class AudioStrip(QFrame):
         self.mic_btn.setChecked(self._mic_muted)
         self.mic_btn.blockSignals(False)
         self.mic_slider.setEnabled(not self._mic_muted)
+        if self._mic_muted:
+            self.mic_vol_btn.setText("0")
+        else:
+            self.mic_vol_btn.setText(str(self._mic_volume_pre_mute))
 
     def _on_muted_toggled(self, checked: bool) -> None:
         self._muted = checked
         self.slider.setEnabled(not checked)
+        if checked:
+            # Stash the current slider value (only if non-zero) so we
+            # can restore it on unmute.
+            cur = self.slider.value()
+            if cur > 0:
+                self._volume_pre_mute = cur
+            self.vol_btn.setText("0")
+        else:
+            self.vol_btn.setText(str(self._volume_pre_mute))
         self.muted_changed.emit(checked)
 
     def _on_mic_muted_toggled(self, checked: bool) -> None:
         self._mic_muted = checked
         self.mic_slider.setEnabled(not checked)
+        if checked:
+            cur = self.mic_slider.value()
+            if cur > 0:
+                self._mic_volume_pre_mute = cur
+            self.mic_vol_btn.setText("0")
+        else:
+            self.mic_vol_btn.setText(str(self._mic_volume_pre_mute))
         self.mic_muted_changed.emit(checked)

@@ -845,20 +845,27 @@ class PhoneShell(QMainWindow):
             pass
 
     def _on_audio_strip_mute(self, muted: bool) -> None:
-        """Top-strip speaker icon → mute/unmute mic on the active call.
-        No-op if there's no live call (the toggle still tracks state)."""
-        call = self._selected_pjsua_call()
-        if call is None or self._selected_call_id is None:
+        """Top-strip SPEAKER icon → silence the playback DEVICE.
+
+        Operating at the device level (not per-call) means a re-INVITE
+        or codec change cannot un-stick our mute, and it works even
+        across simultaneous calls. adjustRxLevel(0) on the playback
+        device scales every signal the conference bridge feeds it.
+        """
+        try:
+            ep = SipEndpoint.instance()
+        except Exception:
             return
         try:
-            SipEndpoint.instance().set_call_mute(call, muted)
-            self.calls.set_mute(self._selected_call_id, muted)
-            # Mirror the in-call CallWidget Mute button so both UIs agree.
-            self.call_widget.mute_btn.blockSignals(True)
-            self.call_widget.mute_btn.setChecked(muted)
-            self.call_widget.mute_btn.blockSignals(False)
+            from noc_beam.sip._pjsua2_loader import PJSUA2_AVAILABLE
+            if not PJSUA2_AVAILABLE:
+                return
+            slider_v = self.audio.slider.value()
+            level = 0.0 if muted else max(0.0, min(1.5, slider_v / 66.6))
+            playback = ep._ep.audDevManager().getPlaybackDevMedia()
+            playback.adjustRxLevel(level)
         except Exception:
-            log.exception("audio-strip mute failed")
+            log.exception("audio-strip speaker (device) mute failed")
 
     def _on_audio_strip_volume(self, value: int) -> None:
         """Top-strip volume → adjust output level on active call media.
@@ -888,20 +895,41 @@ class PhoneShell(QMainWindow):
             log.exception("audio-strip volume adjust failed")
 
     def _on_audio_strip_mic_mute(self, muted: bool) -> None:
-        """Top-strip mic icon → mute/unmute the microphone on the
-        active call. Mirrors the existing speaker-icon mute behaviour."""
-        call = self._selected_pjsua_call()
-        if call is None or self._selected_call_id is None:
+        """Top-strip mic icon → silence the capture DEVICE.
+
+        Same rationale as the speaker case: device-level so it survives
+        re-INVITEs and works regardless of how many calls are live.
+        adjustTxLevel(0) on capture stops the device from feeding any
+        audio into the conference bridge — no call port receives mic
+        audio. Bonus: works even when no call is up (the toggle is no
+        longer a silent no-op idle state).
+        """
+        try:
+            ep = SipEndpoint.instance()
+        except Exception:
             return
         try:
-            SipEndpoint.instance().set_call_mute(call, muted)
-            self.calls.set_mute(self._selected_call_id, muted)
-            # Mirror the in-call CallWidget Mute button.
+            from noc_beam.sip._pjsua2_loader import PJSUA2_AVAILABLE
+            if not PJSUA2_AVAILABLE:
+                return
+            mic_v = self.audio.mic_slider.value()
+            level = 0.0 if muted else max(0.0, min(1.5, mic_v / 66.6))
+            capture = ep._ep.audDevManager().getCaptureDevMedia()
+            capture.adjustTxLevel(level)
+        except Exception:
+            log.exception("audio-strip mic (device) mute failed")
+        # Mirror the in-call CallWidget Mute button so both UIs agree.
+        if self._selected_call_id is not None:
+            try:
+                self.calls.set_mute(self._selected_call_id, muted)
+            except Exception:
+                pass
+        try:
             self.call_widget.mute_btn.blockSignals(True)
             self.call_widget.mute_btn.setChecked(muted)
             self.call_widget.mute_btn.blockSignals(False)
         except Exception:
-            log.exception("audio-strip mic mute failed")
+            pass
 
     def _on_audio_strip_mic_volume(self, value: int) -> None:
         """Top-strip mic gain → adjustTxLevel on the active call.
