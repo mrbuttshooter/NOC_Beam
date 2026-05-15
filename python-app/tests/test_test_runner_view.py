@@ -543,7 +543,7 @@ def test_phone_shell_primary_controls_have_accessible_names(
     try:
         assert shell.menu_btn.accessibleName() == "Application menu"
         assert shell.account_chip.accessibleName() == "Active SIP account"
-        assert shell.status_banner.accessibleName() == "SIP status"
+        assert shell.status_banner.accessibleName() == "Registration and call status"
         assert shell.dial_input.accessibleName() == "Dial target"
         assert shell.call_btn.accessibleName() == "Place call"
 

@@ -980,3 +980,19 @@ QPushButton#SecondaryAction {
     border: 1px solid #FFFFFF;
     color: #FFFFFF;
 }
+QFrame#TopStrip {
+    border-bottom: 1px solid #FFFFFF;
+}
+QFrame#BottomTabs {
+    border-top: 1px solid #FFFFFF;
+}
+QToolButton#TabBtn {
+    border: none;
+    border-top: 2px solid transparent;
+    padding: 4px 0 3px 0;
+    font-size: 10px;
+}
+QToolButton#TabBtn:checked {
+    border-top-color: #FFFF00;
+    color: #FFFF00;
+}

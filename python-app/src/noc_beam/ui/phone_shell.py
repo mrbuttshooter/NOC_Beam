@@ -92,8 +92,8 @@ class PhoneShell(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(__app_name__)
-        self.resize(340, 720)
-        self.setMinimumWidth(300)
+        self.resize(420, 740)
+        self.setMinimumWidth(380)
 
         self.settings = load_settings()
         self.accounts = load_accounts()
@@ -245,7 +245,7 @@ class PhoneShell(QMainWindow):
 
         self.status_banner = QLabel("Starting...", top)
         self.status_banner.setObjectName("StatusBanner")
-        self.status_banner.setAccessibleName("SIP status")
+        self.status_banner.setAccessibleName("Registration and call status")
         self.status_banner.setProperty("level", "muted")
         self.status_banner.setWordWrap(True)
         self.status_link = QLabel("", top); self.status_link.setObjectName("StatusBannerLink")

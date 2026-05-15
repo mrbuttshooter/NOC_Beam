@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from noc_beam.ui.design_tokens import BOTTOM_NAV_HEIGHT
 from noc_beam.ui.rail_icons import rail_icon
 
 
@@ -50,7 +51,7 @@ class BottomTabs(QFrame):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("BottomTabs")
-        self.setFixedHeight(48)
+        self.setFixedHeight(BOTTOM_NAV_HEIGHT)
 
         self._group = QButtonGroup(self)
         self._group.setExclusive(True)
