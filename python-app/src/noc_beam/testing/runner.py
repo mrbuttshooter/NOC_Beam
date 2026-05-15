@@ -1,0 +1,346 @@
+from __future__ import annotations
+
+import time
+from collections import deque
+from dataclasses import dataclass
+from typing import Literal
+
+from PySide6.QtCore import QObject, QTimer, Signal
+
+from noc_beam.config.store import AccountConfig
+from noc_beam.sip.endpoint import SipEndpoint
+from noc_beam.sip.events import SipEvents, sip_events
+from noc_beam.testing.plan import TestCall, TestSpec, expand
+
+
+@dataclass
+class TestResult:
+    call: TestCall
+    result: Literal["PASS", "FAIL"]
+    sip_code: int | None
+    sip_reason: str
+    rtt_ms: float | None
+    duration_s: float
+    notes: str
+    started_at: float
+    from_account: str
+    to_uri: str
+
+
+@dataclass
+class _ActiveCall:
+    call: TestCall
+    account: AccountConfig
+    target_uri: str
+    sip_call: object
+    call_id: int
+    started_at: float
+    timeout_timer: QTimer
+    hold_timer: QTimer | None = None
+    rtt_ms: float | None = None
+
+
+class TestRunner(QObject):
+    call_started = Signal(int)
+    call_completed = Signal(object)
+    run_complete = Signal(object)
+
+    def __init__(
+        self,
+        spec: TestSpec,
+        accounts: list[AccountConfig],
+        parent: QObject | None = None,
+        *,
+        endpoint: object | None = None,
+        events: SipEvents | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.spec = spec
+        self.accounts = accounts
+        self.endpoint = endpoint if endpoint is not None else SipEndpoint.instance()
+        self.events = events if events is not None else sip_events()
+
+        self._queue: deque[TestCall] = deque()
+        self._active: dict[int, _ActiveCall] = {}
+        self._results: list[TestResult] = []
+        self._started = False
+        self._cancelled = False
+        self._run_complete_emitted = False
+
+        self.events.call_state_changed.connect(self._on_call_state_changed)
+
+    def start(self) -> None:
+        if self._started:
+            return
+        self._started = True
+        self._queue = deque(expand(self.spec))
+        self._fill_slots()
+        self._maybe_emit_run_complete()
+
+    def cancel(self) -> None:
+        if self._run_complete_emitted:
+            return
+        self._cancelled = True
+
+        for active in list(self._active.values()):
+            self._complete_active(
+                active,
+                "FAIL",
+                0,
+                "Cancelled",
+                "cancelled",
+                hangup=True,
+                fill_slots=False,
+            )
+
+        while self._queue:
+            call = self._queue.popleft()
+            account = self._resolve_account(call.caller_number)
+            target_uri = (
+                self._build_target_uri(call.target_number, account)
+                if account is not None
+                else call.target_number
+            )
+            self._emit_result(
+                call=call,
+                result="FAIL",
+                sip_code=0,
+                sip_reason="Cancelled",
+                rtt_ms=None,
+                duration_s=0.0,
+                notes="cancelled",
+                started_at=time.monotonic(),
+                from_account=account.id if account is not None else call.caller_number,
+                to_uri=target_uri,
+            )
+
+        self._maybe_emit_run_complete()
+
+    def _fill_slots(self) -> None:
+        if self._cancelled:
+            return
+        while self._queue and len(self._active) < self.spec.parallel:
+            call = self._queue.popleft()
+            account = self._resolve_account(call.caller_number)
+            started_at = time.monotonic()
+            if account is None:
+                self._emit_result(
+                    call=call,
+                    result="FAIL",
+                    sip_code=0,
+                    sip_reason="No matching account",
+                    rtt_ms=None,
+                    duration_s=0.0,
+                    notes="no matching account",
+                    started_at=started_at,
+                    from_account=call.caller_number,
+                    to_uri=call.target_number,
+                )
+                continue
+
+            target_uri = self._build_target_uri(call.target_number, account)
+            try:
+                sip_call = self.endpoint.make_call(account.id, target_uri)
+                call_id = int(sip_call.getInfo().id)
+            except Exception as exc:
+                text = str(exc)
+                notes = (
+                    "pjsua2 not available"
+                    if "pjsua2 not available" in text.lower()
+                    else text
+                )
+                self._emit_result(
+                    call=call,
+                    result="FAIL",
+                    sip_code=0,
+                    sip_reason="Endpoint error",
+                    rtt_ms=None,
+                    duration_s=time.monotonic() - started_at,
+                    notes=notes,
+                    started_at=started_at,
+                    from_account=account.id,
+                    to_uri=target_uri,
+                )
+                continue
+
+            timeout_timer = self._make_timer(self.spec.timeout_seconds)
+            active = _ActiveCall(
+                call=call,
+                account=account,
+                target_uri=target_uri,
+                sip_call=sip_call,
+                call_id=call_id,
+                started_at=started_at,
+                timeout_timer=timeout_timer,
+            )
+            self._active[call_id] = active
+            timeout_timer.timeout.connect(lambda cid=call_id: self._on_timeout(cid))
+            timeout_timer.start()
+            self.call_started.emit(call.index)
+
+    def _on_call_state_changed(
+        self,
+        account_id: str,
+        call_id: int,
+        state: str,
+        code: int,
+        reason: str,
+    ) -> None:
+        active = self._active.get(call_id)
+        if active is None or active.account.id != account_id:
+            return
+
+        now = time.monotonic()
+        if code > 0 and active.rtt_ms is None:
+            active.rtt_ms = (now - active.started_at) * 1000.0
+
+        if 400 <= code <= 699:
+            self._complete_active(active, "FAIL", code, reason, reason)
+            return
+
+        if (
+            self.spec.pass_criterion == "reachability"
+            and state == "EARLY"
+            and code in (180, 183)
+        ):
+            self._complete_active(active, "PASS", code, reason, "")
+            return
+
+        if self.spec.pass_criterion == "full-call" and state == "CONFIRMED":
+            if active.hold_timer is not None:
+                return
+            hold_timer = self._make_timer(self.spec.hold_seconds)
+            active.hold_timer = hold_timer
+            hold_timer.timeout.connect(
+                lambda cid=call_id, c=code, r=reason: self._on_hold_complete(cid, c, r)
+            )
+            hold_timer.start()
+            return
+
+        if state == "DISCONNECTED":
+            self._complete_active(
+                active,
+                "FAIL",
+                code or 0,
+                reason or "Disconnected",
+                reason or "Disconnected",
+            )
+
+    def _on_hold_complete(self, call_id: int, code: int, reason: str) -> None:
+        active = self._active.get(call_id)
+        if active is None:
+            return
+        self._complete_active(active, "PASS", code or 200, reason or "OK", "")
+
+    def _on_timeout(self, call_id: int) -> None:
+        active = self._active.get(call_id)
+        if active is None:
+            return
+        self._complete_active(
+            active,
+            "FAIL",
+            408,
+            "Request Timeout",
+            "timeout",
+            hangup=True,
+        )
+
+    def _complete_active(
+        self,
+        active: _ActiveCall,
+        result: Literal["PASS", "FAIL"],
+        sip_code: int | None,
+        sip_reason: str,
+        notes: str,
+        *,
+        hangup: bool = True,
+        fill_slots: bool = True,
+    ) -> None:
+        if self._active.pop(active.call_id, None) is None:
+            return
+
+        active.timeout_timer.stop()
+        if active.hold_timer is not None:
+            active.hold_timer.stop()
+        if hangup:
+            self._hangup(active.sip_call)
+
+        self._emit_result(
+            call=active.call,
+            result=result,
+            sip_code=sip_code,
+            sip_reason=sip_reason,
+            rtt_ms=active.rtt_ms,
+            duration_s=time.monotonic() - active.started_at,
+            notes=notes,
+            started_at=active.started_at,
+            from_account=active.account.id,
+            to_uri=active.target_uri,
+        )
+
+        if fill_slots:
+            self._fill_slots()
+        self._maybe_emit_run_complete()
+
+    def _emit_result(
+        self,
+        *,
+        call: TestCall,
+        result: Literal["PASS", "FAIL"],
+        sip_code: int | None,
+        sip_reason: str,
+        rtt_ms: float | None,
+        duration_s: float,
+        notes: str,
+        started_at: float,
+        from_account: str,
+        to_uri: str,
+    ) -> None:
+        test_result = TestResult(
+            call=call,
+            result=result,
+            sip_code=sip_code,
+            sip_reason=sip_reason,
+            rtt_ms=rtt_ms,
+            duration_s=duration_s,
+            notes=notes,
+            started_at=started_at,
+            from_account=from_account,
+            to_uri=to_uri,
+        )
+        self._results.append(test_result)
+        self.call_completed.emit(test_result)
+
+    def _maybe_emit_run_complete(self) -> None:
+        if self._run_complete_emitted:
+            return
+        if self._queue or self._active:
+            return
+        self._run_complete_emitted = True
+        self.run_complete.emit(list(self._results))
+
+    def _make_timer(self, seconds: float) -> QTimer:
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(max(1, int(seconds * 1000)))
+        return timer
+
+    def _resolve_account(self, caller_number: str) -> AccountConfig | None:
+        for account in self.accounts:
+            if account.username == caller_number:
+                return account
+        return None
+
+    @staticmethod
+    def _build_target_uri(target: str, account: AccountConfig) -> str:
+        if target.startswith(("sip:", "sips:", "tel:")):
+            return target
+        if "@" in target:
+            return f"sip:{target}"
+        return f"sip:{target}@{account.domain}"
+
+    def _hangup(self, call: object) -> None:
+        try:
+            self.endpoint.hangup_call(call)
+        except Exception:
+            pass
