@@ -67,6 +67,8 @@ class TestRunner(QObject):
 
         self._queue: deque[TestCall] = deque()
         self._active: dict[int, _ActiveCall] = {}
+        self._closing_slots: dict[int, QTimer] = {}
+        self._next_closing_slot = 1
         self._results: list[TestResult] = []
         self._started = False
         self._cancelled = False
@@ -124,7 +126,7 @@ class TestRunner(QObject):
     def _fill_slots(self) -> None:
         if self._cancelled:
             return
-        while self._queue and len(self._active) < self.spec.parallel:
+        while self._queue and self._slots_in_use() < self.spec.parallel:
             call = self._queue.popleft()
             account = self._resolve_account(call.caller_number)
             started_at = time.monotonic()
@@ -170,13 +172,13 @@ class TestRunner(QObject):
             try:
                 call_id = int(sip_call.getInfo().id)
             except Exception as exc:
-                self._hangup(sip_call)
                 text = str(exc)
                 notes = (
                     "pjsua2 not available"
                     if "pjsua2 not available" in text.lower()
                     else text
                 )
+                self._hold_closing_slot()
                 self._emit_result(
                     call=call,
                     result="FAIL",
@@ -189,6 +191,7 @@ class TestRunner(QObject):
                     from_account=account.id,
                     to_uri=target_uri,
                 )
+                self._hangup(sip_call)
                 continue
 
             timeout_timer = self._make_timer(self.spec.timeout_seconds)
@@ -300,9 +303,6 @@ class TestRunner(QObject):
         active.timeout_timer.stop()
         if active.hold_timer is not None:
             active.hold_timer.stop()
-        if hangup:
-            self._hangup(active.sip_call)
-
         self._emit_result(
             call=active.call,
             result=result,
@@ -316,10 +316,11 @@ class TestRunner(QObject):
             to_uri=active.target_uri,
         )
 
-        if fill_slots:
-            self._start_cleanup_timer(active)
-        else:
-            self._start_cleanup_timer(active, fill_slots=False)
+        if hangup:
+            self._hangup(active.sip_call)
+
+        if self._active.get(active.call_id) is active:
+            self._start_cleanup_timer(active, fill_slots=fill_slots)
 
     def _release_active(self, active: _ActiveCall, *, fill_slots: bool = True) -> None:
         if self._active.pop(active.call_id, None) is None:
@@ -345,6 +346,25 @@ class TestRunner(QObject):
             lambda a=active, fs=fill_slots: self._release_active(a, fill_slots=fs)
         )
         cleanup_timer.start()
+
+    def _hold_closing_slot(self) -> None:
+        token = self._next_closing_slot
+        self._next_closing_slot += 1
+        cleanup_timer = self._make_timer(CLEANUP_FALLBACK_SECONDS)
+        self._closing_slots[token] = cleanup_timer
+        cleanup_timer.timeout.connect(lambda t=token: self._release_closing_slot(t))
+        cleanup_timer.start()
+
+    def _release_closing_slot(self, token: int) -> None:
+        timer = self._closing_slots.pop(token, None)
+        if timer is None:
+            return
+        timer.stop()
+        self._fill_slots()
+        self._maybe_emit_run_complete()
+
+    def _slots_in_use(self) -> int:
+        return len(self._active) + len(self._closing_slots)
 
     def _emit_result(
         self,
@@ -378,7 +398,7 @@ class TestRunner(QObject):
     def _maybe_emit_run_complete(self) -> None:
         if self._run_complete_emitted:
             return
-        if self._queue or self._active:
+        if self._queue or self._active or self._closing_slots:
             return
         self._run_complete_emitted = True
         self.run_complete.emit(list(self._results))

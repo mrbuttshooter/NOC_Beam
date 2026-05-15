@@ -12,6 +12,7 @@ QTimer = QtCore.QTimer
 
 from noc_beam.config.store import AccountConfig
 from noc_beam.sip.events import SipEvents
+from noc_beam.testing import runner as runner_module
 from noc_beam.testing.plan import TestSpec as RunnerSpec
 from noc_beam.testing.runner import TestResult as RunnerResult
 from noc_beam.testing.runner import TestRunner as Runner
@@ -218,6 +219,7 @@ def test_fails_without_matching_account() -> None:
     results: list[RunnerResult] = []
     runner.run_complete.connect(lambda emitted: results.extend(emitted))
     runner.start()
+    wait_until(lambda: len(results) == 1, timeout_ms=500)
 
     assert len(results) == 1
     assert results[0].result == "FAIL"
@@ -358,7 +360,10 @@ class BrokenInfoEndpoint(StubEndpoint):
         return self.broken_call
 
 
-def test_getinfo_failure_after_make_call_hangs_up_returned_call() -> None:
+def test_getinfo_failure_after_make_call_hangs_up_returned_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(runner_module, "CLEANUP_FALLBACK_SECONDS", 0.01)
     events = SipEvents()
     endpoint = BrokenInfoEndpoint()
     runner = Runner(spec(), [account()], endpoint=endpoint, events=events)
@@ -366,6 +371,7 @@ def test_getinfo_failure_after_make_call_hangs_up_returned_call() -> None:
     results: list[RunnerResult] = []
     runner.run_complete.connect(lambda emitted: results.extend(emitted))
     runner.start()
+    wait_until(lambda: len(results) == 1, timeout_ms=500)
 
     assert len(results) == 1
     assert results[0].result == "FAIL"
@@ -373,3 +379,98 @@ def test_getinfo_failure_after_make_call_hangs_up_returned_call() -> None:
     assert results[0].sip_reason == "Endpoint error"
     assert results[0].notes == "getInfo failed"
     assert endpoint.hung_up == [endpoint.broken_call]
+
+
+class SyncDisconnectEndpoint(StubEndpoint):
+    def __init__(self, events: SipEvents) -> None:
+        super().__init__()
+        self.events = events
+
+    def hangup_call(self, call: object) -> None:
+        super().hangup_call(call)
+        call_id = call.getInfo().id  # type: ignore[union-attr]
+        self.release_call(call_id)
+        self.events.call_state_changed.emit(
+            "acc-1",
+            call_id,
+            "DISCONNECTED",
+            487,
+            "Request Terminated",
+        )
+
+
+def test_synchronous_disconnected_during_hangup_keeps_result_in_run_complete() -> None:
+    events = SipEvents()
+    endpoint = SyncDisconnectEndpoint(events)
+    runner = Runner(spec(), [account()], endpoint=endpoint, events=events)
+
+    completed_results: list[RunnerResult] = []
+    completed_runs: list[list[RunnerResult]] = []
+    runner.call_completed.connect(completed_results.append)
+    runner.run_complete.connect(lambda emitted: completed_runs.append(list(emitted)))
+    runner.start()
+
+    call_id = first_call_id(endpoint)
+    events.call_state_changed.emit("acc-1", call_id, "EARLY", 180, "Ringing")
+
+    assert len(completed_results) == 1
+    assert len(completed_runs) == 1
+    assert len(completed_runs[0]) == 1
+    assert completed_runs[0][0] is completed_results[0]
+    assert completed_runs[0][0].result == "PASS"
+
+
+class FirstBrokenThenNormalEndpoint(StubEndpoint):
+    def __init__(self) -> None:
+        super().__init__()
+        self.broken_call = BrokenInfoCall()
+        self.make_call_count = 0
+
+    def make_call(self, account_id: str, target_uri: str) -> object:
+        self.make_call_count += 1
+        if self.make_call_count == 1:
+            return self.broken_call
+        return super().make_call(account_id, target_uri)
+
+
+def test_getinfo_failure_holds_parallel_slot_until_cleanup_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(runner_module, "CLEANUP_FALLBACK_SECONDS", 0.01)
+    events = SipEvents()
+    endpoint = FirstBrokenThenNormalEndpoint()
+    runner = Runner(
+        spec(
+            callers=["1001", "1001"],
+            targets=["2001", "2002"],
+            parallel=1,
+        ),
+        [account()],
+        endpoint=endpoint,
+        events=events,
+    )
+
+    results: list[RunnerResult] = []
+    started: list[int] = []
+    runner.call_completed.connect(results.append)
+    runner.call_started.connect(started.append)
+    runner.start()
+
+    assert len(results) == 1
+    assert results[0].result == "FAIL"
+    assert results[0].sip_reason == "Endpoint error"
+    assert results[0].notes == "getInfo failed"
+    assert endpoint.hung_up == [endpoint.broken_call]
+    assert endpoint.make_call_count == 1
+    assert started == []
+    assert endpoint.calls == {}
+
+    wait_until(lambda: endpoint.make_call_count == 2, timeout_ms=500)
+
+    assert started == [2]
+    assert len(endpoint.calls) == 1
+    second_id = first_call_id(endpoint)
+    emit_state(events, endpoint, second_id, "EARLY", 180, "Ringing")
+    emit_state(events, endpoint, second_id, "DISCONNECTED", 487, "Request Terminated")
+    assert len(results) == 2
+    assert results[1].result == "PASS"
