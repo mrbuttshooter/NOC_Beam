@@ -23,6 +23,9 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $ThirdParty = Join-Path $RepoRoot "third_party"
 $VenvDir = Join-Path $RepoRoot ".venv"
 $VcVars = $null
+if (Test-Path -LiteralPath $PythonExe) {
+    $PythonExe = (Resolve-Path -LiteralPath $PythonExe).Path
+}
 
 function Write-Header($msg) {
     Write-Host ""
@@ -240,6 +243,11 @@ if (-not $SkipNativeBuild -and -not (Test-Path "$NativeOut\_pjsua2.pyd")) {
 "@ | Set-Content -Encoding ASCII $ConfigSite
     }
 
+    $OpusCodecSource = "pjmedia\src\pjmedia-codec\opus.c"
+    $opusCodecText = Get-Content -Raw -Path $OpusCodecSource
+    $opusCodecText = $opusCodecText.Replace('#   pragma comment(lib, "libopus.a")', '#   pragma comment(lib, "opus.lib")')
+    Set-Content -Encoding ASCII -Path $OpusCodecSource -Value $opusCodecText
+
     $env:OPENSSL_DIR = "$ThirdParty\openssl-install"
     $env:BCG729_DIR  = "$ThirdParty\bcg729-install"
     $env:OPUS_DIR    = "$ThirdParty\opus-install"
@@ -255,6 +263,7 @@ if (-not $SkipNativeBuild -and -not (Test-Path "$NativeOut\_pjsua2.pyd")) {
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>$externIncludes;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>BCG729_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$externLibs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -265,19 +274,101 @@ if (-not $SkipNativeBuild -and -not (Test-Path "$NativeOut\_pjsua2.pyd")) {
 
     # pjproject 2.14.1 vcxproj files target PlatformToolset v141 (VS2017) which
     # isn't installed on most modern Windows hosts -- override to v143 (VS2022).
-    # Build only pjsua2_lib + transitive dependencies; skip test/sample/CLI
-    # binaries that have known PJSIP packaging bugs (libopus.a misnamed,
-    # crypt32.lib not linked) and aren't shipped.
-    Invoke-VcCmd "msbuild pjproject-vs14.sln /t:pjsua2_lib /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0 /m"
+    # Build the aggregate libpjproject static library; skip test/sample/CLI
+    # binaries that aren't shipped.
+    Invoke-VcCmd "msbuild pjproject-vs14.sln /t:libpjproject /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /p:WindowsTargetPlatformVersion=10.0 /m"
 
     Write-Header "Building pjsua2 Python extension"
     Push-Location pjsip-apps\src\swig
-    Invoke-VcCmd "nmake python"
+    Invoke-External "Generate pjsua2 SWIG wrapper" {
+        swig "-I..\..\..\pjlib\include" `
+             "-I..\..\..\pjlib-util\include" `
+             "-I..\..\..\pjmedia\include" `
+             "-I..\..\..\pjsip\include" `
+             "-I..\..\..\pjnath\include" `
+             -c++ -w312 -threads -DSWIG_NO_EXPORT_ITERATOR_METHODS `
+             -python -o python\pjsua2_wrap.cpp pjsua2.i
+    }
+
+    $SetupMsvc = @"
+from setuptools import Extension, setup
+
+pjdir = r"$($PWD.Path)\..\..\.."
+openssl_dir = r"$env:OPENSSL_DIR"
+bcg729_dir = r"$env:BCG729_DIR"
+opus_dir = r"$env:OPUS_DIR"
+
+include_dirs = [
+    pjdir + r"\pjlib\include",
+    pjdir + r"\pjlib-util\include",
+    pjdir + r"\pjmedia\include",
+    pjdir + r"\pjsip\include",
+    pjdir + r"\pjnath\include",
+    openssl_dir + r"\include",
+    bcg729_dir + r"\include",
+    opus_dir + r"\include",
+]
+library_dirs = [
+    pjdir + r"\lib",
+    openssl_dir + r"\lib",
+    bcg729_dir + r"\lib",
+    opus_dir + r"\lib",
+]
+libraries = [
+    "libpjproject-x86_64-x64-vc14-Release",
+    "libssl",
+    "libcrypto",
+    "bcg729",
+    "opus",
+    "ws2_32",
+    "winmm",
+    "ole32",
+    "dsound",
+    "iphlpapi",
+    "secur32",
+    "crypt32",
+    "advapi32",
+    "setupapi",
+    "user32",
+]
+extra_compile_args = [
+    "/EHsc",
+    "/MD",
+    "/DWIN64",
+    "/DPJ_WIN64=1",
+    "/DPJ_M_X86_64=1",
+]
+
+setup(
+    name="pjsua2",
+    version="2.14.1",
+    ext_modules=[
+        Extension(
+            "_pjsua2",
+            ["pjsua2_wrap.cpp"],
+            include_dirs=include_dirs,
+            library_dirs=library_dirs,
+            libraries=libraries,
+            extra_compile_args=extra_compile_args,
+            language="c++",
+        )
+    ],
+    py_modules=["pjsua2"],
+)
+"@
+    Set-Content -Encoding UTF8 -Path python\setup_msvc.py -Value $SetupMsvc
+    Push-Location python
+    Invoke-VcCmd "`"$PythonExe`" setup_msvc.py build_ext --inplace"
+    Pop-Location
     Pop-Location
 
     New-Item -ItemType Directory -Force -Path $NativeOut | Out-Null
-    Copy-Item -Force pjsip-apps\src\swig\python\_pjsua2.pyd $NativeOut\
-    Copy-Item -Force pjsip-apps\src\swig\python\pjsua2.py    $NativeOut\
+    $BuiltPyd = Get-ChildItem pjsip-apps\src\swig\python -Filter "_pjsua2*.pyd" | Select-Object -First 1
+    if ($null -eq $BuiltPyd) {
+        throw "pjsua2 Python extension build did not produce _pjsua2*.pyd"
+    }
+    Copy-Item -Force $BuiltPyd.FullName (Join-Path $NativeOut "_pjsua2.pyd")
+    Copy-Item -Force pjsip-apps\src\swig\python\pjsua2.py (Join-Path $NativeOut "pjsua2.py")
     # Empty __init__.py so this becomes a package
     "" | Set-Content "$NativeOut\__init__.py"
 

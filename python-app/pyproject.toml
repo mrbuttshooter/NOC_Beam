@@ -43,3 +43,7 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".venv", "build", "dist", "third_party"]

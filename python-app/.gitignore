@@ -5,6 +5,9 @@ __pycache__/
 .venv/
 venv/
 .eggs/
+.pytest_cache/
+.pytest_basetemp/
+.ruff_cache/
 dist/
 build_output/
 
@@ -31,9 +34,8 @@ Thumbs.db
 .env.*
 
 # Native build artifacts (PJSIP)
-third_party/pjproject/
-third_party/openssl/
-third_party/bcg729/
+third_party/
+src/noc_beam/_native/
 *.lib
 *.pdb
 *.obj
