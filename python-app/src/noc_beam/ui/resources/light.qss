@@ -1936,3 +1936,36 @@ QToolButton#AudioChevron:hover {
     color: #1F2933;
 }
 QToolButton#AudioChevron::menu-indicator { image: none; width: 0; }
+
+/* ---------- Compact CallWidget single-row card ---------- */
+QToolButton#CallRowIconBtn {
+    background-color: #FFFFFF;
+    border: 1px solid #D8DEE4;
+    border-radius: 4px;
+    padding: 0;
+}
+QToolButton#CallRowIconBtn:hover {
+    background-color: #EAF0F6;
+    border: 1px solid #B7C0CB;
+}
+QToolButton#CallRowIconBtn:checked {
+    background-color: #FDECEE;
+    border: 1px solid #E5A4A8;
+}
+QToolButton#CallRowIconBtn:disabled {
+    background-color: #F4F6F9;
+    border: 1px solid #ECEFF2;
+}
+QToolButton#CallRowEndBtn {
+    background-color: #D33841;
+    border: 1px solid #B22D35;
+    border-radius: 4px;
+    padding: 0 6px;
+}
+QToolButton#CallRowEndBtn:hover {
+    background-color: #B22D35;
+}
+QToolButton#CallRowEndBtn:disabled {
+    background-color: #E0BFC2;
+    border: 1px solid #D2A8AB;
+}

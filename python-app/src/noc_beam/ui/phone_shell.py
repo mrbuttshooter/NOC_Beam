@@ -409,15 +409,9 @@ class PhoneShell(QMainWindow):
         self.calls.call_added.connect(lambda _cid: self._refresh_calls_strip())
         self.calls.call_removed.connect(lambda _cid: self._refresh_calls_strip())
         self.calls.call_updated.connect(lambda _cid: self._refresh_calls_strip())
-        # Hide the keypad + recents while a call is up. Massive
-        # vertical reclaim -- when in-call the screen focuses on the
-        # call(s), not on dialing the next one. Listen on _updated
-        # too because call_added fires with the record still in
-        # CallState.NULL (before update_state(CALLING) lands), and
-        # is_active filters out NULL.
-        self.calls.call_added.connect(lambda _cid: self._refresh_in_call_layout())
-        self.calls.call_updated.connect(lambda _cid: self._refresh_in_call_layout())
-        self.calls.call_removed.connect(lambda _cid: self._refresh_in_call_layout())
+        # Keypad + recents stay visible during calls -- the user still
+        # needs DTMF and may want to dial a second call. The CallWidget
+        # itself was made compact to make room.
 
         dpl.addWidget(self.calls_strip)
         dpl.addWidget(self.call_widget)
@@ -1157,28 +1151,10 @@ class PhoneShell(QMainWindow):
             self.calls_strip_layout.addWidget(footer)
 
     def _refresh_in_call_layout(self) -> None:
-        """Hide the dial keypad + Recents strip while a call is up.
-
-        Re-show them when the last call ends. This is the biggest
-        single vertical reclaim on the Dial page when multiple calls
-        are stacked: the Active Call card and the multi-call strip
-        get the entire bottom of the window without competing with
-        the keypad and recents list.
-        """
-        # Use .all() rather than .active() because a freshly registered
-        # call is in CallState.NULL until the next state update lands;
-        # .active() would incorrectly say "no call". We exclude only
-        # the explicitly DISCONNECTED records.
-        from noc_beam.sip.call_manager import CallState
-        in_call = any(
-            r.state != CallState.DISCONNECTED
-            for r in self.calls.all()
-        )
-        try:
-            self.dialpad.setVisible(not in_call)
-            self.quick_dial.setVisible(not in_call)
-        except Exception:
-            pass
+        """No-op now that the CallWidget itself is a single compact row.
+        Kept as a stable hook in case we want to react to in-call state
+        without re-wiring signals."""
+        return
 
     def _hangup_one(self, call_id: int) -> None:
         """Hangup a specific call by ID. Bypasses the selected-call
