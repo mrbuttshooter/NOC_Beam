@@ -187,7 +187,7 @@ class AccountDetail(QWidget):
         inc_l.setContentsMargins(14, 12, 14, 12)
         inc_l.setSpacing(4)
         self.incident_title = QLabel("Last incident")
-        self.incident_title.setStyleSheet("color: #FF5C7A; font-weight: 600; font-size: 11px; letter-spacing: 0.06em;")
+        self.incident_title.setObjectName("IncidentTitle")
         self.incident_body = QLabel("")
         self.incident_body.setObjectName("DiagValue")
         self.incident_body.setWordWrap(True)

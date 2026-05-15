@@ -777,6 +777,19 @@ QFrame#StatCard {
     border-radius: 4px;
     padding: 12px 14px;
 }
+QFrame#LastIncident {
+    background-color: #FDF1F2;
+    border: 1px solid rgba(211, 56, 65, 0.35);
+    border-radius: 4px;
+    padding: 12px 14px;
+}
+QLabel#IncidentTitle {
+    color: #B22D35;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
 
 
 /* ---- Contacts + Favorites tabs (Bria-parity) -------------------- */

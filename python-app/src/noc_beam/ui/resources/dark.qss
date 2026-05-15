@@ -757,6 +757,13 @@ QFrame#LastIncident {
     border-radius: 4px;
     padding: 12px 14px;
 }
+QLabel#IncidentTitle {
+    color: #FF5C7A;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
 
 
 /* ---- Trace destination toolbar + preset chips ------------------- */
