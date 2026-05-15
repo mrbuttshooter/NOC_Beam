@@ -198,4 +198,16 @@ def save_accounts(accounts: list[AccountConfig]) -> None:
 def _atomic_write(path: Path, content: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(content, encoding="utf-8")
-    tmp.replace(path)
+    try:
+        tmp.replace(path)
+    except PermissionError:
+        log.warning(
+            "Atomic replace failed for %s; falling back to direct write",
+            path,
+            exc_info=True,
+        )
+        path.write_text(content, encoding="utf-8")
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            log.debug("Could not remove temporary config file %s", tmp, exc_info=True)

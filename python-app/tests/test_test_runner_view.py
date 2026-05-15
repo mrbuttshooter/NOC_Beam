@@ -186,6 +186,206 @@ def test_phone_shell_has_test_runner_menu_action(qt_app: QApplication, monkeypat
         shell.close()
 
 
+def test_phone_shell_empty_account_chip_offers_add_account(
+    qt_app: QApplication,
+    monkeypatch,
+) -> None:
+    class FakeRinger:
+        def start(self) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+    class FakeTimer:
+        @staticmethod
+        def singleShot(_msec, _callback) -> None:
+            pass
+
+    monkeypatch.setattr(phone_shell_module, "load_settings", GlobalSettings)
+    monkeypatch.setattr(phone_shell_module, "load_accounts", lambda: [])
+    monkeypatch.setattr(phone_shell_module, "Ringer", FakeRinger)
+    monkeypatch.setattr(phone_shell_module, "QTimer", FakeTimer)
+    monkeypatch.setattr(PhoneShell, "_start_sip", lambda _self: None)
+
+    shell = PhoneShell()
+
+    try:
+        labels = [action.text() for action in shell.account_chip.menu().actions()]
+
+        assert "No accounts" in labels
+        assert "Add account..." in labels
+    finally:
+        shell._really_quitting = True
+        shell.close()
+
+
+def test_phone_shell_add_account_from_clean_start_saves_and_selects(
+    qt_app: QApplication,
+    monkeypatch,
+) -> None:
+    new_account = AccountConfig(
+        id="new-acct",
+        display_name="NOC Lab",
+        username="1001",
+        domain="sip.example.test",
+        enabled=True,
+    )
+    saved: list[list[AccountConfig]] = []
+    added: list[AccountConfig] = []
+
+    class FakeRinger:
+        def start(self) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+    class FakeTimer:
+        @staticmethod
+        def singleShot(_msec, _callback) -> None:
+            pass
+
+    class FakeDialog:
+        Accepted = 1
+
+        def __init__(self, parent=None) -> None:
+            self.parent = parent
+
+        def result_account(self) -> AccountConfig:
+            return new_account
+
+    class FakeEndpoint:
+        def add_account(self, cfg: AccountConfig) -> None:
+            added.append(cfg)
+
+    class FakeSipEndpoint:
+        @staticmethod
+        def instance() -> FakeEndpoint:
+            return fake_endpoint
+
+    fake_endpoint = FakeEndpoint()
+
+    monkeypatch.setattr(phone_shell_module, "load_settings", GlobalSettings)
+    monkeypatch.setattr(phone_shell_module, "load_accounts", lambda: [])
+    monkeypatch.setattr(
+        phone_shell_module,
+        "save_accounts",
+        lambda accounts: saved.append(list(accounts)),
+    )
+    monkeypatch.setattr(phone_shell_module, "Ringer", FakeRinger)
+    monkeypatch.setattr(phone_shell_module, "QTimer", FakeTimer)
+    monkeypatch.setattr(phone_shell_module, "AccountDialog", FakeDialog)
+    monkeypatch.setattr(phone_shell_module, "SipEndpoint", FakeSipEndpoint)
+    monkeypatch.setattr(phone_shell_module, "_open_modal", lambda _dlg: True)
+    monkeypatch.setattr(PhoneShell, "_start_sip", lambda _self: None)
+
+    shell = PhoneShell()
+
+    try:
+        add_action = next(
+            action for action in shell.account_chip.menu().actions()
+            if action.text() == "Add account..."
+        )
+        add_action.trigger()
+
+        assert saved == [[new_account]]
+        assert added == [new_account]
+        assert shell.accounts == [new_account]
+        assert shell._active_account_id == "new-acct"
+        assert shell.account_chip.text() == "NOC Lab  v"
+    finally:
+        shell._really_quitting = True
+        shell.close()
+
+
+def test_phone_shell_add_account_save_failure_keeps_account_out_of_memory(
+    qt_app: QApplication,
+    monkeypatch,
+) -> None:
+    new_account = AccountConfig(
+        id="new-acct",
+        display_name="NOC Lab",
+        username="1001",
+        domain="sip.example.test",
+        enabled=True,
+    )
+    warnings: list[tuple[str, str]] = []
+    added: list[AccountConfig] = []
+
+    class FakeRinger:
+        def start(self) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+    class FakeTimer:
+        @staticmethod
+        def singleShot(_msec, _callback) -> None:
+            pass
+
+    class FakeDialog:
+        Accepted = 1
+
+        def __init__(self, parent=None) -> None:
+            self.parent = parent
+
+        def result_account(self) -> AccountConfig:
+            return new_account
+
+    class FakeEndpoint:
+        def add_account(self, cfg: AccountConfig) -> None:
+            added.append(cfg)
+
+    class FakeSipEndpoint:
+        @staticmethod
+        def instance() -> FakeEndpoint:
+            return fake_endpoint
+
+    fake_endpoint = FakeEndpoint()
+
+    monkeypatch.setattr(phone_shell_module, "load_settings", GlobalSettings)
+    monkeypatch.setattr(phone_shell_module, "load_accounts", lambda: [])
+    monkeypatch.setattr(
+        phone_shell_module,
+        "save_accounts",
+        lambda _accounts: (_ for _ in ()).throw(OSError("disk denied")),
+    )
+    monkeypatch.setattr(
+        phone_shell_module,
+        "accounts_file",
+        lambda: "C:/Users/User/AppData/Roaming/NOC_Beam/accounts.json",
+    )
+    monkeypatch.setattr(phone_shell_module, "Ringer", FakeRinger)
+    monkeypatch.setattr(phone_shell_module, "QTimer", FakeTimer)
+    monkeypatch.setattr(phone_shell_module, "AccountDialog", FakeDialog)
+    monkeypatch.setattr(phone_shell_module, "SipEndpoint", FakeSipEndpoint)
+    monkeypatch.setattr(phone_shell_module, "_open_modal", lambda _dlg: True)
+    monkeypatch.setattr(
+        phone_shell_module.QMessageBox,
+        "warning",
+        lambda _parent, title, body: warnings.append((title, body)),
+    )
+    monkeypatch.setattr(PhoneShell, "_start_sip", lambda _self: None)
+
+    shell = PhoneShell()
+
+    try:
+        shell._on_add_account()
+
+        assert shell.accounts == []
+        assert added == []
+        assert warnings
+        assert warnings[0][0] == "Account save failed"
+        assert "accounts.json" in warnings[0][1]
+        assert "disk denied" in warnings[0][1]
+        assert shell.status_banner.text() == "Account save failed"
+    finally:
+        shell._really_quitting = True
+        shell.close()
+
+
 def test_phone_shell_account_settings_updates_selected_account(
     qt_app: QApplication,
     monkeypatch,

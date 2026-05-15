@@ -43,6 +43,7 @@ from noc_beam.audio.devices import set_active_devices
 from noc_beam.audio.headset import detect_headsets
 from noc_beam.audio.ringer import Ringer
 from noc_beam.config.history import CdrEntry, append_entry
+from noc_beam.config.paths import accounts_file
 from noc_beam.config.store import (
     AccountConfig, GlobalSettings, load_accounts, load_settings,
     save_accounts, save_settings,
@@ -343,6 +344,9 @@ class PhoneShell(QMainWindow):
             self.status_link.setVisible(False); self.status_link.clear()
 
     def _on_status_link(self, action):
+        if action == "add-account":
+            self._on_add_account()
+            return
         if action == "retry-register":
             for acc in self.accounts:
                 if acc.enabled:
@@ -357,8 +361,11 @@ class PhoneShell(QMainWindow):
         enabled = [a for a in self.accounts if a.enabled]
         if not enabled:
             empty = menu.addAction("No accounts"); empty.setEnabled(False)
+            menu.addSeparator()
+            menu.addAction("Add account...", self._on_add_account)
             self._active_account_id = ""
             self.account_chip.setText("No account  v")
+            self._set_status("No SIP account configured", "warn", "Add account", "add-account")
         else:
             for acc in enabled:
                 label = acc.display_name or f"{acc.username}@{acc.domain}"
@@ -384,11 +391,29 @@ class PhoneShell(QMainWindow):
             log.exception("Failed to add account %s", cfg.id)
             QMessageBox.warning(self, "Account error", str(e))
 
+    def _save_accounts_or_warn(self, accounts):
+        try:
+            save_accounts(accounts)
+        except Exception as e:
+            log.exception("Failed to save accounts to %s", accounts_file())
+            QMessageBox.warning(
+                self,
+                "Account save failed",
+                f"NOC_Beam could not save accounts to:\n{accounts_file()}\n\n{e}",
+            )
+            self._set_status("Account save failed", "danger")
+            return False
+        log.info("Saved %d account(s) to %s", len(accounts), accounts_file())
+        return True
+
     def _on_add_account(self):
         dlg = AccountDialog(parent=self)
         if _open_modal(dlg):
             cfg = dlg.result_account()
-            self.accounts.append(cfg); save_accounts(self.accounts)
+            accounts = [*self.accounts, cfg]
+            if not self._save_accounts_or_warn(accounts):
+                return
+            self.accounts = accounts
             if cfg.enabled: self._add_account_to_endpoint(cfg)
             self._refresh_accounts()
 
@@ -404,8 +429,10 @@ class PhoneShell(QMainWindow):
         dlg = AccountDialog(account=acc, parent=self)
         if _open_modal(dlg):
             new_cfg = dlg.result_account()
-            self.accounts = [new_cfg if a.id == acc.id else a for a in self.accounts]
-            save_accounts(self.accounts)
+            accounts = [new_cfg if a.id == acc.id else a for a in self.accounts]
+            if not self._save_accounts_or_warn(accounts):
+                return
+            self.accounts = accounts
             SipEndpoint.instance().remove_account(acc.id)
             if new_cfg.enabled: self._add_account_to_endpoint(new_cfg)
             self._refresh_accounts()
@@ -417,8 +444,10 @@ class PhoneShell(QMainWindow):
         dlg = AccountSettingsDialog(account=acc, parent=self)
         if _open_modal(dlg):
             new_cfg = dlg.result_account()
-            self.accounts = [new_cfg if a.id == acc.id else a for a in self.accounts]
-            save_accounts(self.accounts)
+            accounts = [new_cfg if a.id == acc.id else a for a in self.accounts]
+            if not self._save_accounts_or_warn(accounts):
+                return
+            self.accounts = accounts
             SipEndpoint.instance().remove_account(acc.id)
             if new_cfg.enabled: self._add_account_to_endpoint(new_cfg)
             self._refresh_accounts()
@@ -430,8 +459,11 @@ class PhoneShell(QMainWindow):
         if not _ask_yes_no(self, "Remove account", f"Remove {acc.username}@{acc.domain}?"):
             return
         SipEndpoint.instance().remove_account(acc.id)
-        self.accounts = [a for a in self.accounts if a.id != acc.id]
-        save_accounts(self.accounts); self._refresh_accounts()
+        accounts = [a for a in self.accounts if a.id != acc.id]
+        if not self._save_accounts_or_warn(accounts):
+            return
+        self.accounts = accounts
+        self._refresh_accounts()
 
     def _on_endpoint_error(self, msg):
         log.error("Endpoint error: %s", msg)
