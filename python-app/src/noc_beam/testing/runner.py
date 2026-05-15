@@ -34,7 +34,8 @@ class _ActiveCall:
     target_uri: str
     sip_call: object
     call_id: int
-    started_at: float
+    started_at_mono: float
+    started_at_wall: float
     timeout_timer: QTimer
     hold_timer: QTimer | None = None
     cleanup_timer: QTimer | None = None
@@ -116,7 +117,7 @@ class TestRunner(QObject):
                 rtt_ms=None,
                 duration_s=0.0,
                 notes="cancelled",
-                started_at=time.monotonic(),
+                started_at=time.time(),
                 from_account=account.id if account is not None else call.caller_number,
                 to_uri=target_uri,
             )
@@ -129,7 +130,8 @@ class TestRunner(QObject):
         while self._queue and self._slots_in_use() < self.spec.parallel:
             call = self._queue.popleft()
             account = self._resolve_account(call.caller_number)
-            started_at = time.monotonic()
+            started_at_mono = time.monotonic()
+            started_at_wall = time.time()
             if account is None:
                 self._emit_result(
                     call=call,
@@ -139,7 +141,7 @@ class TestRunner(QObject):
                     rtt_ms=None,
                     duration_s=0.0,
                     notes="no matching account",
-                    started_at=started_at,
+                    started_at=started_at_wall,
                     from_account=call.caller_number,
                     to_uri=call.target_number,
                 )
@@ -161,9 +163,9 @@ class TestRunner(QObject):
                     sip_code=0,
                     sip_reason="Endpoint error",
                     rtt_ms=None,
-                    duration_s=time.monotonic() - started_at,
+                    duration_s=time.monotonic() - started_at_mono,
                     notes=notes,
-                    started_at=started_at,
+                    started_at=started_at_wall,
                     from_account=account.id,
                     to_uri=target_uri,
                 )
@@ -185,9 +187,9 @@ class TestRunner(QObject):
                     sip_code=0,
                     sip_reason="Endpoint error",
                     rtt_ms=None,
-                    duration_s=time.monotonic() - started_at,
+                    duration_s=time.monotonic() - started_at_mono,
                     notes=notes,
-                    started_at=started_at,
+                    started_at=started_at_wall,
                     from_account=account.id,
                     to_uri=target_uri,
                 )
@@ -201,7 +203,8 @@ class TestRunner(QObject):
                 target_uri=target_uri,
                 sip_call=sip_call,
                 call_id=call_id,
-                started_at=started_at,
+                started_at_mono=started_at_mono,
+                started_at_wall=started_at_wall,
                 timeout_timer=timeout_timer,
             )
             self._active[call_id] = active
@@ -229,7 +232,7 @@ class TestRunner(QObject):
 
         now = time.monotonic()
         if code > 0 and active.rtt_ms is None:
-            active.rtt_ms = (now - active.started_at) * 1000.0
+            active.rtt_ms = (now - active.started_at_mono) * 1000.0
 
         if 400 <= code <= 699:
             self._complete_active(active, "FAIL", code, reason, reason)
@@ -309,9 +312,9 @@ class TestRunner(QObject):
             sip_code=sip_code,
             sip_reason=sip_reason,
             rtt_ms=active.rtt_ms,
-            duration_s=time.monotonic() - active.started_at,
+            duration_s=time.monotonic() - active.started_at_mono,
             notes=notes,
-            started_at=active.started_at,
+            started_at=active.started_at_wall,
             from_account=active.account.id,
             to_uri=active.target_uri,
         )

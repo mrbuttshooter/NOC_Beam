@@ -8,7 +8,9 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
+QtGui = pytest.importorskip("PySide6.QtGui")
 QApplication = QtWidgets.QApplication
+QCloseEvent = QtGui.QCloseEvent
 _APP = QApplication.instance()
 if _APP is None:
     _APP = QApplication([])
@@ -91,5 +93,42 @@ def test_export_csv_writes_header_and_result_row(
         "nb-20260515-123456-007,2026-05-15T12:34:56Z,acc-1,"
         "sip:2001@example.test,PASS,180,Ringing,123,1.2,\n"
     )
+
+    view.close()
+
+
+class FakeRunner:
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+
+def test_close_event_cancels_active_runner_and_ignores_event(
+    qt_app: QApplication,
+) -> None:
+    view = RunnerWindow([])
+    fake_runner = FakeRunner()
+    view.runner = fake_runner  # type: ignore[assignment]
+    event = QCloseEvent()
+
+    view.closeEvent(event)
+
+    assert fake_runner.cancelled
+    assert not event.isAccepted()
+
+    view.runner = None
+    view.close()
+
+
+def test_close_event_without_active_runner_is_accepted(qt_app: QApplication) -> None:
+    view = RunnerWindow([])
+    event = QCloseEvent()
+    event.ignore()
+
+    view.closeEvent(event)
+
+    assert event.isAccepted()
 
     view.close()

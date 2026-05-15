@@ -51,7 +51,7 @@ class TestRunnerView(QMainWindow):
         super().__init__(parent)
         self.accounts = accounts
         self.results: list[RunnerResult] = []
-        self._runner: Runner | None = None
+        self.runner: Runner | None = None
         self._row_by_call_index: dict[int, int] = {}
 
         self.setWindowTitle("NOC_Beam test runner")
@@ -192,7 +192,7 @@ class TestRunnerView(QMainWindow):
     def _refresh_plan_preview(self) -> None:
         count = len(expand(self._spec_from_ui()))
         self.run_btn.setText(f"Run {count} calls")
-        self.run_btn.setEnabled(count > 0 and self._runner is None)
+        self.run_btn.setEnabled(count > 0 and self.runner is None)
 
     def _refresh_hold_enabled(self) -> None:
         self.hold_spin.setEnabled(self.pass_combo.currentData() == "full-call")
@@ -200,7 +200,7 @@ class TestRunnerView(QMainWindow):
     def _on_run_clicked(self) -> None:
         spec = self._spec_from_ui()
         calls = expand(spec)
-        if not calls or self._runner is not None:
+        if not calls or self.runner is not None:
             self._refresh_plan_preview()
             return
 
@@ -214,12 +214,12 @@ class TestRunnerView(QMainWindow):
         self.cancel_btn.setEnabled(True)
         self._refresh_summary()
 
-        self._runner = Runner(spec, self.accounts, self)
-        self._runner.call_started.connect(self._on_call_started)
-        self._runner.call_completed.connect(self._on_call_completed)
-        self._runner.run_complete.connect(self._on_run_complete)
+        self.runner = Runner(spec, self.accounts, self)
+        self.runner.call_started.connect(self._on_call_started)
+        self.runner.call_completed.connect(self._on_call_completed)
+        self.runner.run_complete.connect(self._on_run_complete)
         self._refresh_plan_preview()
-        self._runner.start()
+        self.runner.start()
 
     def _on_call_started(self, call_index: int) -> None:
         row = self._row_by_call_index.get(call_index)
@@ -238,15 +238,22 @@ class TestRunnerView(QMainWindow):
 
     def _on_run_complete(self, results: list[RunnerResult]) -> None:
         self.results = list(results)
-        self._runner = None
+        self.runner = None
         self.cancel_btn.setEnabled(False)
         self.export_btn.setEnabled(bool(self.results))
         self._refresh_plan_preview()
         self._refresh_summary()
 
     def _on_cancel_clicked(self) -> None:
-        if self._runner is not None:
-            self._runner.cancel()
+        if self.runner is not None:
+            self.runner.cancel()
+
+    def closeEvent(self, event) -> None:  # noqa: N802, ANN001
+        if self.runner is not None:
+            self.runner.cancel()
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     def _on_export_clicked(self) -> None:
         filename, _ = QFileDialog.getSaveFileName(

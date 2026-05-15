@@ -155,6 +155,27 @@ def test_reachability_passes_on_first_180_ringing() -> None:
     assert len(completed_runs) == 1
 
 
+def test_result_started_at_uses_wall_clock_while_timings_use_monotonic() -> None:
+    events = SipEvents()
+    endpoint = StubEndpoint()
+    runner = Runner(spec(), [account()], endpoint=endpoint, events=events)
+
+    results: list[RunnerResult] = []
+    runner.call_completed.connect(results.append)
+
+    before = time.time()
+    runner.start()
+    call_id = first_call_id(endpoint)
+    emit_state(events, endpoint, call_id, "EARLY", 180, "Ringing")
+    after = time.time()
+
+    assert len(results) == 1
+    assert before <= results[0].started_at <= after
+    assert results[0].duration_s >= 0.0
+    assert results[0].rtt_ms is not None
+    assert results[0].rtt_ms >= 0.0
+
+
 def test_full_call_passes_after_200_ok_and_hold_timer_expiry() -> None:
     events = SipEvents()
     endpoint = StubEndpoint()
