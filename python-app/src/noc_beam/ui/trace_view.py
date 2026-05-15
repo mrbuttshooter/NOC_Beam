@@ -23,12 +23,15 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction, QGuiApplication
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QTextEdit,
@@ -42,7 +45,8 @@ from noc_beam.sip.events import sip_events
 
 
 _trace_logger: logging.Logger | None = None
-MAX_DIALOGS = 200    # cap at dialog level, not message level
+MAX_DIALOGS = 200       # cap at dialog level
+MAX_MSGS_PER_DIALOG = 200  # also cap inside each dialog so long REGISTER refresh loops don't OOM
 
 _CALLID_RX = re.compile(r"^Call-ID:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _STATUS_RX = re.compile(r"^SIP/2\.0\s+(\d{3})", re.IGNORECASE)
@@ -50,6 +54,15 @@ _METHOD_RX = re.compile(
     r"^(INVITE|REGISTER|ACK|BYE|CANCEL|OPTIONS|SUBSCRIBE|"
     r"NOTIFY|REFER|MESSAGE|PUBLISH|INFO|UPDATE|PRACK)\s+"
 )
+_FROM_RX = re.compile(r"^(?:From|f):\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+_TO_RX = re.compile(r"^(?:To|t):\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+
+
+def _extract_header(rx: re.Pattern, body: str) -> str:
+    if not body:
+        return ""
+    m = rx.search(body)
+    return m.group(1).strip() if m else ""
 
 
 def _persistent_trace_logger() -> logging.Logger:
@@ -183,7 +196,12 @@ class _Chip(QLabel):
 class TraceMsgRow(QFrame):
     """Single SIP message row inside an expanded dialog."""
 
-    def __init__(self, msg: _Msg, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        msg: _Msg,
+        prev_ts: float | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.msg = msg
         self.setObjectName("TraceMsgRow")
@@ -193,6 +211,22 @@ class TraceMsgRow(QFrame):
         ts = QLabel(msg.when, self)
         ts.setObjectName("TraceMsgTime")
         ts.setFixedWidth(64)
+
+        # Delta-time vs previous message in the same dialog -- the
+        # column NOC operators always reach for in sngrep.
+        delta_text = ""
+        if prev_ts is not None and prev_ts > 0:
+            delta_ms = int(max(0.0, msg.ts - prev_ts) * 1000)
+            if delta_ms < 1000:
+                delta_text = f"+{delta_ms}ms"
+            elif delta_ms < 60000:
+                delta_text = f"+{delta_ms / 1000:.2f}s"
+            else:
+                delta_text = f"+{delta_ms // 60000}m{(delta_ms % 60000) // 1000}s"
+        delta_lbl = QLabel(delta_text, self)
+        delta_lbl.setObjectName("TraceMsgDelta")
+        delta_lbl.setFixedWidth(64)
+        delta_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         dir_lbl = QLabel(msg.direction, self)
         dir_lbl.setObjectName("TraceMsgDir")
@@ -206,12 +240,24 @@ class TraceMsgRow(QFrame):
         summary.setObjectName("TraceMsgSummary")
         summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         summary.setMinimumWidth(120)
-        summary.setToolTip(msg.summary)
+        # Operator-grade tooltip: From / To headers parsed out of the
+        # body so the row is scannable without expanding.
+        from_h = _extract_header(_FROM_RX, msg.body)
+        to_h = _extract_header(_TO_RX, msg.body)
+        tip_lines = [msg.summary]
+        if from_h:
+            tip_lines.append(f"From: {from_h}")
+        if to_h:
+            tip_lines.append(f"To: {to_h}")
+        if msg.peer:
+            tip_lines.append(f"Peer: {msg.peer}")
+        summary.setToolTip("\n".join(tip_lines))
 
         head = QHBoxLayout()
         head.setContentsMargins(28, 4, 10, 4)
         head.setSpacing(8)
         head.addWidget(ts)
+        head.addWidget(delta_lbl)
         head.addWidget(dir_lbl)
         head.addWidget(chip)
         head.addWidget(summary, 1)
@@ -229,10 +275,35 @@ class TraceMsgRow(QFrame):
         outer.addLayout(head)
         outer.addWidget(self.body)
 
+        # Right-click context menu: Copy headers / Copy body / Copy
+        # Call-ID. Operator basics.
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_menu)
+
     def mousePressEvent(self, event):  # noqa: N802, ANN001
         if event.button() == Qt.MouseButton.LeftButton:
             self.body.setVisible(not self.body.isVisible())
         super().mousePressEvent(event)
+
+    def _show_menu(self, pos) -> None:
+        menu = QMenu(self)
+        cb = QGuiApplication.clipboard()
+        act_body = QAction("Copy full message", menu)
+        act_body.triggered.connect(lambda: cb.setText(self.msg.body))
+        menu.addAction(act_body)
+        # Headers only = strip body after first blank line.
+        act_hdrs = QAction("Copy headers only", menu)
+        def _copy_hdrs():
+            hdrs = self.msg.body.split("\r\n\r\n", 1)[0].split("\n\n", 1)[0]
+            cb.setText(hdrs)
+        act_hdrs.triggered.connect(_copy_hdrs)
+        menu.addAction(act_hdrs)
+        cid = _extract_call_id(self.msg.body)
+        if cid:
+            act_cid = QAction(f"Copy Call-ID ({cid[:24]}…)" if len(cid) > 24 else f"Copy Call-ID ({cid})", menu)
+            act_cid.triggered.connect(lambda: cb.setText(cid))
+            menu.addAction(act_cid)
+        menu.popup(self.mapToGlobal(pos))
 
 
 class TraceDialogRow(QFrame):
@@ -282,10 +353,12 @@ class TraceDialogRow(QFrame):
         self._body_layout.setSpacing(0)
         self._body.setVisible(False)
         self._msg_rows: list[TraceMsgRow] = []
+        prev_ts: float | None = None
         for m in dialog.msgs:
-            row = TraceMsgRow(m, self._body)
+            row = TraceMsgRow(m, prev_ts, self._body)
             self._msg_rows.append(row)
             self._body_layout.addWidget(row)
+            prev_ts = m.ts
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -293,8 +366,17 @@ class TraceDialogRow(QFrame):
         outer.addLayout(head)
         outer.addWidget(self._body)
 
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_menu)
+
     def append_msg(self, msg: _Msg) -> None:
-        """Add a new message into this dialog (chip + sub-row)."""
+        """Add a new message into this dialog (chip + sub-row).
+
+        Caps msgs at MAX_MSGS_PER_DIALOG -- a long-running REGISTER
+        refresh loop on a single Call-ID would otherwise grow the
+        dialog forever and eventually OOM.
+        """
+        prev_ts = self.dialog.msgs[-1].ts if self.dialog.msgs else None
         self.dialog.msgs.append(msg)
         self._refresh_state_property()
         # Insert a new chip + arrow into the chips holder
@@ -305,9 +387,48 @@ class TraceDialogRow(QFrame):
         chip = _Chip(msg.chip, msg.chip_level, self._chips_holder)
         self._chips_layout.addWidget(chip)
         # Append a sub-row
-        sub = TraceMsgRow(msg, self._body)
+        sub = TraceMsgRow(msg, prev_ts, self._body)
         self._msg_rows.append(sub)
         self._body_layout.addWidget(sub)
+        # Trim oldest msgs (and their widgets) past the per-dialog cap.
+        while len(self.dialog.msgs) > MAX_MSGS_PER_DIALOG:
+            self.dialog.msgs.pop(0)
+            old_row = self._msg_rows.pop(0)
+            old_row.setParent(None)
+            old_row.deleteLater()
+            # Drop the matching head chip + arrow pair.
+            if self._chips_layout.count() >= 2:
+                # First entry is a chip; remove it. If the next one is
+                # an arrow, remove that too.
+                first = self._chips_layout.takeAt(0)
+                w = first.widget()
+                if w is not None:
+                    w.setParent(None)
+                    w.deleteLater()
+                second = self._chips_layout.itemAt(0)
+                if second is not None:
+                    sw = second.widget()
+                    if sw is not None and sw.objectName() == "TraceChipArrow":
+                        self._chips_layout.takeAt(0)
+                        sw.setParent(None)
+                        sw.deleteLater()
+
+    def _show_menu(self, pos) -> None:
+        menu = QMenu(self)
+        cb = QGuiApplication.clipboard()
+        act_cid = QAction("Copy Call-ID", menu)
+        act_cid.triggered.connect(lambda: cb.setText(self.dialog.call_id))
+        menu.addAction(act_cid)
+        act_dialog = QAction("Copy whole dialog", menu)
+        def _copy_dialog():
+            buf = [f"=== Call-ID: {self.dialog.call_id} ==="]
+            for m in self.dialog.msgs:
+                buf.append(f"\n[{m.when}] {m.direction}  {m.peer}")
+                buf.append(m.body)
+            cb.setText("\n".join(buf))
+        act_dialog.triggered.connect(_copy_dialog)
+        menu.addAction(act_dialog)
+        menu.popup(self.mapToGlobal(pos))
 
     def _render_chips(self) -> None:
         # Initial render -- chips with arrows between
@@ -410,6 +531,26 @@ class TraceView(QWidget):
         self.filter_edit = QLineEdit()
         self.filter_edit.setObjectName("TraceFilter")
         self.filter_edit.setPlaceholderText("Filter (Call-ID, body, peer)")
+
+        # Pause/resume button -- demo blocker. While paused, incoming
+        # messages buffer in self._paused_buffer and the screen does
+        # not scroll-jump on every packet.
+        self.pause_btn = QToolButton()
+        self.pause_btn.setObjectName("TracePauseBtn")
+        self.pause_btn.setCheckable(True)
+        self.pause_btn.setText("⏸ Pause")
+        self.pause_btn.setToolTip("Pause auto-scroll + queue new messages")
+        self.pause_btn.toggled.connect(self._on_pause_toggled)
+
+        # LIVE indicator next to the pause button. Visible when streaming,
+        # hidden (or "PAUSED") when paused. The pulse comes from QSS via
+        # an animated property; if that's not present a static dot still
+        # reads as live.
+        self.live_label = QLabel("● LIVE")
+        self.live_label.setObjectName("TraceLiveBadge")
+        self.live_label.setProperty("state", "live")
+        self.live_label.setToolTip("Streaming SIP traffic in real time")
+
         self.export_btn = QPushButton("Export…")
         self.clear_btn = QPushButton("Clear")
 
@@ -419,6 +560,8 @@ class TraceView(QWidget):
         toolbar.addWidget(self.chk_rx)
         toolbar.addWidget(self.chk_tx)
         toolbar.addWidget(self.filter_edit, 1)
+        toolbar.addWidget(self.live_label)
+        toolbar.addWidget(self.pause_btn)
         toolbar.addWidget(self.export_btn)
         toolbar.addWidget(self.clear_btn)
 
@@ -471,16 +614,40 @@ class TraceView(QWidget):
         layout.addLayout(chip_bar)
         layout.addWidget(self._scroll, 1)
 
+        # ---- Pause buffer --------------------------------------------
+        # While paused, incoming messages accumulate here and flush on
+        # resume. Bounded so a long pause can't OOM.
+        from collections import deque
+        self._paused: bool = False
+        self._paused_buffer: deque = deque(maxlen=500)
+
         # ---- Wires ---------------------------------------------------
         self.clear_btn.clicked.connect(self._on_clear)
         self.export_btn.clicked.connect(self._on_export)
         self.chk_rx.toggled.connect(self._reapply_filters)
         self.chk_tx.toggled.connect(self._reapply_filters)
         self.filter_edit.textChanged.connect(self._reapply_filters)
-        sip_events().sip_message.connect(self._on_sip_message)
+        # CRITICAL: SIP messages arrive on PJSIP worker threads. Without
+        # QueuedConnection the slot would mutate Qt widgets from the
+        # wrong thread -> SIGSEGV / heap corruption. Forcing
+        # QueuedConnection guarantees the slot runs on the main GUI
+        # thread regardless of which thread emitted the signal.
+        sip_events().sip_message.connect(
+            self._on_sip_message,
+            type=Qt.ConnectionType.QueuedConnection,
+        )
 
     # ------------------------------------------------------------------
     def _on_sip_message(self, ts: float, direction: str, peer: str, body: str) -> None:
+        if self._paused:
+            # Buffer until resume. The deque is bounded so we don't OOM
+            # during a long pause; the oldest dropped entries are still
+            # in the on-disk RotatingFileHandler log.
+            self._paused_buffer.append((ts, direction, peer, body))
+            return
+        self._ingest(ts, direction, peer, body)
+
+    def _ingest(self, ts: float, direction: str, peer: str, body: str) -> None:
         when = datetime.fromtimestamp(ts).strftime("%H:%M:%S.%f")[:-3]
         try:
             _persistent_trace_logger().info(
@@ -513,20 +680,54 @@ class TraceView(QWidget):
             while len(self._dialogs) > MAX_DIALOGS:
                 old_id, old_row = next(iter(self._dialogs.items()))
                 del self._dialogs[old_id]
+                old_row.setParent(None)
                 old_row.deleteLater()
 
-        # Always hide the placeholder once we have any dialog row -- the
-        # isVisible() check was unreliable when the placeholder had been
-        # laid out but obscured by zero-height stretches.
         self._empty.setVisible(False)
 
         bar = self._scroll.verticalScrollBar()
         bar.setValue(bar.maximum())
 
+    def _on_pause_toggled(self, paused: bool) -> None:
+        self._paused = bool(paused)
+        if paused:
+            self.pause_btn.setText("▶ Resume")
+            self.pause_btn.setToolTip(
+                "Resume streaming + flush queued messages"
+            )
+            self.live_label.setText("● PAUSED")
+            self.live_label.setProperty("state", "paused")
+        else:
+            self.pause_btn.setText("⏸ Pause")
+            self.pause_btn.setToolTip(
+                "Pause auto-scroll + queue new messages"
+            )
+            self.live_label.setText("● LIVE")
+            self.live_label.setProperty("state", "live")
+            # Drain the buffer in arrival order.
+            while self._paused_buffer:
+                args = self._paused_buffer.popleft()
+                self._ingest(*args)
+        # Re-polish so the QSS attribute-selector applies.
+        self.live_label.style().unpolish(self.live_label)
+        self.live_label.style().polish(self.live_label)
+
     def _on_clear(self) -> None:
+        # Confirm before nuking -- protection against demo mis-clicks.
+        reply = QMessageBox.question(
+            self,
+            "Clear trace",
+            "Discard all captured SIP dialogs from this session?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
         for row in self._dialogs.values():
+            row.setParent(None)
             row.deleteLater()
         self._dialogs.clear()
+        self._paused_buffer.clear()
         self._empty.setVisible(True)
 
     # ------------------------------------------------------------------
