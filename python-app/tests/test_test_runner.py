@@ -42,11 +42,16 @@ class StubCall:
         return self._info
 
 
+class BrokenInfoCall:
+    def getInfo(self) -> StubInfo:  # noqa: N802
+        raise RuntimeError("getInfo failed")
+
+
 class StubEndpoint:
     def __init__(self) -> None:
         self.next_call_id = 100
         self.calls: dict[int, tuple[str, str, StubCall]] = {}
-        self.hung_up: list[int] = []
+        self.hung_up: list[object] = []
         self.max_active = 0
 
     def make_call(self, account_id: str, target_uri: str) -> StubCall:
@@ -56,9 +61,10 @@ class StubEndpoint:
         self.max_active = max(self.max_active, len(self.calls))
         return call
 
-    def hangup_call(self, call: StubCall) -> None:
-        call_id = call.getInfo().id
-        self.hung_up.append(call_id)
+    def hangup_call(self, call: object) -> None:
+        self.hung_up.append(call)
+
+    def release_call(self, call_id: int) -> None:
         self.calls.pop(call_id, None)
 
 
@@ -103,24 +109,49 @@ def first_call_id(endpoint: StubEndpoint) -> int:
     return next(iter(endpoint.calls))
 
 
+def emit_state(
+    events: SipEvents,
+    endpoint: StubEndpoint,
+    call_id: int,
+    state: str,
+    code: int,
+    reason: str,
+    account_id: str = "acc-1",
+) -> None:
+    if state == "DISCONNECTED":
+        endpoint.release_call(call_id)
+    events.call_state_changed.emit(account_id, call_id, state, code, reason)
+
+
+def wait_for_completed(results: list[RunnerResult], count: int = 1) -> None:
+    wait_until(lambda: len(results) >= count, timeout_ms=500)
+
+
 def test_reachability_passes_on_first_180_ringing() -> None:
     events = SipEvents()
     endpoint = StubEndpoint()
     runner = Runner(spec(), [account()], endpoint=endpoint, events=events)
 
     results: list[RunnerResult] = []
-    runner.run_complete.connect(lambda emitted: results.extend(emitted))
+    completed_runs: list[list[RunnerResult]] = []
+    runner.call_completed.connect(results.append)
+    runner.run_complete.connect(completed_runs.append)
     runner.start()
 
     call_id = first_call_id(endpoint)
-    events.call_state_changed.emit("acc-1", call_id, "EARLY", 180, "Ringing")
+    call = endpoint.calls[call_id][2]
+    emit_state(events, endpoint, call_id, "EARLY", 180, "Ringing")
 
     assert len(results) == 1
     assert results[0].result == "PASS"
     assert results[0].sip_code == 180
     assert results[0].sip_reason == "Ringing"
     assert results[0].to_uri == "sip:2001@pbx.example.test"
-    assert endpoint.hung_up == [call_id]
+    assert endpoint.hung_up == [call]
+    assert completed_runs == []
+
+    emit_state(events, endpoint, call_id, "DISCONNECTED", 487, "Request Terminated")
+    assert len(completed_runs) == 1
 
 
 def test_full_call_passes_after_200_ok_and_hold_timer_expiry() -> None:
@@ -134,17 +165,24 @@ def test_full_call_passes_after_200_ok_and_hold_timer_expiry() -> None:
     )
 
     results: list[RunnerResult] = []
-    runner.run_complete.connect(lambda emitted: results.extend(emitted))
+    completed_runs: list[list[RunnerResult]] = []
+    runner.call_completed.connect(results.append)
+    runner.run_complete.connect(completed_runs.append)
     runner.start()
 
     call_id = first_call_id(endpoint)
-    events.call_state_changed.emit("acc-1", call_id, "CONFIRMED", 200, "OK")
-    wait_until(lambda: bool(results), timeout_ms=500)
+    call = endpoint.calls[call_id][2]
+    emit_state(events, endpoint, call_id, "CONFIRMED", 200, "OK")
+    wait_for_completed(results)
 
     assert results[0].result == "PASS"
     assert results[0].sip_code == 200
     assert results[0].sip_reason == "OK"
-    assert endpoint.hung_up == [call_id]
+    assert endpoint.hung_up == [call]
+    assert completed_runs == []
+
+    emit_state(events, endpoint, call_id, "DISCONNECTED", 200, "OK")
+    assert len(completed_runs) == 1
 
 
 def test_fails_on_404() -> None:
@@ -157,13 +195,14 @@ def test_fails_on_404() -> None:
     runner.start()
 
     call_id = first_call_id(endpoint)
-    events.call_state_changed.emit("acc-1", call_id, "DISCONNECTED", 404, "Not Found")
+    call = endpoint.calls[call_id][2]
+    emit_state(events, endpoint, call_id, "DISCONNECTED", 404, "Not Found")
 
     assert len(results) == 1
     assert results[0].result == "FAIL"
     assert results[0].sip_code == 404
     assert results[0].sip_reason == "Not Found"
-    assert endpoint.hung_up == [call_id]
+    assert endpoint.hung_up == [call]
 
 
 def test_fails_without_matching_account() -> None:
@@ -196,17 +235,19 @@ def test_fails_on_timeout() -> None:
     runner = Runner(timeout_spec, [account()], endpoint=endpoint, events=events)
 
     results: list[RunnerResult] = []
-    runner.run_complete.connect(lambda emitted: results.extend(emitted))
+    runner.call_completed.connect(results.append)
     runner.start()
 
     call_id = first_call_id(endpoint)
-    wait_until(lambda: bool(results), timeout_ms=500)
+    call = endpoint.calls[call_id][2]
+    wait_for_completed(results)
 
     assert results[0].result == "FAIL"
     assert results[0].sip_code == 408
     assert results[0].sip_reason == "Request Timeout"
     assert results[0].notes == "timeout"
-    assert endpoint.hung_up == [call_id]
+    assert endpoint.hung_up == [call]
+    emit_state(events, endpoint, call_id, "DISCONNECTED", 408, "Request Timeout")
 
 
 def test_parallel_run_never_exceeds_configured_concurrency() -> None:
@@ -230,7 +271,8 @@ def test_parallel_run_never_exceeds_configured_concurrency() -> None:
     assert len(endpoint.calls) == 2
     while len(results) < 4:
         call_id = first_call_id(endpoint)
-        events.call_state_changed.emit("acc-1", call_id, "EARLY", 180, "Ringing")
+        emit_state(events, endpoint, call_id, "EARLY", 180, "Ringing")
+        emit_state(events, endpoint, call_id, "DISCONNECTED", 487, "Request Terminated")
 
     assert len(results) == 4
     assert endpoint.max_active == 2
@@ -256,11 +298,78 @@ def test_cancel_fails_in_flight_and_queued_calls() -> None:
     runner.start()
 
     active_call_ids = list(endpoint.calls)
+    active_calls = [endpoint.calls[call_id][2] for call_id in active_call_ids]
     runner.cancel()
+
+    for call_id in active_call_ids:
+        emit_state(events, endpoint, call_id, "DISCONNECTED", 0, "Cancelled")
 
     assert len(results) == 4
     assert all(result.result == "FAIL" for result in results)
     assert all(result.sip_reason == "Cancelled" for result in results)
     assert all(result.notes == "cancelled" for result in results)
-    assert endpoint.hung_up == active_call_ids
+    assert endpoint.hung_up == active_calls
     assert endpoint.calls == {}
+
+
+def test_reachability_holds_slot_until_disconnected_before_next_call() -> None:
+    events = SipEvents()
+    endpoint = StubEndpoint()
+    runner = Runner(
+        spec(
+            callers=["1001", "1001"],
+            targets=["2001", "2002"],
+            parallel=1,
+        ),
+        [account()],
+        endpoint=endpoint,
+        events=events,
+    )
+
+    results: list[RunnerResult] = []
+    started: list[int] = []
+    runner.call_completed.connect(results.append)
+    runner.call_started.connect(started.append)
+    runner.start()
+
+    first_id = first_call_id(endpoint)
+    emit_state(events, endpoint, first_id, "EARLY", 180, "Ringing")
+
+    assert len(results) == 1
+    assert results[0].result == "PASS"
+    assert started == [1]
+    assert len(endpoint.calls) == 1
+    assert first_id in endpoint.calls
+
+    emit_state(events, endpoint, first_id, "DISCONNECTED", 487, "Request Terminated")
+
+    assert started == [1, 2]
+    assert len(endpoint.calls) == 1
+    second_id = first_call_id(endpoint)
+    assert second_id != first_id
+
+
+class BrokenInfoEndpoint(StubEndpoint):
+    def __init__(self) -> None:
+        super().__init__()
+        self.broken_call = BrokenInfoCall()
+
+    def make_call(self, account_id: str, target_uri: str) -> BrokenInfoCall:
+        return self.broken_call
+
+
+def test_getinfo_failure_after_make_call_hangs_up_returned_call() -> None:
+    events = SipEvents()
+    endpoint = BrokenInfoEndpoint()
+    runner = Runner(spec(), [account()], endpoint=endpoint, events=events)
+
+    results: list[RunnerResult] = []
+    runner.run_complete.connect(lambda emitted: results.extend(emitted))
+    runner.start()
+
+    assert len(results) == 1
+    assert results[0].result == "FAIL"
+    assert results[0].sip_code == 0
+    assert results[0].sip_reason == "Endpoint error"
+    assert results[0].notes == "getInfo failed"
+    assert endpoint.hung_up == [endpoint.broken_call]

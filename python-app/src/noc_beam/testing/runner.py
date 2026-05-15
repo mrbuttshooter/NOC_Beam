@@ -37,7 +37,12 @@ class _ActiveCall:
     started_at: float
     timeout_timer: QTimer
     hold_timer: QTimer | None = None
+    cleanup_timer: QTimer | None = None
     rtt_ms: float | None = None
+    completed: bool = False
+
+
+CLEANUP_FALLBACK_SECONDS = 1.0
 
 
 class TestRunner(QObject):
@@ -141,8 +146,31 @@ class TestRunner(QObject):
             target_uri = self._build_target_uri(call.target_number, account)
             try:
                 sip_call = self.endpoint.make_call(account.id, target_uri)
+            except Exception as exc:
+                text = str(exc)
+                notes = (
+                    "pjsua2 not available"
+                    if "pjsua2 not available" in text.lower()
+                    else text
+                )
+                self._emit_result(
+                    call=call,
+                    result="FAIL",
+                    sip_code=0,
+                    sip_reason="Endpoint error",
+                    rtt_ms=None,
+                    duration_s=time.monotonic() - started_at,
+                    notes=notes,
+                    started_at=started_at,
+                    from_account=account.id,
+                    to_uri=target_uri,
+                )
+                continue
+
+            try:
                 call_id = int(sip_call.getInfo().id)
             except Exception as exc:
+                self._hangup(sip_call)
                 text = str(exc)
                 notes = (
                     "pjsua2 not available"
@@ -190,12 +218,20 @@ class TestRunner(QObject):
         if active is None or active.account.id != account_id:
             return
 
+        if state == "DISCONNECTED" and active.completed:
+            self._release_active(active)
+            return
+        if active.completed:
+            return
+
         now = time.monotonic()
         if code > 0 and active.rtt_ms is None:
             active.rtt_ms = (now - active.started_at) * 1000.0
 
         if 400 <= code <= 699:
             self._complete_active(active, "FAIL", code, reason, reason)
+            if state == "DISCONNECTED":
+                self._release_active(active)
             return
 
         if (
@@ -225,6 +261,7 @@ class TestRunner(QObject):
                 reason or "Disconnected",
                 reason or "Disconnected",
             )
+            self._release_active(active)
 
     def _on_hold_complete(self, call_id: int, code: int, reason: str) -> None:
         active = self._active.get(call_id)
@@ -256,9 +293,10 @@ class TestRunner(QObject):
         hangup: bool = True,
         fill_slots: bool = True,
     ) -> None:
-        if self._active.pop(active.call_id, None) is None:
+        if self._active.get(active.call_id) is not active or active.completed:
             return
 
+        active.completed = True
         active.timeout_timer.stop()
         if active.hold_timer is not None:
             active.hold_timer.stop()
@@ -279,8 +317,34 @@ class TestRunner(QObject):
         )
 
         if fill_slots:
+            self._start_cleanup_timer(active)
+        else:
+            self._start_cleanup_timer(active, fill_slots=False)
+
+    def _release_active(self, active: _ActiveCall, *, fill_slots: bool = True) -> None:
+        if self._active.pop(active.call_id, None) is None:
+            return
+        active.timeout_timer.stop()
+        if active.hold_timer is not None:
+            active.hold_timer.stop()
+        if active.cleanup_timer is not None:
+            active.cleanup_timer.stop()
+        if fill_slots:
             self._fill_slots()
         self._maybe_emit_run_complete()
+
+    def _start_cleanup_timer(
+        self,
+        active: _ActiveCall,
+        *,
+        fill_slots: bool = True,
+    ) -> None:
+        cleanup_timer = self._make_timer(CLEANUP_FALLBACK_SECONDS)
+        active.cleanup_timer = cleanup_timer
+        cleanup_timer.timeout.connect(
+            lambda a=active, fs=fill_slots: self._release_active(a, fill_slots=fs)
+        )
+        cleanup_timer.start()
 
     def _emit_result(
         self,
