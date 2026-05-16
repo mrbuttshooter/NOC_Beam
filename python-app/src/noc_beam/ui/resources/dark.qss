@@ -111,11 +111,9 @@ QPushButton:focus {
     outline: none;
 }
 
-/* Call / Hang up — semantic success/danger fills.
-   CallButton: full rule moved to the late-block at ~line 1327
-   for single-source-of-truth (was triplicated). HangupButton
-   stays here as the canonical declaration. */
-
+/* Hang up — semantic danger fill. CallButton lives in the
+   late-overrides block at the bottom of this file as the single
+   source of truth (was previously triplicated). */
 QPushButton#HangupButton {
     background-color: #FF5C7A;   /* --danger */
     border-color: #FF5C7A;
@@ -1134,14 +1132,6 @@ QToolButton#TabBtn:checked {
     border-top-color: #FF8A3D;
     color: #FF8A3D;
 }
-/* DialInput sizing was redeclared here (and again at line ~1317).
-   Defer to the canonical late-block at the bottom of this file so
-   there's a single source of truth. CallButton sizing stays. */
-/* CallButton was redeclared here. The canonical rule lives at the
-   top of this file (line 115) for the base success colour, and the
-   late-block at line 1329 enforces the sized 42px footer variant.
-   Keeping a third middle declaration just created cascade
-   confusion -- deleted in favour of those two. */
 QWidget#DialPad QPushButton#DialPadButton {
     min-height: 40px;
     max-height: 48px;
@@ -1522,9 +1512,6 @@ QLabel#FirstRunHelp {
     font-size: 11px;
 }
 
-/* CallButton rule moved up to ~line 1327 where the sized + coloured
-   block now lives as the single source of truth. This stub kept as
-   a marker so a future grep stays informative. */
 
 /* ------------------------------------------------------------------
    Round 5 audit fixes

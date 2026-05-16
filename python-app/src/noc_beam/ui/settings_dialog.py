@@ -653,26 +653,43 @@ class SettingsDialog(QDialog):
             lambda *_: self._safe_disconnect_pill()
         )
         reg.addRow("Status",     status_pill)
-        # Live Expires-In: shows the registrar's granted Expires when
-        # available (read off the account's RegConfig via SipEndpoint
-        # singleton). Falls back to em-dash when no live endpoint or
-        # account isn't registered.
+        # Live Expires-In: reads the registrar's granted Expires from
+        # SipEndpoint and refreshes on every registration_changed
+        # tick for this account. Falls back to em-dash when no live
+        # endpoint or the account isn't currently registered.
         expires_lbl = QLabel("—")
         expires_lbl.setObjectName("SettingsExpiresLabel")
         self._expires_lbl = expires_lbl
-        try:
-            from noc_beam.sip.endpoint import SipEndpoint
-            ep = SipEndpoint.instance()
-            if ep.is_started():
-                acc = ep.get_account(self._account.id)
-                if acc is not None:
-                    info = acc.getInfo()
-                    if getattr(info, "regIsActive", False):
-                        exp = getattr(info, "regExpiresSec", 0)
-                        if exp > 0:
-                            expires_lbl.setText(f"{exp} s")
-        except Exception:
-            pass
+
+        def _read_expires(_lbl=expires_lbl, _aid=self._account.id):
+            try:
+                from noc_beam.sip.endpoint import SipEndpoint
+                ep = SipEndpoint.instance()
+                if not ep.is_started():
+                    return
+                acc = ep.get_account(_aid)
+                if acc is None:
+                    _lbl.setText("—")
+                    return
+                info = acc.getInfo()
+                if getattr(info, "regIsActive", False):
+                    exp = getattr(info, "regExpiresSec", 0)
+                    _lbl.setText(f"{exp} s" if exp > 0 else "—")
+                else:
+                    _lbl.setText("—")
+            except Exception:
+                pass
+
+        _read_expires()
+        # Re-read whenever this account's registration state changes.
+        # The pill subscriber above (_update_pill) already gates on
+        # account_id; we add a sibling that just refreshes the label.
+        def _expires_on_change(account_id: str, _code: int, _reason: str,
+                               _aid=self._account.id):
+            if account_id == _aid:
+                _read_expires()
+        self._expires_slot = _expires_on_change
+        _sev().registration_changed.connect(_expires_on_change)
         reg.addRow("Expires In", expires_lbl)
         outer.addLayout(reg)
 
@@ -690,17 +707,19 @@ class SettingsDialog(QDialog):
         return w
 
     def _safe_disconnect_pill(self) -> None:
-        """Drop the registration_changed subscriber installed in
-        _build_account_pane. Hooked from destroyed so the singleton
-        sip_events doesn't keep firing into the dead dialog."""
+        """Drop the registration_changed subscribers installed in
+        _build_account_pane (pill + expires-in). Hooked from
+        destroyed so the singleton sip_events doesn't keep firing
+        into the dead dialog."""
         from noc_beam.sip.events import sip_events as _sev
-        slot = getattr(self, "_pill_slot", None)
-        if slot is None:
-            return
-        try:
-            _sev().registration_changed.disconnect(slot)
-        except Exception:
-            pass
+        for slot_attr in ("_pill_slot", "_expires_slot"):
+            slot = getattr(self, slot_attr, None)
+            if slot is None:
+                continue
+            try:
+                _sev().registration_changed.disconnect(slot)
+            except Exception:
+                pass
 
     def _build_advanced_pane(self) -> QWidget:
         w = QWidget()
