@@ -111,15 +111,10 @@ QPushButton:focus {
     outline: none;
 }
 
-/* Call / Hang up — semantic success/danger fills */
-QPushButton#CallButton {
-    background-color: #66D19E;   /* --success */
-    border-color: #66D19E;
-    color: #0E1116;
-    font-weight: 600;
-}
-QPushButton#CallButton:hover { background-color: #84DDB1; border-color: #84DDB1; }
-QPushButton#CallButton:disabled { background-color: #1F252E; color: #7C8696; border-color: #2A3340; }
+/* Call / Hang up — semantic success/danger fills.
+   CallButton: full rule moved to the late-block at ~line 1327
+   for single-source-of-truth (was triplicated). HangupButton
+   stays here as the canonical declaration. */
 
 QPushButton#HangupButton {
     background-color: #FF5C7A;   /* --danger */
@@ -1324,19 +1319,30 @@ QLineEdit#DialInput:focus {
     border: 1px solid #7FD3FF;
     background-color: #0E1721;
 }
+/* CallButton: this is the SINGLE canonical rule. Earlier you'd find
+   two more blocks (line 115 base and line ~1521 contrast override);
+   both have been folded in here. Background is the darker #2E9D5A
+   for WCAG AA contrast on the white "Call" label at 13px (the
+   lighter #66D19E was ~3.4:1, fails AA). */
 QPushButton#CallButton {
     min-height: 42px;
     max-height: 42px;
     min-width: 72px;
     border-radius: 6px;
-    background-color: #66D19E;
-    border: 1px solid #66D19E;
+    background-color: #2E9D5A;
+    border: 1px solid #2E9D5A;
     color: #FFFFFF;
     font-size: 13px;
     font-weight: 800;
 }
 QPushButton#CallButton:hover {
-    background-color: #42CF70;
+    background-color: #42B576;
+    border-color: #42B576;
+}
+QPushButton#CallButton:disabled {
+    background-color: #1F252E;
+    color: #7C8696;
+    border-color: #2A3340;
 }
 QWidget#DialPad QPushButton#DialPadButton {
     min-height: 50px;
@@ -1516,15 +1522,9 @@ QLabel#FirstRunHelp {
     font-size: 11px;
 }
 
-/* CallButton contrast fix: the late-pass white-on-green at
-   ~3.4:1 fails WCAG AA. Darken the green to lift contrast. */
-QPushButton#CallButton {
-    background-color: #2E9D5A;
-    border: 1px solid #2E9D5A;
-}
-QPushButton#CallButton:hover {
-    background-color: #42B576;
-}
+/* CallButton rule moved up to ~line 1327 where the sized + coloured
+   block now lives as the single source of truth. This stub kept as
+   a marker so a future grep stays informative. */
 
 /* ------------------------------------------------------------------
    Round 5 audit fixes

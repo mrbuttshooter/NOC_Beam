@@ -653,7 +653,27 @@ class SettingsDialog(QDialog):
             lambda *_: self._safe_disconnect_pill()
         )
         reg.addRow("Status",     status_pill)
-        reg.addRow("Expires In", QLabel("—"))
+        # Live Expires-In: shows the registrar's granted Expires when
+        # available (read off the account's RegConfig via SipEndpoint
+        # singleton). Falls back to em-dash when no live endpoint or
+        # account isn't registered.
+        expires_lbl = QLabel("—")
+        expires_lbl.setObjectName("SettingsExpiresLabel")
+        self._expires_lbl = expires_lbl
+        try:
+            from noc_beam.sip.endpoint import SipEndpoint
+            ep = SipEndpoint.instance()
+            if ep.is_started():
+                acc = ep.get_account(self._account.id)
+                if acc is not None:
+                    info = acc.getInfo()
+                    if getattr(info, "regIsActive", False):
+                        exp = getattr(info, "regExpiresSec", 0)
+                        if exp > 0:
+                            expires_lbl.setText(f"{exp} s")
+        except Exception:
+            pass
+        reg.addRow("Expires In", expires_lbl)
         outer.addLayout(reg)
 
         test_btn = QPushButton("Test Register")

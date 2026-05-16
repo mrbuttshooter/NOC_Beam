@@ -124,10 +124,15 @@ class SipEndpoint:
             except Exception as e:
                 log.exception("Failed to start PJSIP endpoint")
                 sip_events().endpoint_error.emit(str(e))
-                # Drop any SipAccount shadows from a prior partial
-                # session so the next start() doesn't inherit objects
-                # that point at the now-destroyed pj.Endpoint.
+                # Full state reset on partial start. Without clearing
+                # _started + _accounts the next start() inherits stale
+                # state pointing at a destroyed pj.Endpoint; without
+                # _safe_destroy clearing _log_writer + _ep the
+                # TraceLogWriter could outlive the EpConfig that owns
+                # its vtable.
                 self._accounts.clear()
+                self._transports.clear()
+                self._started = False
                 self._safe_destroy()
 
     def stop(self) -> None:
