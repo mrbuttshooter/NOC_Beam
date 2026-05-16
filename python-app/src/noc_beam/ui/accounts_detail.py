@@ -95,6 +95,20 @@ class AccountDetail(QWidget):
 
         sip_events().registration_changed.connect(self._on_reg_changed)
         sip_events().call_quality.connect(self._on_call_quality)
+        # Disconnect on destruction so the singleton sip_events doesn't
+        # keep firing into a dead AccountDetail when the accounts
+        # window is closed and re-opened (signal-leak audit fix).
+        self.destroyed.connect(self._disconnect_signals)
+
+    def _disconnect_signals(self, *_args) -> None:
+        try:
+            sip_events().registration_changed.disconnect(self._on_reg_changed)
+        except Exception:
+            pass
+        try:
+            sip_events().call_quality.disconnect(self._on_call_quality)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     def _build_empty(self) -> QWidget:

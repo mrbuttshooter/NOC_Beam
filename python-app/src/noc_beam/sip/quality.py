@@ -61,12 +61,39 @@ class CallQualitySampler(QObject):
         self._timer = QTimer(self)
         self._timer.setInterval(POLL_MS)
         self._timer.timeout.connect(self._poll)
-        self._timer.start()
+        # Start lazily -- the timer fires forever otherwise, burning
+        # CPU + battery during idle. Hooked to CallManager so we
+        # auto-arm whenever a call is added or its state changes
+        # toward CONFIRMED.
+        self._started = False
+        try:
+            manager.call_added.connect(lambda _cid: self._ensure_running())
+            manager.call_updated.connect(lambda _cid: self._ensure_running())
+        except Exception:
+            pass
+
+    def _ensure_running(self) -> None:
+        if not self._started:
+            self._timer.start()
+            self._started = True
+
+    def _maybe_pause(self) -> None:
+        """Stop polling if there's nothing to sample (no active calls)."""
+        if not any(
+            r.state in (CallState.CONFIRMED, CallState.HELD)
+            for r in self._manager.all()
+        ):
+            self._timer.stop()
+            self._started = False
 
     def _poll(self) -> None:
         active = [r for r in self._manager.all()
                   if r.state in (CallState.CONFIRMED, CallState.HELD)]
         if not active:
+            # No live calls -- pause the timer until next call ramps up
+            # (CallManager call_added/updated will re-arm via _ensure_running).
+            self._timer.stop()
+            self._started = False
             return
         # Late import — endpoint may not exist yet when this object is built.
         from noc_beam.sip.endpoint import SipEndpoint

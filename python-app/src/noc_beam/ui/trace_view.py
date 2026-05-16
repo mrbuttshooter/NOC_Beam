@@ -642,6 +642,18 @@ class TraceView(QWidget):
             self._on_sip_message,
             type=Qt.ConnectionType.QueuedConnection,
         )
+        # Disconnect on destruction. Without this, every TraceView
+        # constructed (in-shell + popup + any future) leaves a permanent
+        # subscriber on the singleton sip_events. A single open/close
+        # cycle of the trace popup doubles per-message processing for
+        # the rest of the session.
+        self.destroyed.connect(self._disconnect_signals)
+
+    def _disconnect_signals(self, *_args) -> None:
+        try:
+            sip_events().sip_message.disconnect(self._on_sip_message)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     def _on_sip_message(self, ts: float, direction: str, peer: str, body: str) -> None:

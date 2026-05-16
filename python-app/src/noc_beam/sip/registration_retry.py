@@ -34,7 +34,25 @@ class RegistrationRetry(QObject):
         super().__init__(parent)
         self._attempts: dict[str, int] = {}
         self._timers: dict[str, QTimer] = {}
+        # Connect to the singleton sip_events. Disconnect on
+        # destruction so we don't keep firing into a dead RegistrationRetry
+        # if PhoneShell is closed and re-opened (or in tests).
         sip_events().registration_changed.connect(self._on_registration_changed)
+        self.destroyed.connect(self._on_destroyed)
+
+    def _on_destroyed(self, *_args) -> None:
+        try:
+            sip_events().registration_changed.disconnect(self._on_registration_changed)
+        except Exception:
+            pass
+        # Stop all pending timers so they don't fire into self after
+        # Qt has destroyed the C++ side.
+        for t in list(self._timers.values()):
+            try:
+                t.stop()
+            except Exception:
+                pass
+        self._timers.clear()
 
     # ------------------------------------------------------------------
     # Event handling
@@ -92,3 +110,8 @@ class RegistrationRetry(QObject):
         timer = self._timers.pop(account_id, None)
         if timer is not None:
             timer.stop()
+
+    def reset(self, account_id: str) -> None:
+        """Public clear -- call this from the host when an account is
+        removed so a stale retry doesn't fire after removal."""
+        self._reset(account_id)
