@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QGuiApplication
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -632,7 +632,18 @@ class TraceView(QWidget):
         self.export_btn.clicked.connect(self._on_export)
         self.chk_rx.toggled.connect(self._reapply_filters)
         self.chk_tx.toggled.connect(self._reapply_filters)
-        self.filter_edit.textChanged.connect(self._reapply_filters)
+        # Debounce the per-keystroke filter pass: every char typed
+        # used to walk the entire row collection (1000+ rows) and
+        # toggle each one's visibility, freezing the GUI during
+        # heavy traces. 150ms timer coalesces a burst of keystrokes
+        # into one re-filter pass.
+        self._filter_debounce = QTimer(self)
+        self._filter_debounce.setSingleShot(True)
+        self._filter_debounce.setInterval(150)
+        self._filter_debounce.timeout.connect(self._reapply_filters)
+        self.filter_edit.textChanged.connect(
+            lambda _t: self._filter_debounce.start()
+        )
         # CRITICAL: SIP messages arrive on PJSIP worker threads. Without
         # QueuedConnection the slot would mutate Qt widgets from the
         # wrong thread -> SIGSEGV / heap corruption. Forcing

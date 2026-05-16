@@ -303,7 +303,11 @@ class PhoneShell(QMainWindow):
         try:
             self._level_timer.setInterval(200)
             self._level_timer.timeout.connect(self._poll_audio_levels)
-            self._level_timer.start()
+            # Don't start until a call exists. The 5 Hz poll wakes
+            # Python + crosses into pjsua2 native code; on idle that
+            # was burning ~1-2% CPU and warming the laptop for nothing.
+            # _ensure_level_timer() arms it on call_added; the timer
+            # auto-stops in _poll_audio_levels when there's no call.
         except Exception:
             log.exception("level timer setup failed")
 
@@ -882,6 +886,12 @@ class PhoneShell(QMainWindow):
     def _on_call_record_added(self, call_id):
         if self._selected_call_id is None: self._select_call(call_id)
         self.dialpad.set_in_call(True); self.call_widget.setVisible(True)
+        # Arm the audio meter timer now that there's something to measure.
+        try:
+            if not self._level_timer.isActive():
+                self._level_timer.start()
+        except Exception:
+            pass
 
     def _on_call_record_updated(self, call_id):
         rec = self.calls.get(call_id)
@@ -1191,6 +1201,13 @@ class PhoneShell(QMainWindow):
         if call is None:
             self.audio.set_tx_level(0)
             self.audio.set_rx_level(0)
+            # No live call -- pause the timer entirely. _on_call_record_added
+            # re-arms it when the next call materialises.
+            try:
+                if not self.calls.all():
+                    self._level_timer.stop()
+            except Exception:
+                pass
             return
         try:
             from noc_beam.sip._pjsua2_loader import PJSUA2_AVAILABLE

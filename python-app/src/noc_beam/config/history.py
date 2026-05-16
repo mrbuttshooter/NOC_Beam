@@ -18,6 +18,24 @@ log = logging.getLogger(__name__)
 
 MAX_ENTRIES = 1000
 
+# Module-level in-memory cache. append_entry() used to call
+# load_history() on EVERY hangup, re-reading + re-deserializing the
+# full 1000-entry JSON before appending one row -- O(n) IO per call
+# ended. We now load once on first access and treat the cache as the
+# source of truth between calls; save_history() still atomically
+# writes the trimmed tail so the on-disk file stays bounded.
+_cache: list["CdrEntry"] | None = None
+_cache_path: Path | None = None  # which history_file() the cache belongs to
+
+
+def _invalidate_cache() -> None:
+    """Reset the in-memory cache. Tests use this between fixtures; in
+    production it's only hit when history_file() changes (data dir
+    swap, never happens at runtime)."""
+    global _cache, _cache_path
+    _cache = None
+    _cache_path = None
+
 
 def history_file() -> Path:
     return data_dir() / "call_history.json"
@@ -54,9 +72,12 @@ class CdrEntry:
 
 
 def load_history() -> list[CdrEntry]:
+    global _cache, _cache_path
     path = history_file()
+    _cache_path = path
     if not path.exists():
-        return []
+        _cache = []
+        return _cache
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
@@ -78,7 +99,8 @@ def load_history() -> list[CdrEntry]:
                 "Failed to read call history AND failed to quarantine; "
                 "leaving file in place to prevent overwrite"
             )
-        return []
+        _cache = []
+        return _cache
     # Filter unknown keys per row so a stale field on disk doesn't take
     # out the whole list. Also drop any row missing required fields.
     known = {f.name for f in fields(CdrEntry)}
@@ -92,6 +114,7 @@ def load_history() -> list[CdrEntry]:
         except TypeError:
             log.warning("Skipping malformed CDR row: %s", item)
             continue
+    _cache = out
     return out
 
 
@@ -116,14 +139,26 @@ def save_history(entries: list[CdrEntry]) -> None:
     raise last_err  # type: ignore[misc]
 
 
+def _ensure_cache() -> list[CdrEntry]:
+    global _cache, _cache_path
+    path = history_file()
+    if _cache is None or _cache_path != path:
+        _cache = load_history()
+        _cache_path = path
+    return _cache
+
+
 def append_entry(entry: CdrEntry) -> None:
     """Append a single CDR row. Safe to call from any UI handler."""
-    entries = load_history()
+    entries = _ensure_cache()
     entries.append(entry)
     save_history(entries)
 
 
 def clear_history() -> None:
+    global _cache, _cache_path
+    _cache = []
+    _cache_path = history_file()
     path = history_file()
     if path.exists():
         path.unlink()
