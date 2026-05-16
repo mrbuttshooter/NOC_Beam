@@ -113,12 +113,17 @@ class AudioStrip(QFrame):
         self.mic_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mic_btn.customContextMenuRequested.connect(self._show_input_device_menu)
 
-        # Tiny chevron next to mic to open input-device picker.
+        # Invisible menu-holder for the input-device picker. The user
+        # opens the picker via RIGHT-CLICK on the mic icon (above);
+        # the standalone ▾ chevron next to the icon was redundant
+        # and was removed per user feedback -- single discoverable
+        # affordance is cleaner. set_input_devices() still attaches
+        # the QMenu to this button so the right-click handler can
+        # popup it.
         self.mic_dev_btn = QToolButton(self)
         self.mic_dev_btn.setObjectName("AudioChevron")
-        self.mic_dev_btn.setText("▾")
         self.mic_dev_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.mic_dev_btn.setToolTip("Input device")
+        self.mic_dev_btn.hide()
 
         # --- Speaker (output) MUTE toggle + adjacent chevron picker ---
         self.spk_btn = _MuteToggleButton(self)
@@ -131,11 +136,12 @@ class AudioStrip(QFrame):
         self.spk_btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.spk_btn.customContextMenuRequested.connect(self._show_output_device_menu)
 
+        # Same pattern as mic_dev_btn above -- invisible menu holder.
+        # Right-click on the speaker icon is the discoverable affordance.
         self.spk_dev_btn = QToolButton(self)
         self.spk_dev_btn.setObjectName("AudioChevron")
-        self.spk_dev_btn.setText("▾")
         self.spk_dev_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.spk_dev_btn.setToolTip("Output device")
+        self.spk_dev_btn.hide()
 
         # --- Mic volume button + popover ----------------------------
         # Just the number (e.g. "75") -- the mic icon to the left is
@@ -198,15 +204,16 @@ class AudioStrip(QFrame):
         tx_label = QLabel("TX", self); tx_label.setObjectName("AudioMeterLabel")
 
         # Single-row layout: mic-grp · spk-grp · stretch · RX · TX
+        # Device-picker chevrons (mic_dev_btn / spk_dev_btn) are kept
+        # as off-layout menu holders -- right-click on the mic/speaker
+        # icon is now the only device-picker entry point.
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 4, 10, 4)
         layout.setSpacing(2)
         layout.addWidget(self.mic_btn)
-        layout.addWidget(self.mic_dev_btn)
         layout.addWidget(self.mic_vol_btn)
         layout.addSpacing(10)
         layout.addWidget(self.spk_btn)
-        layout.addWidget(self.spk_dev_btn)
         layout.addWidget(self.vol_btn)
         layout.addStretch(1)
         layout.addWidget(rx_label)
