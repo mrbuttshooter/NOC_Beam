@@ -54,7 +54,18 @@ def run(argv: list[str]) -> int:
     apply_theme(app, settings.appearance.high_contrast, theme=theme)
 
     window = PhoneShell()
-    window.show()
+    # Honour StartupSettings persisted from Settings -> General.
+    # start_minimized launches into the tray (or minimized to taskbar
+    # if no tray) instead of popping a foreground window. Was
+    # display-only at the checkbox layer until this hook.
+    _start_cfg = getattr(settings, "startup", None)
+    if _start_cfg is not None and getattr(_start_cfg, "start_minimized", False):
+        if getattr(window, "tray", None) is not None and window.tray.available:
+            window.hide()
+        else:
+            window.showMinimized()
+    else:
+        window.show()
 
     return app.exec()
 

@@ -494,29 +494,35 @@ class PhoneShell(QMainWindow):
         self.setCentralWidget(central)
 
     def _connect_events(self):
-        # Lambdas are stored on self so closeEvent can disconnect by
-        # slot reference. Blanket `sig.disconnect()` with no slot
-        # arg drops EVERY subscriber on the singleton -- including
-        # AccountsDetail, TraceView, RegistrationRetry, CallQualitySampler
-        # in other open windows -- so a single PhoneShell close used
-        # to silently break the entire SIP signal mesh.
+        # All singleton subscriptions go through SignalRegistry so
+        # closeEvent can drop them with one unbind_all() call. Was
+        # hand-maintained connect/disconnect pairs spread across two
+        # files -- drifted into the v3 test-hang root cause (lambdas
+        # without disconnect accumulating on the singleton). Stored
+        # lambdas for endpoint_started/stopped are kept on self so
+        # they have stable identity for the registry to remember.
+        from noc_beam.ui._signal_registry import SignalRegistry
+        self._signals = SignalRegistry()
         self._sip_on_started = lambda: self._set_status("Ready", "ok")
         self._sip_on_stopped = lambda: self._set_status("SIP endpoint stopped", "warn")
         ev = sip_events()
-        ev.endpoint_started.connect(self._sip_on_started)
-        ev.endpoint_stopped.connect(self._sip_on_stopped)
-        ev.endpoint_error.connect(self._on_endpoint_error)
-        ev.registration_changed.connect(self._on_registration_changed)
-        ev.call_incoming.connect(self._on_call_incoming)
-        ev.call_state_changed.connect(self._on_call_state)
-        ev.call_media_active.connect(self._on_call_media)
-        ev.call_quality.connect(self._on_call_quality)
-        ev.call_ended.connect(self._on_call_ended)
-        self.calls.call_added.connect(self._on_call_record_added)
-        self.calls.call_updated.connect(self._on_call_record_updated)
-        self.calls.call_removed.connect(self._on_call_record_removed)
-        self.tray.show_requested.connect(self._restore_from_tray)
-        self.tray.quit_requested.connect(self._on_quit)
+        for sig, slot in (
+            (ev.endpoint_started,      self._sip_on_started),
+            (ev.endpoint_stopped,      self._sip_on_stopped),
+            (ev.endpoint_error,        self._on_endpoint_error),
+            (ev.registration_changed,  self._on_registration_changed),
+            (ev.call_incoming,         self._on_call_incoming),
+            (ev.call_state_changed,    self._on_call_state),
+            (ev.call_media_active,     self._on_call_media),
+            (ev.call_quality,          self._on_call_quality),
+            (ev.call_ended,            self._on_call_ended),
+            (self.calls.call_added,    self._on_call_record_added),
+            (self.calls.call_updated,  self._on_call_record_updated),
+            (self.calls.call_removed,  self._on_call_record_removed),
+            (self.tray.show_requested, self._restore_from_tray),
+            (self.tray.quit_requested, self._on_quit),
+        ):
+            self._signals.bind(sig, slot)
 
     def _set_status(self, text, level="muted", link_text="", link_action=""):
         # Prepend a coloured dot glyph so the registration / endpoint
@@ -1750,27 +1756,19 @@ class PhoneShell(QMainWindow):
     def closeEvent(self, event):
         if not self._really_quitting and self.tray.available:
             event.ignore(); self.hide(); return
-        # Disconnect from singletons before tearing down the window.
-        # CallManager and sip_events outlive PhoneShell; without
-        # disconnecting, signal slots fire into a half-deleted Qt
-        # widget (RuntimeError "Internal C++ object already deleted").
-        # Reopening PhoneShell after a close also stacks duplicate
-        # connections per re-open if we don't clean up here.
-        # Disconnect THIS PhoneShell's slots only. Earlier this called
-        # sig.disconnect() with no argument, which silently dropped
-        # every subscriber on the singleton -- breaking AccountsDetail,
-        # TraceView, RegistrationRetry and CallQualitySampler in any
-        # neighbouring window that happened to be open. Pair each
-        # connect() above with a disconnect() referencing the same
-        # bound method / stored lambda.
+        # Drop every singleton subscription via the SignalRegistry
+        # that _connect_events populated. One call replaces the
+        # giant hand-maintained connect/disconnect pair list that
+        # used to drift -- now bind() and unbind_all() are the
+        # single source of truth. The strip-refresh lambdas are
+        # disconnected separately because they're wired in _build_ui
+        # (before _connect_events), not via the registry.
+        registry = getattr(self, "_signals", None)
+        if registry is not None:
+            registry.unbind_all()
+        # Strip-refresh lambdas (v3 audit's test-hang root cause).
+        # Pre-date the registry adoption -- still hand-disconnected.
         for sig, slot in (
-            (self.calls.call_added, self._on_call_record_added),
-            (self.calls.call_updated, self._on_call_record_updated),
-            (self.calls.call_removed, self._on_call_record_removed),
-            # Strip-refresh lambdas. The v3 audit identified these
-            # three as the test-hang root cause: without disconnect
-            # they accumulated on the singleton across PhoneShell
-            # reinstantiations in the test suite.
             (self.calls.call_added, getattr(self, "_strip_refresh_added", None)),
             (self.calls.call_removed, getattr(self, "_strip_refresh_removed", None)),
             (self.calls.call_updated, getattr(self, "_strip_refresh_updated", None)),
@@ -1781,31 +1779,6 @@ class PhoneShell(QMainWindow):
                 sig.disconnect(slot)
             except Exception:
                 pass
-        try:
-            ev = sip_events()
-        except Exception:
-            ev = None
-        if ev is not None:
-            for sig_name, slot in (
-                ("endpoint_started", getattr(self, "_sip_on_started", None)),
-                ("endpoint_stopped", getattr(self, "_sip_on_stopped", None)),
-                ("endpoint_error", self._on_endpoint_error),
-                ("registration_changed", self._on_registration_changed),
-                ("call_incoming", self._on_call_incoming),
-                ("call_state_changed", self._on_call_state),
-                ("call_media_active", self._on_call_media),
-                ("call_quality", self._on_call_quality),
-                ("call_ended", self._on_call_ended),
-            ):
-                if slot is None:
-                    continue
-                sig = getattr(ev, sig_name, None)
-                if sig is None:
-                    continue
-                try:
-                    sig.disconnect(slot)
-                except Exception:
-                    pass
         # Stop the audio level poll timer so it can't fire into a
         # destroyed widget.
         try:
