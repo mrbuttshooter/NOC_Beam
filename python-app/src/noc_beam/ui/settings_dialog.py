@@ -652,16 +652,6 @@ class SettingsDialog(QDialog):
         self.destroyed.connect(
             lambda *_: self._safe_disconnect_pill()
         )
-
-    def _safe_disconnect_pill(self) -> None:
-        from noc_beam.sip.events import sip_events as _sev
-        slot = getattr(self, "_pill_slot", None)
-        if slot is None:
-            return
-        try:
-            _sev().registration_changed.disconnect(slot)
-        except Exception:
-            pass
         reg.addRow("Status",     status_pill)
         reg.addRow("Expires In", QLabel("—"))
         outer.addLayout(reg)
@@ -678,6 +668,19 @@ class SettingsDialog(QDialog):
 
         outer.addStretch(1)
         return w
+
+    def _safe_disconnect_pill(self) -> None:
+        """Drop the registration_changed subscriber installed in
+        _build_account_pane. Hooked from destroyed so the singleton
+        sip_events doesn't keep firing into the dead dialog."""
+        from noc_beam.sip.events import sip_events as _sev
+        slot = getattr(self, "_pill_slot", None)
+        if slot is None:
+            return
+        try:
+            _sev().registration_changed.disconnect(slot)
+        except Exception:
+            pass
 
     def _build_advanced_pane(self) -> QWidget:
         w = QWidget()

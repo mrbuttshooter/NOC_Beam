@@ -124,6 +124,10 @@ class SipEndpoint:
             except Exception as e:
                 log.exception("Failed to start PJSIP endpoint")
                 sip_events().endpoint_error.emit(str(e))
+                # Drop any SipAccount shadows from a prior partial
+                # session so the next start() doesn't inherit objects
+                # that point at the now-destroyed pj.Endpoint.
+                self._accounts.clear()
                 self._safe_destroy()
 
     def stop(self) -> None:

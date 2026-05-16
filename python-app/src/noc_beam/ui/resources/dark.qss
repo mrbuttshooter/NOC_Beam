@@ -1142,13 +1142,11 @@ QToolButton#TabBtn:checked {
 /* DialInput sizing was redeclared here (and again at line ~1317).
    Defer to the canonical late-block at the bottom of this file so
    there's a single source of truth. CallButton sizing stays. */
-QPushButton#CallButton {
-    min-height: 32px;
-    max-height: 36px;
-    border-radius: 4px;
-    background-color: #66D19E;
-    color: #FFFFFF;
-}
+/* CallButton was redeclared here. The canonical rule lives at the
+   top of this file (line 115) for the base success colour, and the
+   late-block at line 1329 enforces the sized 42px footer variant.
+   Keeping a third middle declaration just created cascade
+   confusion -- deleted in favour of those two. */
 QWidget#DialPad QPushButton#DialPadButton {
     min-height: 40px;
     max-height: 48px;
