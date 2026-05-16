@@ -268,6 +268,16 @@ class SettingsDialog(QDialog):
         self._start_with_windows = QCheckBox("Start NOC_Beam when I sign in to Windows")
         self._start_minimized = QCheckBox("Start minimized to the system tray")
         self._restore_window_pos = QCheckBox("Restore previous window position")
+        # Seed from persisted StartupSettings so the dialog reflects
+        # the saved choice instead of always opening unchecked.
+        try:
+            st = getattr(self._settings, "startup", None)
+            if st is not None:
+                self._start_with_windows.setChecked(bool(st.start_with_windows))
+                self._start_minimized.setChecked(bool(st.start_minimized))
+                self._restore_window_pos.setChecked(bool(st.restore_window_pos))
+        except Exception:
+            pass
         for box in (self._start_with_windows, self._start_minimized, self._restore_window_pos):
             box.setObjectName("SettingsCheckbox")
             s_l.addWidget(box)
@@ -868,6 +878,21 @@ class SettingsDialog(QDialog):
         settings.appearance.high_contrast = self.high_contrast_chk.isChecked()
         settings.appearance.reduced_motion = self.reduced_motion_chk.isChecked()
         settings.appearance.theme = self.theme_combo.currentData() or "light"
+
+        # Persist the three Startup checkboxes from the General pane.
+        # Previously toggling them had zero effect because apply_to
+        # never read them back into the settings object -- they were
+        # display-only.
+        try:
+            from noc_beam.config.store import StartupSettings
+            if not hasattr(settings, "startup") or settings.startup is None:
+                settings.startup = StartupSettings()
+            if hasattr(self, "_start_with_windows"):
+                settings.startup.start_with_windows = self._start_with_windows.isChecked()
+                settings.startup.start_minimized = self._start_minimized.isChecked()
+                settings.startup.restore_window_pos = self._restore_window_pos.isChecked()
+        except Exception:
+            pass
 
         new_priorities: dict[str, int] = {}
         codec_map: dict[str, int] = {}

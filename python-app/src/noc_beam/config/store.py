@@ -140,10 +140,21 @@ class AppearanceSettings:
 
 
 @dataclass
+class StartupSettings:
+    # Three boxes from Settings -> General -> Startup card.
+    # `start_with_windows` is wired up at launcher level (registry
+    # Run key); the other two are read by main.py at boot.
+    start_with_windows: bool = False
+    start_minimized: bool = False
+    restore_window_pos: bool = True
+
+
+@dataclass
 class GlobalSettings:
     audio: AudioSettings = field(default_factory=AudioSettings)
     codecs: CodecSettings = field(default_factory=CodecSettings)
     appearance: AppearanceSettings = field(default_factory=AppearanceSettings)
+    startup: StartupSettings = field(default_factory=StartupSettings)
     sip_port: int = 0               # 0 = ephemeral
     log_level: int = 4              # PJSIP log level 0..6
     user_agent: str = "NOC_Beam/0.1"

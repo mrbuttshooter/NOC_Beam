@@ -435,7 +435,9 @@ class ContactsView(QWidget):
             self._on_add_contact(group)
 
     def _on_add_contact(self, group: str = "Work") -> None:
-        self.add_contact_requested.emit()
+        # Emit AFTER save success, not on intent. Subscribers were
+        # previously counting attempted-but-cancelled adds as real
+        # adds because the signal fired before the dialog opened.
         # Create a FRESH dialog per attempt -- the previous version
         # re-execed the same QDialog instance after a validation
         # failure, which under PySide6 6.x on Windows can replay the
@@ -447,6 +449,7 @@ class ContactsView(QWidget):
             if not _open_modal(dlg):
                 return
             if self._save_new_contact(dlg):
+                self.add_contact_requested.emit()
                 return
             # Preserve the user's last-typed group on retry.
             try:
