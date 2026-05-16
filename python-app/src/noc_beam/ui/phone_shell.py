@@ -1391,13 +1391,74 @@ class PhoneShell(QMainWindow):
 
     def _on_settings(self):
         dlg = SettingsDialog(self.settings, parent=self)
+        # Apply-without-close: lets the user click Apply and watch the
+        # change land while the dialog stays open. Wrapped because the
+        # unit-test FakeDialog stand-in doesn't define apply_requested.
+        try:
+            dlg.apply_requested.connect(lambda d=dlg: self._apply_settings_from_dialog(d))
+        except Exception:
+            pass
         if _open_modal(dlg):
-            codec_map = dlg.apply_to(self.settings); save_settings(self.settings)
-            from noc_beam.codecs.manager import set_priority
-            for cid, prio in codec_map.items(): set_priority(cid, prio)
-            set_active_devices(self.settings.audio.input_device, self.settings.audio.output_device)
-            self._apply_accessibility_settings()
+            self._apply_settings_from_dialog(dlg)
+
+    def _apply_settings_from_dialog(self, dlg) -> None:
+        """Common path for OK + Apply.
+
+        Defends against three failure modes the audit caught:
+          1. apply mid-CONFIRMED-call would tear down conf bridge audio;
+             skip device + codec push, surface a warning, persist anyway
+          2. save_settings raising leaves UI in-memory desynced from
+             disk; wrap in try/except and surface via status
+          3. set_priority / set_active_devices raising mid-flow would
+             abort the rest; each call is its own try
+        """
+        from noc_beam.codecs.manager import set_priority
+        # 1. Always mutate the in-memory GlobalSettings + collect codec map.
+        try:
+            codec_map = dlg.apply_to(self.settings)
+        except Exception:
+            log.exception("settings apply_to failed")
+            self._set_status("Settings: read failed", "danger")
+            return
+        # 2. Persist to disk -- if this fails the in-memory mutation
+        # already happened, but at least we surface the failure.
+        try:
+            save_settings(self.settings)
+        except Exception:
+            log.exception("settings save_settings failed")
+            self._set_status(
+                "Settings saved in memory but disk write failed", "danger"
+            )
+        # 3. If a CONFIRMED call is in progress, defer the audio/codec
+        # apply -- swapping devices mid-call kills the live conf bridge.
+        in_call = any(
+            r.state == CallState.CONFIRMED for r in self.calls.active()
+        )
+        if in_call:
+            self._set_status(
+                "Settings saved. Audio + codec changes apply after current call ends.",
+                "warn",
+            )
+        else:
+            for cid, prio in codec_map.items():
+                try:
+                    set_priority(cid, prio)
+                except Exception:
+                    log.exception("set_priority(%s) failed", cid)
+            try:
+                set_active_devices(
+                    self.settings.audio.input_device,
+                    self.settings.audio.output_device,
+                )
+            except Exception:
+                log.exception("set_active_devices failed")
             self._set_status("Settings applied", "ok")
+        # 4. Theme/reduced-motion is always safe to apply -- no audio
+        # path involved.
+        try:
+            self._apply_accessibility_settings()
+        except Exception:
+            log.exception("apply_accessibility_settings failed")
 
     def _apply_accessibility_settings(self):
         from PySide6.QtWidgets import QApplication

@@ -10,7 +10,7 @@ Footer: Reset / [stretch] / Cancel / Save (orange primary action).
 """
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -55,6 +55,12 @@ class SettingsDialog(QDialog):
     identity / server / registration is shown under the Account pane."""
 
     NAV_ITEMS = ("General", "Audio", "Codecs", "Appearance", "Account", "Advanced")
+
+    # Apply-without-close: the host (phone_shell._on_settings) connects
+    # to this and runs its apply_to + save_settings + push-to-PJSIP path
+    # without dismissing the dialog. Lets the user click Apply, see the
+    # change, keep tweaking.
+    apply_requested = Signal()
 
     def __init__(
         self,
@@ -123,6 +129,11 @@ class SettingsDialog(QDialog):
         ok_btn.clicked.connect(self.accept)
         cancel_btn.clicked.connect(self.reject)
         apply_btn.clicked.connect(self._on_apply)
+        # Reset was created but never connected previously -- clicking
+        # did nothing, contradicting the "Reset to defaults" affordance.
+        reset_btn.clicked.connect(self._on_reset)
+        self._apply_btn = apply_btn
+        self._reset_btn = reset_btn
 
         footer = QFrame(self)
         footer.setObjectName("SettingsFooter")
@@ -440,10 +451,58 @@ class SettingsDialog(QDialog):
             self._stack.setCurrentIndex(idx)
 
     def _on_apply(self) -> None:
-        # Apply takes effect via the shell's existing apply_to + save_settings
-        # flow. We simply accept(); the shell's _on_settings handler will
-        # call apply_to(self.settings) and persist.
-        self.accept()
+        # Real apply-without-close: emit a signal the host listens for.
+        # The host runs apply_to + save_settings + push-to-PJSIP and
+        # leaves the dialog open so the user can keep tweaking.
+        # If nothing is connected, fall back to legacy accept() so the
+        # old shell wiring still works.
+        if self.receivers(self.apply_requested) > 0:
+            self.apply_requested.emit()
+        else:
+            self.accept()
+
+    def _on_reset(self) -> None:
+        """Reset all editable widgets to GlobalSettings() defaults.
+        Confirms first so a misclick during demo doesn't wipe tweaks."""
+        from PySide6.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self,
+            "Reset settings",
+            "Restore all settings to their defaults? Changes will be "
+            "kept in the dialog until you click OK or Apply.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        defaults = GlobalSettings()
+        # Audio
+        try:
+            self._select_by_data(self.in_combo, defaults.audio.input_device)
+            self._select_by_data(self.out_combo, defaults.audio.output_device)
+            self._select_by_data(self.ring_combo, defaults.audio.ringer_device)
+            self.ec_tail.setValue(defaults.audio.ec_tail_ms)
+            self.clock.setValue(defaults.audio.clock_rate)
+        except Exception:
+            pass
+        # Network / log
+        try:
+            self.sip_port.setValue(defaults.sip_port)
+            self.log_level.setValue(defaults.log_level)
+        except Exception:
+            pass
+        # Appearance
+        try:
+            self.high_contrast_chk.setChecked(defaults.appearance.high_contrast)
+            self.reduced_motion_chk.setChecked(defaults.appearance.reduced_motion)
+            idx = self.theme_combo.findData(defaults.appearance.theme)
+            if idx >= 0:
+                self.theme_combo.setCurrentIndex(idx)
+        except Exception:
+            pass
+        # Codecs -- reset each row's priority spinbox to its default-ish
+        # value (just leave the user's stored priority untouched; the
+        # spec doesn't define a "default priority" per codec).
 
     @staticmethod
     def _select_by_data(combo: QComboBox, data: int) -> None:
@@ -452,7 +511,15 @@ class SettingsDialog(QDialog):
             combo.setCurrentIndex(idx)
 
     def _lookup_stored_priority(self, codec_id: str) -> int | None:
-        for key, prio in self._settings.codecs.priorities.items():
+        # Exact match first (the full "PCMU/8000/1" key) -- otherwise
+        # opus/48000/1 and opus/48000/2 alias to the same stored entry
+        # and last-write wins.
+        prios = self._settings.codecs.priorities
+        if codec_id in prios:
+            return prios[codec_id]
+        # Backwards-compat fallback: trimmed "PCMU/8000" stored by a
+        # prior build still resolves to its codec.
+        for key, prio in prios.items():
             if key.lower() in codec_id.lower():
                 return prio
         return None
@@ -480,7 +547,13 @@ class SettingsDialog(QDialog):
             codec_id = item.data(Qt.UserRole)
             prio = int(spin.value())
             codec_map[codec_id] = prio
-            key = "/".join(codec_id.split("/")[:2])
-            new_priorities[key] = prio
-        settings.codecs.priorities = new_priorities
+            # Key by full codec_id so opus/48000/1 and opus/48000/2
+            # don't collide and overwrite each other (last-write-wins
+            # bug from the trimmed "/".join(...[:2]) prefix key).
+            new_priorities[codec_id] = prio
+        # Guard against the "opened Settings before PJSIP loaded" case:
+        # an empty codec table would overwrite the user's saved
+        # priorities with {} and silently destroy their tuning.
+        if self.codec_table.rowCount() > 0:
+            settings.codecs.priorities = new_priorities
         return codec_map

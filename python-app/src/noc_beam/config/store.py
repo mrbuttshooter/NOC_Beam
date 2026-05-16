@@ -10,7 +10,7 @@ import base64
 import json
 import logging
 import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -159,9 +159,47 @@ def load_settings() -> GlobalSettings:
         return GlobalSettings()
     try:
         raw = json.loads(path.read_text(encoding="utf-8-sig"))
-        audio = AudioSettings(**raw.get("audio", {}))
-        codecs = CodecSettings(**raw.get("codecs", {}))
-        appearance = AppearanceSettings(**raw.get("appearance", {}))
+    except Exception:
+        # Same protection History uses: quarantine the corrupt file so
+        # the next save_settings can't overwrite it with defaults and
+        # silently lose every user pref. Then start fresh.
+        try:
+            import time as _time
+            backup = path.with_name(
+                f"{path.stem}.corrupted-{int(_time.time())}{path.suffix}"
+            )
+            path.rename(backup)
+            log.error(
+                "settings.json was unreadable; quarantined to %s; "
+                "starting with defaults",
+                backup.name,
+            )
+        except Exception:
+            log.exception(
+                "Failed to read settings AND failed to quarantine; "
+                "leaving file in place"
+            )
+        return GlobalSettings()
+
+    def _filter(cls, data):
+        # Drop unknown keys per-section so a forward-compat field or a
+        # stale dump from another build doesn't TypeError out the whole
+        # load and silently wipe every setting back to defaults (the
+        # bug the History audit caught for CDR rows -- same shape).
+        if not isinstance(data, dict):
+            return cls()
+        known = {f.name for f in fields(cls)}
+        clean = {k: v for k, v in data.items() if k in known}
+        try:
+            return cls(**clean)
+        except Exception:
+            log.warning("Settings section %s could not be parsed; using defaults", cls.__name__)
+            return cls()
+
+    try:
+        audio = _filter(AudioSettings, raw.get("audio", {}))
+        codecs = _filter(CodecSettings, raw.get("codecs", {}))
+        appearance = _filter(AppearanceSettings, raw.get("appearance", {}))
         return GlobalSettings(
             audio=audio,
             codecs=codecs,

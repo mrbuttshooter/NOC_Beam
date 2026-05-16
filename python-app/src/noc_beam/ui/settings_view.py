@@ -47,8 +47,10 @@ class SettingsView(QWidget):
         self._settings = settings
 
         # Underlying dialog -- never shown. Owns all the form widgets so
-        # apply_to() reads off them directly.
-        self._dialog = SettingsDialog(settings)
+        # apply_to() reads off them directly. Parented to self so it
+        # gets cleaned up when this view is destroyed (otherwise the
+        # dialog leaks every time the view is shown).
+        self._dialog = SettingsDialog(settings, parent=self)
 
         # Title bar across the top of the destination
         title = QLabel("Settings")
@@ -66,15 +68,18 @@ class SettingsView(QWidget):
             item = QListWidgetItem(label)
             self.nav.addItem(item)
 
-        # Body stack -- pull each tab body out of the dialog
+        # Body stack -- pull each pane body out of the dialog. The
+        # dialog renamed _build_*_tab -> _build_*_pane in the sidebar
+        # refactor; using the old names was an AttributeError on every
+        # instantiation of SettingsView (dead-on-arrival regression).
         self.body_stack = QStackedWidget()
-        self.body_stack.addWidget(self._wrap(self._dialog._build_audio_tab(),
+        self.body_stack.addWidget(self._wrap(self._dialog._build_audio_pane(),
                                             "Audio", _PAGES[0][1]))
-        self.body_stack.addWidget(self._wrap(self._dialog._build_codec_tab(),
+        self.body_stack.addWidget(self._wrap(self._dialog._build_codec_pane(),
                                             "Codecs", _PAGES[1][1]))
-        self.body_stack.addWidget(self._wrap(self._dialog._build_appearance_tab(),
+        self.body_stack.addWidget(self._wrap(self._dialog._build_appearance_pane(),
                                             "Appearance", _PAGES[2][1]))
-        self.body_stack.addWidget(self._wrap(self._dialog._build_advanced_tab(),
+        self.body_stack.addWidget(self._wrap(self._dialog._build_advanced_pane(),
                                             "Advanced", _PAGES[3][1]))
 
         body_holder = QFrame()
