@@ -271,7 +271,7 @@ class PhoneShell(QMainWindow):
         acct_row = QHBoxLayout(); acct_row.setContentsMargins(0, 6, 0, 0); acct_row.setSpacing(8)
         kicker = QLabel("ACCOUNT", top); kicker.setObjectName("AccountKicker")
         self.account_chip = QToolButton(top); self.account_chip.setObjectName("AccountChip")
-        self.account_chip.setText("No account  v")
+        self.account_chip.setText("No account  ▾")
         self.account_chip.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.account_chip.setMenu(QMenu(self.account_chip))
         self.account_chip.setAccessibleName("Active SIP account")
@@ -484,9 +484,17 @@ class PhoneShell(QMainWindow):
         self.setCentralWidget(central)
 
     def _connect_events(self):
+        # Lambdas are stored on self so closeEvent can disconnect by
+        # slot reference. Blanket `sig.disconnect()` with no slot
+        # arg drops EVERY subscriber on the singleton -- including
+        # AccountsDetail, TraceView, RegistrationRetry, CallQualitySampler
+        # in other open windows -- so a single PhoneShell close used
+        # to silently break the entire SIP signal mesh.
+        self._sip_on_started = lambda: self._set_status("Ready", "ok")
+        self._sip_on_stopped = lambda: self._set_status("SIP endpoint stopped", "warn")
         ev = sip_events()
-        ev.endpoint_started.connect(lambda: self._set_status("Ready", "ok"))
-        ev.endpoint_stopped.connect(lambda: self._set_status("SIP endpoint stopped", "warn"))
+        ev.endpoint_started.connect(self._sip_on_started)
+        ev.endpoint_stopped.connect(self._sip_on_stopped)
         ev.endpoint_error.connect(self._on_endpoint_error)
         ev.registration_changed.connect(self._on_registration_changed)
         ev.call_incoming.connect(self._on_call_incoming)
@@ -547,7 +555,7 @@ class PhoneShell(QMainWindow):
             menu.addSeparator()
             menu.addAction("Add account...", self._on_add_account)
             self._active_account_id = ""
-            self.account_chip.setText("○  No account  ⌄")
+            self.account_chip.setText("○  No account  ▾")
             self.account_chip.setProperty("health", "muted")
             self.account_chip.style().unpolish(self.account_chip)
             self.account_chip.style().polish(self.account_chip)
@@ -582,7 +590,7 @@ class PhoneShell(QMainWindow):
         else:
             dot = "○"
             health = "muted"
-        self.account_chip.setText(f"{dot}  {label}  ⌄")
+        self.account_chip.setText(f"{dot}  {label}  ▾")
         self.account_chip.setProperty("health", health)
         self.account_chip.style().unpolish(self.account_chip)
         self.account_chip.style().polish(self.account_chip)
@@ -890,6 +898,16 @@ class PhoneShell(QMainWindow):
         try:
             if not self._level_timer.isActive():
                 self._level_timer.start()
+        except Exception:
+            pass
+        # Tell the AccountDetail pane which account owns this call so
+        # its per-account MOS/RTT cards filter correctly (was averaging
+        # globally across all accounts -> mis-attribution).
+        try:
+            rec = self.calls.get(call_id)
+            detail = getattr(self, "_accounts_detail", None)
+            if detail is not None and rec is not None:
+                detail.note_call_account(call_id, rec.account_id)
         except Exception:
             pass
 
@@ -1290,95 +1308,145 @@ class PhoneShell(QMainWindow):
         duration · End. Click anywhere (except End) to promote that
         call to selected. A small header bar shows total call count
         + End-all link when there's >1 call total.
+
+        Diff-update: rather than tearing down + rebuilding every
+        widget on every call_added/updated/removed tick (which caused
+        flicker, lost focus, and the phantom "NO..." top-level-window
+        flash on parent detach), we keep a dict[call_id -> QFrame]
+        and only create/update/destroy what actually changed.
         """
-        # Tear down existing strip widgets. hide() BEFORE the implicit
-        # parent-detachment from takeAt -- in PySide6, reparenting a
-        # visible QWidget without an explicit hide first briefly
-        # promotes it to a top-level Windows window (it picks up the
-        # app icon + "NOC_Beam" title) for the few ms between takeAt
-        # and deleteLater. That was the phantom "NO..." popup the
-        # user saw on every call_added / call_updated / call_removed.
-        while self.calls_strip_layout.count():
-            item = self.calls_strip_layout.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.hide()
-                w.deleteLater()
+        # Per-instance state stash; first-tick init.
+        if not hasattr(self, "_strip_rows"):
+            self._strip_rows: dict[int, QFrame] = {}
+            self._strip_header: QFrame | None = None
+
         active = self.calls.active()
         others = [r for r in active if r.call_id != self._selected_call_id]
+        others_by_id = {r.call_id: r for r in others}
+
         if not others:
+            # Tear down completely when no others -- but use hide first
+            # to avoid the "NO..." top-level flash from setParent(None)
+            # on a still-visible widget.
+            for cid, row in list(self._strip_rows.items()):
+                row.hide()
+                row.deleteLater()
+            self._strip_rows.clear()
+            if self._strip_header is not None:
+                self._strip_header.hide()
+                self._strip_header.deleteLater()
+                self._strip_header = None
             self.calls_strip.setVisible(False)
             return
         self.calls_strip.setVisible(True)
 
-        # Header row: "N calls" + End-all ghost link (only when 2+ total).
-        if len(active) >= 2:
-            header = QFrame(self.calls_strip)
-            header.setObjectName("CallStackHeader")
-            header.setFixedHeight(24)
-            hl = QHBoxLayout(header)
-            hl.setContentsMargins(10, 0, 8, 0)
-            hl.setSpacing(8)
-            count_lbl = QLabel(f"{len(active)} calls", header)
-            count_lbl.setObjectName("CallStackHeaderLabel")
-            end_all_btn = QPushButton("End all", header)
-            end_all_btn.setObjectName("CallStackEndAllLink")
-            end_all_btn.setFlat(True)
-            end_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            end_all_btn.clicked.connect(self._on_end_all_calls)
-            hl.addWidget(count_lbl)
-            hl.addStretch(1)
-            hl.addWidget(end_all_btn)
-            self.calls_strip_layout.addWidget(header)
+        # ----- Header diff: present only when total active >= 2 -----
+        want_header = len(active) >= 2
+        if want_header and self._strip_header is None:
+            self._strip_header = self._build_strip_header()
+            self.calls_strip_layout.insertWidget(0, self._strip_header)
+        elif not want_header and self._strip_header is not None:
+            self._strip_header.hide()
+            self._strip_header.deleteLater()
+            self._strip_header = None
+        if self._strip_header is not None:
+            count_lbl = self._strip_header.findChild(QLabel, "CallStackHeaderLabel")
+            if count_lbl is not None:
+                count_lbl.setText(f"{len(active)} calls")
 
-        # One compact card per OTHER call.
+        # ----- Row diff: remove rows whose call_id is no longer "other" -----
+        for cid in list(self._strip_rows.keys()):
+            if cid not in others_by_id:
+                row = self._strip_rows.pop(cid)
+                row.hide()
+                row.deleteLater()
+
+        # ----- Add missing rows + update existing -----
         for rec in others:
-            row = QFrame(self.calls_strip)
-            row.setObjectName("CallStripRow")
-            row.setProperty("state", rec.state.name.lower())
-            row.setCursor(Qt.CursorShape.PointingHandCursor)
-            row.setFixedHeight(36)
-            # Row click → promote to selected, EXCEPT when click landed
-            # on the End button (which has its own handler).
-            def _make_row_press(cid, row_ref):
-                def _press(ev):
-                    end = row_ref.findChild(QToolButton, "CallStripEndBtn")
-                    if end is not None and end.geometry().contains(ev.pos()):
-                        return
-                    self._select_call(cid)
-                return _press
-            row.mousePressEvent = _make_row_press(rec.call_id, row)  # type: ignore[method-assign]
+            row = self._strip_rows.get(rec.call_id)
+            if row is None:
+                row = self._build_strip_row(rec.call_id)
+                self._strip_rows[rec.call_id] = row
+                self.calls_strip_layout.addWidget(row)
+            self._update_strip_row(row, rec)
 
-            rl = QHBoxLayout(row)
-            rl.setContentsMargins(12, 0, 8, 0)
-            rl.setSpacing(10)
-            # State dot -- colored circle per call state.
-            dot = QLabel("●", row)
-            dot.setObjectName("CallStripDot")
-            dot.setProperty("state", rec.state.name.lower())
-            dot.setFixedWidth(10)
-            peer_text = self._short_peer(rec.remote_uri)
-            peer_lbl = QLabel(peer_text, row)
-            peer_lbl.setObjectName("CallStripPeer")
-            peer_lbl.setToolTip(rec.remote_uri or "")
-            # Duration (only when CONFIRMED).
-            duration_text = self._format_call_duration(rec)
-            dur_lbl = QLabel(duration_text, row)
-            dur_lbl.setObjectName("CallStripDuration")
-            end_btn = QToolButton(row)
-            end_btn.setObjectName("CallStripEndBtn")
-            end_btn.setText("✕")  # multiplication X glyph
-            end_btn.setToolTip("End this call")
-            end_btn.setFixedSize(22, 22)
-            end_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            end_btn.clicked.connect(
-                lambda _checked=False, cid=rec.call_id: self._hangup_one(cid)
-            )
-            rl.addWidget(dot)
-            rl.addWidget(peer_lbl, 1)
-            rl.addWidget(dur_lbl)
-            rl.addWidget(end_btn)
-            self.calls_strip_layout.addWidget(row)
+    def _build_strip_header(self) -> QFrame:
+        header = QFrame(self.calls_strip)
+        header.setObjectName("CallStackHeader")
+        header.setFixedHeight(24)
+        hl = QHBoxLayout(header)
+        hl.setContentsMargins(10, 0, 8, 0)
+        hl.setSpacing(8)
+        count_lbl = QLabel("", header)
+        count_lbl.setObjectName("CallStackHeaderLabel")
+        end_all_btn = QPushButton("End all", header)
+        end_all_btn.setObjectName("CallStackEndAllLink")
+        end_all_btn.setFlat(True)
+        end_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        end_all_btn.clicked.connect(self._on_end_all_calls)
+        hl.addWidget(count_lbl)
+        hl.addStretch(1)
+        hl.addWidget(end_all_btn)
+        return header
+
+    def _build_strip_row(self, cid: int) -> QFrame:
+        row = QFrame(self.calls_strip)
+        row.setObjectName("CallStripRow")
+        row.setCursor(Qt.CursorShape.PointingHandCursor)
+        row.setFixedHeight(36)
+        # Row click → promote to selected, EXCEPT when click landed
+        # on the End button (which has its own handler).
+        def _press(ev, _cid=cid, _row=row):
+            end = _row.findChild(QToolButton, "CallStripEndBtn")
+            if end is not None and end.geometry().contains(ev.pos()):
+                return
+            self._select_call(_cid)
+        row.mousePressEvent = _press  # type: ignore[method-assign]
+
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(12, 0, 8, 0)
+        rl.setSpacing(10)
+        dot = QLabel("●", row); dot.setObjectName("CallStripDot")
+        dot.setFixedWidth(10)
+        peer_lbl = QLabel("", row); peer_lbl.setObjectName("CallStripPeer")
+        dur_lbl = QLabel("", row); dur_lbl.setObjectName("CallStripDuration")
+        end_btn = QToolButton(row); end_btn.setObjectName("CallStripEndBtn")
+        end_btn.setText("✕")
+        end_btn.setToolTip("End this call")
+        end_btn.setFixedSize(22, 22)
+        end_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        end_btn.clicked.connect(
+            lambda _checked=False, _cid=cid: self._hangup_one(_cid)
+        )
+        rl.addWidget(dot)
+        rl.addWidget(peer_lbl, 1)
+        rl.addWidget(dur_lbl)
+        rl.addWidget(end_btn)
+        return row
+
+    def _update_strip_row(self, row: QFrame, rec) -> None:
+        state_key = rec.state.name.lower()
+        # Only repolish when state actually changed -- the heavy work
+        # is the QSS style recomputation, not the property set itself.
+        old_state = row.property("state")
+        if old_state != state_key:
+            row.setProperty("state", state_key)
+            row.style().unpolish(row); row.style().polish(row)
+        dot = row.findChild(QLabel, "CallStripDot")
+        if dot is not None and dot.property("state") != state_key:
+            dot.setProperty("state", state_key)
+            dot.style().unpolish(dot); dot.style().polish(dot)
+        peer_lbl = row.findChild(QLabel, "CallStripPeer")
+        if peer_lbl is not None:
+            new_peer = self._short_peer(rec.remote_uri)
+            if peer_lbl.text() != new_peer:
+                peer_lbl.setText(new_peer)
+                peer_lbl.setToolTip(rec.remote_uri or "")
+        dur_lbl = row.findChild(QLabel, "CallStripDuration")
+        if dur_lbl is not None:
+            new_dur = self._format_call_duration(rec)
+            if dur_lbl.text() != new_dur:
+                dur_lbl.setText(new_dur)
 
     @staticmethod
     def _short_peer(uri: str) -> str:
@@ -1667,27 +1735,47 @@ class PhoneShell(QMainWindow):
         # widget (RuntimeError "Internal C++ object already deleted").
         # Reopening PhoneShell after a close also stacks duplicate
         # connections per re-open if we don't clean up here.
-        try:
-            self.calls.call_added.disconnect()
-            self.calls.call_updated.disconnect()
-            self.calls.call_removed.disconnect()
-        except Exception:
-            pass
+        # Disconnect THIS PhoneShell's slots only. Earlier this called
+        # sig.disconnect() with no argument, which silently dropped
+        # every subscriber on the singleton -- breaking AccountsDetail,
+        # TraceView, RegistrationRetry and CallQualitySampler in any
+        # neighbouring window that happened to be open. Pair each
+        # connect() above with a disconnect() referencing the same
+        # bound method / stored lambda.
+        for sig, slot in (
+            (self.calls.call_added, self._on_call_record_added),
+            (self.calls.call_updated, self._on_call_record_updated),
+            (self.calls.call_removed, self._on_call_record_removed),
+        ):
+            try:
+                sig.disconnect(slot)
+            except Exception:
+                pass
         try:
             ev = sip_events()
-            for sig_name in (
-                "endpoint_started", "endpoint_stopped", "endpoint_error",
-                "registration_changed", "call_incoming", "call_state_changed",
-                "call_media_active", "call_quality", "call_ended",
-            ):
-                sig = getattr(ev, sig_name, None)
-                if sig is not None:
-                    try:
-                        sig.disconnect()
-                    except Exception:
-                        pass
         except Exception:
-            pass
+            ev = None
+        if ev is not None:
+            for sig_name, slot in (
+                ("endpoint_started", getattr(self, "_sip_on_started", None)),
+                ("endpoint_stopped", getattr(self, "_sip_on_stopped", None)),
+                ("endpoint_error", self._on_endpoint_error),
+                ("registration_changed", self._on_registration_changed),
+                ("call_incoming", self._on_call_incoming),
+                ("call_state_changed", self._on_call_state),
+                ("call_media_active", self._on_call_media),
+                ("call_quality", self._on_call_quality),
+                ("call_ended", self._on_call_ended),
+            ):
+                if slot is None:
+                    continue
+                sig = getattr(ev, sig_name, None)
+                if sig is None:
+                    continue
+                try:
+                    sig.disconnect(slot)
+                except Exception:
+                    pass
         # Stop the audio level poll timer so it can't fire into a
         # destroyed widget.
         try:

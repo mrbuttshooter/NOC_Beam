@@ -1063,7 +1063,7 @@ QLabel#StatusPill, QLabel#SipCodeBadge, QLabel#MetricChip {
 QLabel#StatusPill[level="ok"], QLabel#SipCodeBadge[level="ok"], QLabel#MetricChip[level="ok"] {
     color: #8DDBA6;
     background-color: #102B1A;
-    border: 1px solid #2EBD5C;
+    border: 1px solid #66D19E;
 }
 QLabel#StatusPill[level="progress"], QLabel#SipCodeBadge[level="progress"], QLabel#MetricChip[level="progress"] {
     color: #F2CC60;
@@ -1149,7 +1149,7 @@ QPushButton#CallButton {
     min-height: 32px;
     max-height: 36px;
     border-radius: 4px;
-    background-color: #2EBD5C;
+    background-color: #66D19E;
     color: #FFFFFF;
 }
 QWidget#DialPad QPushButton#DialPadButton {
@@ -1252,7 +1252,7 @@ QTableWidget#TestRunnerResults {
 QPushButton#RunTestButton {
     min-height: 32px;
     border-radius: 4px;
-    background-color: #2EBD5C;
+    background-color: #66D19E;
     color: #FFFFFF;
     font-weight: 700;
 }
@@ -1264,7 +1264,10 @@ QPushButton#RejectButton {
 }
 
 /* ------------------------------------------------------------------
-   Operator console visual pass -- dark
+   Late overrides -- Bria-cyan visual pass (dark)
+   Was an orange/green operator-console block (#F26A21, #2EBD5C) that
+   silently fought the v2 Bria-cyan tokens earlier in this file
+   (#7FD3FF, #66D19E). Recolored to harmonise; structural rules kept.
    ------------------------------------------------------------------ */
 QMainWindow, QDialog, QWidget {
     background-color: #0F151D;
@@ -1275,7 +1278,7 @@ QFrame#TopStrip {
     border-bottom: 1px solid #263241;
 }
 QLabel#BrandMark {
-    background-color: #F26A21;
+    background-color: #7FD3FF;
     color: #FFFFFF;
     border-radius: 5px;
     min-width: 30px;
@@ -1307,7 +1310,7 @@ QToolButton#AccountChip {
 QLabel#StatusBanner {
     background-color: #102B1A;
     color: #8DDBA6;
-    border: 1px solid #2EBD5C;
+    border: 1px solid #66D19E;
     border-radius: 5px;
     padding: 5px 8px;
     font-weight: 700;
@@ -1323,7 +1326,7 @@ QLineEdit#DialInput {
     font-size: 13px;
 }
 QLineEdit#DialInput:focus {
-    border: 1px solid #F26A21;
+    border: 1px solid #7FD3FF;
     background-color: #0E1721;
 }
 QPushButton#CallButton {
@@ -1331,8 +1334,8 @@ QPushButton#CallButton {
     max-height: 42px;
     min-width: 72px;
     border-radius: 6px;
-    background-color: #2EBD5C;
-    border: 1px solid #2EBD5C;
+    background-color: #66D19E;
+    border: 1px solid #66D19E;
     color: #FFFFFF;
     font-size: 13px;
     font-weight: 800;
@@ -1396,7 +1399,7 @@ QToolButton#TabBtn:hover {
     color: #F4F7FB;
 }
 QToolButton#TabBtn:checked {
-    color: #F26A21;
-    border-top-color: #F26A21;
+    color: #7FD3FF;
+    border-top-color: #7FD3FF;
     font-weight: 800;
 }

@@ -460,7 +460,22 @@ class ContactsView(QWidget):
                 return
 
     def _on_delete_contact(self, contact_id: str) -> None:
+        from PySide6.QtWidgets import QMessageBox
         contacts = load_contacts()
+        contact = next((c for c in contacts if c.id == contact_id), None)
+        # Confirm before nuke -- the kebab menu's Delete used to fire
+        # straight through with no prompt, so a slipped click silently
+        # removed a contact with no undo.
+        label = contact.name if contact else "this contact"
+        reply = QMessageBox.question(
+            self,
+            "Delete contact",
+            f"Delete {label}? This cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
         if delete_contact(contacts, contact_id):
             try:
                 save_contacts(contacts)

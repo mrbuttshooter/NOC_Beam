@@ -1123,3 +1123,29 @@ QToolButton#IconActionButton, QPushButton#PrimaryAction, QPushButton#SecondaryAc
 QFrame#DenseListRow, QFrame#TraceMsgRow, QFrame#TraceDialogRow {
     border-width: 1px;
 }
+
+/* ---- First-run hero (parity with light.qss + dark.qss) -----------
+   Missing in earlier HC builds, so HC users got an unstyled QFrame
+   for the cold-launch hero. Use HC-tier contrast: pure-black bg,
+   white title, peak-chroma accent for the help link.
+   ------------------------------------------------------------------ */
+QFrame#FirstRunHero {
+    background-color: #000000;
+    border: 2px solid #FFFFFF;
+    border-radius: 8px;
+}
+QLabel#FirstRunTitle {
+    color: #FFFFFF;
+    font-size: 18px;
+    font-weight: 800;
+}
+QLabel#FirstRunSub {
+    color: #FFD500;
+    font-size: 13px;
+    font-weight: 600;
+}
+QLabel#FirstRunHelp {
+    color: #00FFFF;
+    font-size: 11px;
+    font-weight: 600;
+}

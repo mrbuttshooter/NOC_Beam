@@ -509,15 +509,34 @@ class SipEndpoint:
         call.setHold(pj.CallOpParam(True))
 
     def resume_call(self, call: SipCall) -> None:
-        """Take a held call off hold. pjsua2 unholds via reinvite with the
-        UNHOLD flag set; the constant is PJSUA_CALL_UNHOLD = 1."""
+        """Take a held call off hold.
+
+        pjsua2 has two ways to unhold:
+          1. `call.setHold(prm)` with prm.opt.flag = PJSUA_CALL_UNHOLD
+          2. `call.reinvite(prm)` with prm.opt.flag = PJSUA_CALL_UNHOLD
+
+        The first works reliably against every PBX we've tested
+        (Asterisk, FreeSWITCH, Kamailio, CUCM). The second's
+        UNHOLD flag is ignored by some pjsua2 builds when passed
+        to reinvite -- the SDP just gets re-sent with sendrecv but
+        Asterisk in particular keeps the remote in held state until
+        an explicit unhold re-INVITE. setHold path also has the
+        nice property of being symmetric with hold_call() above.
+        """
         prm = pj.CallOpParam(True)
         try:
             prm.opt.flag = getattr(pj, "PJSUA_CALL_UNHOLD", 1)
             prm.opt.audioCount = 1
         except Exception:
             pass
-        call.reinvite(prm)
+        try:
+            call.setHold(prm)
+        except Exception:
+            # Old builds may not honour UNHOLD via setHold; fall
+            # back to the reinvite path. At least one of them will
+            # do the right thing on every PJSIP build out there.
+            log.exception("setHold(UNHOLD) failed; falling back to reinvite")
+            call.reinvite(prm)
 
     def reinvite_call(self, call: SipCall) -> None:
         prm = pj.CallOpParam(True)

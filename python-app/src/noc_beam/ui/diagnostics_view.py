@@ -20,6 +20,7 @@ import logging
 import time
 from collections import deque
 
+from PySide6 import QtGui
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFormLayout,
@@ -171,10 +172,14 @@ class _RegisterTimingPanel(QWidget):
         self.table.setItem(row, 0, QTableWidgetItem(time.strftime("%H:%M:%S")))
         self.table.setItem(row, 1, QTableWidgetItem(account_id))
         code_item = QTableWidgetItem(f"{code} {reason}")
+        # Use the same palette tokens dark/dark-hc/light.qss already
+        # define for status colors -- raw Qt.GlobalColor.green is
+        # fixed pure-RGB and is unreadable on light backgrounds plus
+        # clashes with the muted Bria-cyan palette on dark.
         if 200 <= code < 300:
-            code_item.setForeground(Qt.GlobalColor.green)
+            code_item.setForeground(QtGui.QColor("#66D19E"))  # success token
         elif code in (401, 403, 407):
-            code_item.setForeground(Qt.GlobalColor.red)
+            code_item.setForeground(QtGui.QColor("#EF5350"))  # danger token
         self.table.setItem(row, 2, code_item)
         self.table.setItem(row, 3, QTableWidgetItem(delta))
 

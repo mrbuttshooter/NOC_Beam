@@ -137,7 +137,9 @@ class CallWidget(QWidget):
             "phone-down", "End call", checkable=False, color="#FFFFFF",
             object_name="CallRowEndBtn",
         )
-        self.hangup_btn.setFixedSize(48, 28)
+        # End button is a touch wider (visual rank > Hold/Mute/Transfer)
+        # but matches the new 36 px height for vertical alignment.
+        self.hangup_btn.setFixedSize(60, 36)
 
         # Speaker stays around for the QSS contract / API but is
         # hidden by default in compact mode -- speaker mute already
@@ -235,12 +237,16 @@ class CallWidget(QWidget):
     ) -> QToolButton:
         btn = QToolButton(self._card)
         btn.setObjectName(object_name)
-        btn.setIcon(rail_icon(icon_name, color=color, px=14))
-        btn.setIconSize(QSize(14, 14))
+        # 18 px icon in a 36 px hit-target -- matches Bria's call-card
+        # control row. Was 14 / 28 which read as toolbar chrome, not
+        # call controls, and failed the WCAG 2.5.5 minimum 24x24 hit
+        # area for the End/Hold/Transfer buttons.
+        btn.setIcon(rail_icon(icon_name, color=color, px=18))
+        btn.setIconSize(QSize(18, 18))
         btn.setCheckable(checkable)
         btn.setToolTip(tooltip)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setFixedSize(28, 28)
+        btn.setFixedSize(36, 36)
         return btn
 
     # ------------------------------------------------------------------

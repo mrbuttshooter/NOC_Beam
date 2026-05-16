@@ -236,7 +236,17 @@ class HistoryView(QWidget):
         self._search.setAccessibleName("History search")
         self._search.setPlaceholderText("Search peer URI / number…")
         self._search.setClearButtonEnabled(True)
-        self._search.textChanged.connect(self._refresh_rows)
+        # 150ms debounce: _refresh_rows tears down + rebuilds every row +
+        # date divider, which on a 1000-CDR history was stalling the UI
+        # mid-keystroke. Coalesce a burst of typing into one rebuild.
+        from PySide6.QtCore import QTimer as _QT
+        self._search_debounce = _QT(self)
+        self._search_debounce.setSingleShot(True)
+        self._search_debounce.setInterval(150)
+        self._search_debounce.timeout.connect(self._refresh_rows)
+        self._search.textChanged.connect(
+            lambda _t: self._search_debounce.start()
+        )
         # The clear-button QLineEdit creates internally is a QToolButton
         # with no text/icon/accessibleName -- which breaks the a11y
         # contract test that walks every QPushButton+QToolButton in the
@@ -415,9 +425,15 @@ class HistoryView(QWidget):
         return True
 
     def _open_detail(self, index: int) -> None:
-        if not (0 <= index < len(self._entries)):
+        # HistoryRow emits its visible-list index (the `i` from the
+        # enumerate in _refresh_rows). Previously this method indexed
+        # self._entries (the FULL list) with that visible-list value,
+        # so opening detail on a filtered row showed the WRONG CDR.
+        # Resolve through the visible projection.
+        visible = [e for e in self._entries if self._matches_filters(e)]
+        if not (0 <= index < len(visible)):
             return
-        entry = self._entries[index]
+        entry = visible[index]
         dlg = CdrDetailDialog(entry, parent=self)
         dlg.redial_requested.connect(self.redial_requested.emit)
         runner = getattr(dlg, "exec")
@@ -425,10 +441,8 @@ class HistoryView(QWidget):
 
     def _on_delete_one(self, index: int) -> None:
         from noc_beam.config.history import save_history
-        if not (0 <= index < len(self._entries)):
-            return
         visible = [e for e in self._entries if self._matches_filters(e)]
-        if index >= len(visible):
+        if not (0 <= index < len(visible)):
             return
         target = visible[index]
         self._entries = [e for e in self._entries if e is not target]

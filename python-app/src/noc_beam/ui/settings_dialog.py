@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -665,12 +666,14 @@ class SettingsDialog(QDialog):
         # Real apply-without-close: emit a signal the host listens for.
         # The host runs apply_to + save_settings + push-to-PJSIP and
         # leaves the dialog open so the user can keep tweaking.
-        # If nothing is connected, fall back to legacy accept() so the
-        # old shell wiring still works.
-        if self.receivers(self.apply_requested) > 0:
-            self.apply_requested.emit()
-        else:
-            self.accept()
+        #
+        # The previous "fallback to accept() if no receivers" was buggy:
+        # QObject.receivers() with the *bound-signal* form is unreliable
+        # in PySide6 (returns 0 even when slots are connected via the
+        # Pythonic .connect call), so Apply silently closed the dialog
+        # instead of applying -- defeating the whole "keep tweaking"
+        # intent. Just emit; PhoneShell._on_settings always connects.
+        self.apply_requested.emit()
 
     def _on_reset(self) -> None:
         """Reset all editable widgets to GlobalSettings() defaults.
@@ -761,7 +764,14 @@ class SettingsDialog(QDialog):
                 continue
             codec_map[codec_id] = prio
             new_priorities[codec_id] = prio
-        # Guard: empty codec list = don't wipe saved priorities.
+        # Merge instead of replace: PJSIP may load a SUBSET of installed
+        # codecs (e.g. opus disabled in this build) and the spins dict
+        # only contains the loaded ones. Replacing wholesale would wipe
+        # priorities for codecs the user configured before but that
+        # aren't currently visible -- a silent data loss every time a
+        # PJSIP build dropped a codec for any reason.
         if spins:
-            settings.codecs.priorities = new_priorities
+            merged = dict(settings.codecs.priorities)
+            merged.update(new_priorities)
+            settings.codecs.priorities = merged
         return codec_map

@@ -137,16 +137,27 @@ class TestRunner(QObject):
         """
         if self._cancelled:
             return
-        # Synchronously dispatch what fits in the parallel budget but
-        # pump the Qt event loop between each call so signal callbacks
-        # (call_started, registration_changed) and UI repaints get a
-        # chance to land mid-batch. Original code did neither, freezing
-        # the GUI for the whole burst at parallel=16.
-        while self._queue and self._slots_in_use() < self.spec.parallel:
-            if self._cancelled:
-                return
-            self._dispatch_one_call()
-            self._yield_to_event_loop()
+        # Re-entrancy guard: processEvents() inside the dispatch loop
+        # below can run user-driven events that re-enter _fill_slots
+        # (e.g. the Stop button calls cancel() which iterates _active
+        # while we're mid-dispatch -- race condition that could
+        # drop calls or double-hangup).
+        if getattr(self, "_dispatching", False):
+            return
+        self._dispatching = True
+        try:
+            # Synchronously dispatch what fits in the parallel budget
+            # but pump the Qt event loop between each call so signal
+            # callbacks (call_started, registration_changed) and UI
+            # repaints land mid-batch. Original code did neither,
+            # freezing the GUI for the whole burst at parallel=16.
+            while self._queue and self._slots_in_use() < self.spec.parallel:
+                if self._cancelled:
+                    return
+                self._dispatch_one_call()
+                self._yield_to_event_loop()
+        finally:
+            self._dispatching = False
 
     @staticmethod
     def _yield_to_event_loop() -> None:

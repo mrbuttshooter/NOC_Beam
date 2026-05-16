@@ -12,7 +12,18 @@ log = logging.getLogger(__name__)
 
 
 def _transport_id_for(transport: str, transports: dict[str, int]) -> int:
-    return transports.get(transport.lower(), transports.get("udp", -1))
+    """Look up the PJSIP transport ID for a requested transport.
+
+    Earlier this silently fell back to UDP whenever the requested
+    transport wasn't present (e.g. TLS bind failed at endpoint init).
+    A TLS-configured account would then register over UDP with no
+    diagnostic -- the user sees "Registered" and reasonably believes
+    their credentials are encrypted on the wire. Now return -1 on
+    miss so the caller can surface a clear error instead of
+    downgrading in silence.
+    """
+    key = (transport or "udp").lower()
+    return transports.get(key, -1)
 
 
 def _srtp_use(setting: str) -> int:
@@ -91,8 +102,11 @@ if PJSUA2_AVAILABLE:
             # an unrelated proxy that happens to share the same dialog
             # (the wildcard credential is a known information-leak vector
             # against malicious 401 challenges from off-path attackers).
-            # Fall back to `*` only when the domain is blank.
-            realm = (cfg.domain or "*").split(":", 1)[0] or "*"
+            # Lowercased: Kamailio (default config) and some OpenSIPS
+            # builds challenge with lowercase realm, AuthCredInfo match
+            # is case-sensitive in older PJSIP -> 401 loop with correct
+            # creds. Fall back to `*` only when the domain is blank.
+            realm = (cfg.domain or "*").split(":", 1)[0].lower() or "*"
             cred = pj.AuthCredInfo(
                 "digest", realm, cfg.auth_user or cfg.username, 0, cfg.password
             )
@@ -104,9 +118,44 @@ if PJSUA2_AVAILABLE:
             tid = _transport_id_for(cfg.transport, self._transports)
             if tid >= 0:
                 ac.sipConfig.transportId = tid
+            else:
+                # Requested transport isn't bound. Don't silently fall
+                # back to UDP -- emit a clear diagnostic so the user
+                # knows their TLS/TCP request was honoured.
+                from noc_beam.sip.events import sip_events
+                sip_events().registration_changed.emit(
+                    cfg.id, 0,
+                    f"Transport '{cfg.transport}' unavailable; "
+                    f"account will not register",
+                )
+                log.error(
+                    "Account %s requested transport=%s but no such "
+                    "transport is bound; refusing silent UDP downgrade",
+                    cfg.id, cfg.transport,
+                )
+                # Force pjsua2 to NOT register so the user sees the
+                # failure mode immediately instead of "registered fine"
+                # over the wrong transport.
+                ac.regConfig.registerOnAdd = False
 
             ac.mediaConfig.srtpUse = _srtp_use(cfg.srtp)
             ac.mediaConfig.srtpSecureSignaling = 0 if cfg.srtp != "mandatory" else 1
+
+            # ICE on by default. Without it, calls behind symmetric NAT
+            # produce one-way-audio after the SDP exchange because the
+            # remote side has no candidate for our internal address.
+            # ICE solves this universally and PJSIP supports it out of
+            # the box; we just have to flip the flag.
+            try:
+                ac.natConfig.iceEnabled = True
+                # 50ms ICE check pacing -- pjsua2 default is reasonable
+                # but be explicit so a future EpConfig change can't
+                # silently slow this down.
+                ac.natConfig.iceMaxHostCands = 32
+            except Exception:
+                # Older pjsua2 builds may not expose iceEnabled on
+                # AccountConfig; degrade gracefully.
+                log.warning("ICE config not available on this pjsua2 build")
 
             if cfg.stun_server:
                 ac.natConfig.sipStunUse = 1

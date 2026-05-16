@@ -85,6 +85,11 @@ class AccountDetail(QWidget):
         self._account: AccountConfig | None = None
         # Per-call quality buffer: call_id -> deque of (ts, mos, loss, jitter, rtt)
         self._quality_buf: dict[int, deque] = {}
+        # call_id -> account_id mapping. Without this the stats
+        # aggregator can't tell whose call's MOS to show in the
+        # detail pane. Populated from sip_events.call_incoming and
+        # the call_manager.call_added signal.
+        self._call_account: dict[int, str] = {}
         # Last non-2xx event per account_id: (ts, code, reason)
         self._last_incident: dict[str, tuple[float, int, str]] = {}
 
@@ -255,12 +260,24 @@ class AccountDetail(QWidget):
         # Uptime / Calls counts not tracked anywhere stable yet -- leave em-dash.
         self.uptime_val.setText("—")
         self.calls_val.setText("—")
-        # MOS / RTT use the rolling buffer if the account has any active call.
-        # The buffer keys by call_id; we don't have a robust call->account map
-        # here, so we average across all buffers. Tier-3 wires per-account.
+        # Per-account MOS / RTT. Previously this averaged across ALL
+        # active call quality buffers globally, so two simultaneous
+        # accounts each with a call showed the SAME mixed average in
+        # both detail panes (mis-attribution). Now filter to the
+        # call_ids known to belong to this account via the
+        # _call_account map maintained from call_added.
         mos_vals: list[float] = []
         rtt_vals: list[float] = []
-        for buf in self._quality_buf.values():
+        target_id = cfg.id
+        for call_id, buf in self._quality_buf.items():
+            owner = self._call_account.get(call_id)
+            # If we don't yet know the owner, prefer to exclude rather
+            # than mis-attribute. The CallManager wires the mapping
+            # within ~one event tick of call_added.
+            if owner is not None and owner != target_id:
+                continue
+            if owner is None:
+                continue
             for _, mos, _loss, _jit, rtt in buf:
                 mos_vals.append(mos)
                 rtt_vals.append(rtt)
@@ -272,6 +289,15 @@ class AccountDetail(QWidget):
             self.rtt_val.setText(f"{sum(rtt_vals) / len(rtt_vals):.0f} ms")
         else:
             self.rtt_val.setText("—")
+
+    def note_call_account(self, call_id: int, account_id: str) -> None:
+        """Host wires this from CallManager.call_added so we can
+        attribute per-call quality samples to the right account."""
+        self._call_account[call_id] = account_id
+
+    def forget_call_account(self, call_id: int) -> None:
+        self._call_account.pop(call_id, None)
+        self._quality_buf.pop(call_id, None)
 
     def _refresh_incident(self, account_id: str) -> None:
         info = self._last_incident.get(account_id)
