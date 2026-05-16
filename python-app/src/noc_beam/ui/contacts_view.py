@@ -95,7 +95,13 @@ class ContactDialog(QDialog):
         )
         self.save_btn = self.footer.primary_button
         self.save_btn.clicked.connect(self.accept)
+        # Enter on any field submits Save. Without setDefault/setAutoDefault
+        # the dialog had no default button -- Enter did nothing, leaving the
+        # user confused about why "save" wasn't happening.
+        self.save_btn.setDefault(True)
+        self.save_btn.setAutoDefault(True)
         self.footer.secondary_button.clicked.connect(self.reject)
+        self.footer.secondary_button.setAutoDefault(False)
         self.buttons = None
 
         root = QVBoxLayout(self)
@@ -421,17 +427,32 @@ class ContactsView(QWidget):
 
     def _on_add_contact(self, group: str = "Work") -> None:
         self.add_contact_requested.emit()
-        dlg = ContactDialog(group=group, parent=self)
-        while _open_modal(dlg):
+        # Create a FRESH dialog per attempt -- the previous version
+        # re-execed the same QDialog instance after a validation
+        # failure, which under PySide6 6.x on Windows can replay the
+        # previous accept() result on re-open and skip the user's
+        # second input ("doesn't save" UX bug).
+        last_group = group
+        while True:
+            dlg = ContactDialog(group=last_group, parent=self)
+            if not _open_modal(dlg):
+                return
             if self._save_new_contact(dlg):
                 return
+            # Preserve the user's last-typed group on retry.
+            try:
+                last_group = str(dlg.values().get("group", last_group)) or last_group
+            except Exception:
+                pass
 
     def _on_edit_contact(self, contact_id: str) -> None:
         contact = next((item for item in self._contacts if item.id == contact_id), None)
         if contact is None:
             return
-        dlg = ContactDialog(contact=contact, parent=self)
-        while _open_modal(dlg):
+        while True:
+            dlg = ContactDialog(contact=contact, parent=self)
+            if not _open_modal(dlg):
+                return
             if self._save_existing_contact(dlg, contact_id):
                 return
 

@@ -1283,12 +1283,14 @@ class PhoneShell(QMainWindow):
                 log.exception("hangup failed for call %s", cid)
 
     def _refresh_calls_strip(self) -> None:
-        """Re-render the compact multi-call strip.
+        """Render the multi-call stack of OTHER active calls.
 
-        Shows OTHER active calls (not the currently-selected one --
-        that's already in the Active Call card above). Click a row
-        to switch which call is active; X hangs that call up.
-        Hidden when there are no other calls to show.
+        Unified Call Stack design: selected call lives in the main
+        CallWidget (expanded, full controls). Other calls render as
+        compact 36px cards in this stack -- peer · state-dot ·
+        duration · End. Click anywhere (except End) to promote that
+        call to selected. A small header bar shows total call count
+        + End-all link when there's >1 call total.
         """
         # Tear down existing strip widgets.
         while self.calls_strip_layout.count():
@@ -1297,66 +1299,106 @@ class PhoneShell(QMainWindow):
             if w is not None:
                 w.setParent(None)
                 w.deleteLater()
-        # Strip excludes the selected call -- the main Active Call
-        # card already shows it. So with 1 call up the strip is empty
-        # (hidden); with N calls the strip shows N-1.
         active = self.calls.active()
         others = [r for r in active if r.call_id != self._selected_call_id]
         if not others:
             self.calls_strip.setVisible(False)
             return
         self.calls_strip.setVisible(True)
+
+        # Header row: "N calls" + End-all ghost link (only when 2+ total).
+        if len(active) >= 2:
+            header = QFrame(self.calls_strip)
+            header.setObjectName("CallStackHeader")
+            header.setFixedHeight(24)
+            hl = QHBoxLayout(header)
+            hl.setContentsMargins(10, 0, 8, 0)
+            hl.setSpacing(8)
+            count_lbl = QLabel(f"{len(active)} calls", header)
+            count_lbl.setObjectName("CallStackHeaderLabel")
+            end_all_btn = QPushButton("End all", header)
+            end_all_btn.setObjectName("CallStackEndAllLink")
+            end_all_btn.setFlat(True)
+            end_all_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            end_all_btn.clicked.connect(self._on_end_all_calls)
+            hl.addWidget(count_lbl)
+            hl.addStretch(1)
+            hl.addWidget(end_all_btn)
+            self.calls_strip_layout.addWidget(header)
+
+        # One compact card per OTHER call.
         for rec in others:
             row = QFrame(self.calls_strip)
             row.setObjectName("CallStripRow")
+            row.setProperty("state", rec.state.name.lower())
             row.setCursor(Qt.CursorShape.PointingHandCursor)
-            row.setFixedHeight(22)
-            # Row click selects the call -- but only if the click did
-            # NOT land on the X end button. Without the hit-test the
-            # X button's parent (the row) also gets the press and
-            # _select_call fires on a call that's about to terminate.
+            row.setFixedHeight(36)
+            # Row click → promote to selected, EXCEPT when click landed
+            # on the End button (which has its own handler).
             def _make_row_press(cid, row_ref):
                 def _press(ev):
                     end = row_ref.findChild(QToolButton, "CallStripEndBtn")
                     if end is not None and end.geometry().contains(ev.pos()):
-                        return  # X handles its own click
+                        return
                     self._select_call(cid)
                 return _press
             row.mousePressEvent = _make_row_press(rec.call_id, row)  # type: ignore[method-assign]
+
             rl = QHBoxLayout(row)
-            rl.setContentsMargins(8, 0, 4, 0)
-            rl.setSpacing(6)
-            peer_lbl = QLabel(rec.remote_uri or "...", row)
+            rl.setContentsMargins(12, 0, 8, 0)
+            rl.setSpacing(10)
+            # State dot -- colored circle per call state.
+            dot = QLabel("●", row)
+            dot.setObjectName("CallStripDot")
+            dot.setProperty("state", rec.state.name.lower())
+            dot.setFixedWidth(10)
+            peer_text = self._short_peer(rec.remote_uri)
+            peer_lbl = QLabel(peer_text, row)
             peer_lbl.setObjectName("CallStripPeer")
-            state_lbl = QLabel(rec.state.name.title(), row)
-            state_lbl.setObjectName("CallStripState")
+            peer_lbl.setToolTip(rec.remote_uri or "")
+            # Duration (only when CONFIRMED).
+            duration_text = self._format_call_duration(rec)
+            dur_lbl = QLabel(duration_text, row)
+            dur_lbl.setObjectName("CallStripDuration")
             end_btn = QToolButton(row)
             end_btn.setObjectName("CallStripEndBtn")
-            end_btn.setText("X")
+            end_btn.setText("✕")  # multiplication X glyph
             end_btn.setToolTip("End this call")
-            end_btn.setFixedSize(18, 18)
+            end_btn.setFixedSize(22, 22)
             end_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             end_btn.clicked.connect(
                 lambda _checked=False, cid=rec.call_id: self._hangup_one(cid)
             )
+            rl.addWidget(dot)
             rl.addWidget(peer_lbl, 1)
-            rl.addWidget(state_lbl)
+            rl.addWidget(dur_lbl)
             rl.addWidget(end_btn)
             self.calls_strip_layout.addWidget(row)
-        # End-all pill only when 2+ calls total live (so user has
-        # something to bulk-clear).
-        if len(active) >= 2:
-            footer = QFrame(self.calls_strip)
-            footer.setObjectName("CallStripFooter")
-            footer.setFixedHeight(24)
-            fl = QHBoxLayout(footer)
-            fl.setContentsMargins(8, 2, 4, 2)
-            fl.addStretch(1)
-            end_all_btn = QPushButton(f"End all ({len(active)})", footer)
-            end_all_btn.setObjectName("CallStripEndAllBtn")
-            end_all_btn.clicked.connect(self._on_end_all_calls)
-            fl.addWidget(end_all_btn)
-            self.calls_strip_layout.addWidget(footer)
+
+    @staticmethod
+    def _short_peer(uri: str) -> str:
+        """Trim sip: prefix and host for compact display."""
+        if not uri:
+            return "..."
+        s = uri.strip()
+        if s.startswith("sip:"):
+            s = s[4:]
+        elif s.startswith("sips:"):
+            s = s[5:]
+        if "<" in s:
+            s = s.split("<", 1)[1].rstrip(">")
+        return s
+
+    @staticmethod
+    def _format_call_duration(rec) -> str:
+        """HH:MM:SS for CONFIRMED, empty otherwise."""
+        if not getattr(rec, "connected_at", None):
+            return rec.state.name.title()
+        import time as _t
+        elapsed = int(_t.time() - rec.connected_at)
+        h, rem = divmod(elapsed, 3600)
+        m, s = divmod(rem, 60)
+        return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
     def _refresh_in_call_layout(self) -> None:
         """No-op now that the CallWidget itself is a single compact row.
@@ -1490,13 +1532,20 @@ class PhoneShell(QMainWindow):
         self._diagnostics_window.raise_(); self._diagnostics_window.activateWindow()
 
     def _on_open_trace(self):
-        # Reparent the trace_view into a standalone QMainWindow on demand.
+        # Build a DEDICATED TraceView for the popup. Re-parenting the
+        # stack's instance into the popup yanks it out of the stack,
+        # which leaves BOTH surfaces broken (popup paints blank and
+        # the in-shell Trace tab loses its content). Each TraceView
+        # self-wires to sip_events().sip_message in __init__, so
+        # both stay live independently.
         if not hasattr(self, "_trace_window"):
             from PySide6.QtWidgets import QMainWindow
-            self._trace_window = QMainWindow()
+            self._trace_window = QMainWindow(self)
             self._trace_window.setWindowTitle("NOC_Beam SIP trace")
             self._trace_window.resize(900, 600)
-            self._trace_window.setCentralWidget(self.trace_view)
+            from noc_beam.ui.trace_view import TraceView
+            self._popup_trace_view = TraceView(self._trace_window)
+            self._trace_window.setCentralWidget(self._popup_trace_view)
         self._trace_window.show()
         self._trace_window.raise_(); self._trace_window.activateWindow()
 

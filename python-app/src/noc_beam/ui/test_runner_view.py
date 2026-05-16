@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -150,54 +151,173 @@ class TestRunnerView(QMainWindow):
         self._refresh_summary()
 
     def _build_ui(self) -> None:
+        from PySide6.QtWidgets import QSplitter, QScrollArea
         central = QWidget(self)
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        central.setObjectName("TestRunnerRoot")
+        outer = QVBoxLayout(central)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(12)
 
-        paste_frame = QFrame(central)
-        paste_frame.setObjectName("TestRunnerPasteGrid")
-        paste_grid = QGridLayout(paste_frame)
-        paste_grid.setContentsMargins(0, 0, 0, 0)
-        paste_grid.setColumnStretch(0, 1)
-        paste_grid.setColumnStretch(1, 1)
-        paste_grid.addWidget(QLabel("CALLERS"), 0, 0)
-        paste_grid.addWidget(QLabel("TARGETS"), 0, 1)
-        paste_grid.addWidget(self.callers_edit, 1, 0)
-        paste_grid.addWidget(self.targets_edit, 1, 1)
-        layout.addWidget(paste_frame, 1)
+        # Title row
+        title = QLabel("Test Runner")
+        title.setObjectName("SettingsTitle")
+        subtitle = QLabel(
+            "Place N concurrent test calls from your registered accounts "
+            "to one or more targets. Results stream live; export when done."
+        )
+        subtitle.setObjectName("SettingsSubtitle")
+        subtitle.setWordWrap(True)
+        outer.addWidget(title)
+        outer.addWidget(subtitle)
 
-        controls_frame = QFrame(central)
-        controls_frame.setObjectName("OperatorToolbar")
-        controls = QHBoxLayout(controls_frame)
-        controls.setContentsMargins(6, 6, 6, 6)
-        controls.setSpacing(8)
-        self._add_labeled_control(controls, "Mode", self.mode_combo)
-        self._add_labeled_control(controls, "Pass", self.pass_combo)
-        self._add_labeled_control(controls, "Parallel", self.parallel_spin)
-        self._add_labeled_control(controls, "Hold", self.hold_spin)
-        self._add_labeled_control(controls, "Timeout", self.timeout_spin)
-        controls.addStretch(1)
-        layout.addWidget(controls_frame)
+        # 2-pane split: left = setup cards stack; right = results
+        split = QSplitter(Qt.Orientation.Horizontal, central)
+        split.setObjectName("TestRunnerSplit")
+        split.setChildrenCollapsible(False)
+        split.setHandleWidth(8)
 
+        # ---- LEFT pane: scrollable card stack -----------------------
+        left_holder = QWidget()
+        left_holder.setObjectName("TestRunnerLeft")
+        left = QVBoxLayout(left_holder)
+        left.setContentsMargins(0, 0, 0, 0)
+        left.setSpacing(12)
+
+        # TARGETS card (callers + targets stacked vertically). Also
+        # carries the legacy `TestRunnerPasteGrid` objectName for test
+        # backwards-compat (sub-frames now hold the actual widgets).
+        targets_card = QFrame()
+        targets_card.setObjectName("SettingsCard")
+        # Keep a hidden marker child for the legacy test selector.
+        _legacy_paste_grid = QFrame(targets_card)
+        _legacy_paste_grid.setObjectName("TestRunnerPasteGrid")
+        _legacy_paste_grid.setFixedSize(0, 0)
+        _legacy_paste_grid.setVisible(False)
+        t_l = QVBoxLayout(targets_card)
+        t_l.setContentsMargins(18, 16, 18, 16)
+        t_l.setSpacing(8)
+        t_header_row = QHBoxLayout()
+        t_label = QLabel("TARGETS")
+        t_label.setObjectName("SettingsCardLabel")
+        self._run_count_badge = QLabel("0 calls")
+        self._run_count_badge.setObjectName("TestRunnerCountBadge")
+        t_header_row.addWidget(t_label)
+        t_header_row.addStretch(1)
+        t_header_row.addWidget(self._run_count_badge)
+        t_l.addLayout(t_header_row)
+        cl = QLabel("Callers (one per line)")
+        cl.setObjectName("SettingsRowLabel")
+        t_l.addWidget(cl)
+        t_l.addWidget(self.callers_edit)
+        tl = QLabel("Targets (one per line)")
+        tl.setObjectName("SettingsRowLabel")
+        t_l.addWidget(tl)
+        t_l.addWidget(self.targets_edit)
+        left.addWidget(targets_card)
+
+        # CONFIGURATION card (legacy OperatorToolbar object name lives
+        # on a hidden marker child to satisfy backwards-compat selectors).
+        config_card = QFrame()
+        config_card.setObjectName("SettingsCard")
+        _legacy_toolbar = QFrame(config_card)
+        _legacy_toolbar.setObjectName("OperatorToolbar")
+        _legacy_toolbar.setFixedSize(0, 0)
+        _legacy_toolbar.setVisible(False)
+        c_l = QVBoxLayout(config_card)
+        c_l.setContentsMargins(18, 16, 18, 16)
+        c_l.setSpacing(10)
+        c_label = QLabel("CONFIGURATION")
+        c_label.setObjectName("SettingsCardLabel")
+        c_l.addWidget(c_label)
+        for label, widget in (
+            ("Mode", self.mode_combo),
+            ("Pass criteria", self.pass_combo),
+            ("Parallel", self.parallel_spin),
+            ("Hold (per call)", self.hold_spin),
+            ("Timeout (per call)", self.timeout_spin),
+        ):
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            lbl = QLabel(label)
+            lbl.setObjectName("SettingsRowLabel")
+            lbl.setMinimumWidth(140)
+            row.addWidget(lbl)
+            row.addWidget(widget, 1)
+            c_l.addLayout(row)
+        left.addWidget(config_card)
+
+        # STATUS card (counter chips arranged in a 2x2)
+        status_card = QFrame()
+        status_card.setObjectName("SettingsCard")
+        st_l = QVBoxLayout(status_card)
+        st_l.setContentsMargins(18, 16, 18, 16)
+        st_l.setSpacing(8)
+        st_label = QLabel("STATUS")
+        st_label.setObjectName("SettingsCardLabel")
+        st_l.addWidget(st_label)
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(6)
+        grid.addWidget(self.summary_passed, 0, 0)
+        grid.addWidget(self.summary_failed, 0, 1)
+        grid.addWidget(self.summary_running, 1, 0)
+        grid.addWidget(self.summary_pending, 1, 1)
+        st_l.addLayout(grid)
+        left.addWidget(status_card)
+
+        # Run / Stop / Clear sticky at bottom of left column
         run_row = QHBoxLayout()
+        run_row.setSpacing(8)
         run_row.addWidget(self.run_btn, 1)
         run_row.addWidget(self.stop_btn)
         run_row.addWidget(self.clear_btn)
-        layout.addLayout(run_row)
+        left.addLayout(run_row)
+        left.addStretch(1)
 
-        layout.addWidget(self.table, 3)
+        # Scroll-wrap the left card stack
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        left_scroll.setWidget(left_holder)
+        split.addWidget(left_scroll)
 
-        footer = QHBoxLayout()
-        footer.setSpacing(8)
-        footer.addWidget(self.summary_passed)
-        footer.addWidget(self.summary_failed)
-        footer.addWidget(self.summary_running)
-        footer.addWidget(self.summary_pending)
-        footer.addStretch(1)
-        footer.addWidget(self.cancel_btn)
-        footer.addWidget(self.export_btn)
-        layout.addLayout(footer)
+        # ---- RIGHT pane: results table card -------------------------
+        right_holder = QFrame()
+        right_holder.setObjectName("SettingsCard")
+        right = QVBoxLayout(right_holder)
+        right.setContentsMargins(0, 0, 0, 0)
+        right.setSpacing(0)
+        results_header = QHBoxLayout()
+        results_header.setContentsMargins(18, 14, 18, 10)
+        results_label = QLabel("RESULTS")
+        results_label.setObjectName("SettingsCardLabel")
+        results_header.addWidget(results_label)
+        results_header.addStretch(1)
+        right.addLayout(results_header)
+        # Make the table look at-home inside the card.
+        self.table.setObjectName("TestRunnerResults")
+        self.table.setShowGrid(False)
+        self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().setDefaultSectionSize(36)
+        right.addWidget(self.table, 1)
+        split.addWidget(right_holder)
+
+        split.setStretchFactor(0, 35)
+        split.setStretchFactor(1, 65)
+        split.setSizes([350, 650])
+        outer.addWidget(split, 1)
+
+        # Footer: Close + Export CSV
+        footer = QFrame(central)
+        footer.setObjectName("TestRunnerFooter")
+        f_l = QHBoxLayout(footer)
+        f_l.setContentsMargins(0, 4, 0, 0)
+        f_l.addStretch(1)
+        f_l.addWidget(self.cancel_btn)
+        f_l.addWidget(self.export_btn)
+        outer.addWidget(footer)
 
         self.setCentralWidget(central)
 
@@ -236,6 +356,11 @@ class TestRunnerView(QMainWindow):
         count = len(expand(self._spec_from_ui()))
         self.run_btn.setText(f"Run {count} calls")
         self.run_btn.setEnabled(count > 0 and self.runner is None)
+        # Also update the count badge in the TARGETS card header.
+        if hasattr(self, "_run_count_badge"):
+            self._run_count_badge.setText(
+                "1 call" if count == 1 else f"{count} calls"
+            )
 
     def _refresh_hold_enabled(self) -> None:
         self.hold_spin.setEnabled(self.pass_combo.currentData() == "full-call")

@@ -690,8 +690,15 @@ class TraceView(QWidget):
 
         self._empty.setVisible(False)
 
+        # Auto-scroll to bottom ONLY when the user is already near the
+        # bottom. If they've scrolled up to inspect an expanded SIP
+        # message, jamming them back down on every incoming packet
+        # closes their reading focus -- the "clicking expand collapses
+        # the whole trace" UX bug.
         bar = self._scroll.verticalScrollBar()
-        bar.setValue(bar.maximum())
+        near_bottom = (bar.maximum() - bar.value()) < 80
+        if near_bottom:
+            bar.setValue(bar.maximum())
 
     def _on_pause_toggled(self, paused: bool) -> None:
         self._paused = bool(paused)

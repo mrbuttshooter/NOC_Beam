@@ -177,22 +177,126 @@ class SettingsDialog(QDialog):
         return method()
 
     def _build_general_pane(self) -> QWidget:
+        from noc_beam import __app_name__, __version__
+        from PySide6.QtWidgets import QSizePolicy, QSpacerItem
+        from noc_beam.config.paths import data_dir
+
         w = QWidget()
         w.setObjectName("SettingsPane")
         layout = QVBoxLayout(w)
-        layout.setContentsMargins(20, 18, 20, 18)
-        layout.setSpacing(8)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
         title = QLabel("General")
         title.setObjectName("SettingsTitle")
         layout.addWidget(title)
-        hint = QLabel(
-            "App-wide preferences. Use the sidebar to drill into Audio "
-            "devices, codec priorities, theme, account credentials, or "
-            "advanced SIP settings."
+        subtitle = QLabel(
+            "App-wide preferences. Audio devices, codecs, theme, account "
+            "credentials, and advanced SIP settings live in their own panes."
         )
-        hint.setObjectName("ViewHint")
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
+        subtitle.setObjectName("SettingsSubtitle")
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
+
+        # --- Appearance card -----------------------------------------
+        appearance_card = QFrame()
+        appearance_card.setObjectName("SettingsCard")
+        a_l = QVBoxLayout(appearance_card)
+        a_l.setContentsMargins(18, 16, 18, 16)
+        a_l.setSpacing(8)
+        a_label = QLabel("APPEARANCE")
+        a_label.setObjectName("SettingsCardLabel")
+        a_l.addWidget(a_label)
+        # Promote the theme picker here so the user sees it on General.
+        # The dedicated Appearance pane still has it (same widget).
+        self._general_theme_combo = QComboBox()
+        self._general_theme_combo.addItem("Light", "light")
+        self._general_theme_combo.addItem("Dark", "dark")
+        # Mirror current selection from the main theme_combo.
+        try:
+            self._general_theme_combo.setCurrentText(
+                "Dark" if getattr(self._settings.appearance, "theme", "light") == "dark"
+                else "Light"
+            )
+            self._general_theme_combo.currentTextChanged.connect(
+                lambda t: self.theme_combo.setCurrentText(t) if hasattr(self, "theme_combo") else None
+            )
+        except Exception:
+            pass
+        theme_row = QHBoxLayout()
+        theme_row.setContentsMargins(0, 0, 0, 0)
+        theme_lbl = QLabel("Theme")
+        theme_lbl.setObjectName("SettingsRowLabel")
+        theme_lbl.setMinimumWidth(140)
+        theme_row.addWidget(theme_lbl)
+        theme_row.addWidget(self._general_theme_combo, 1)
+        a_l.addLayout(theme_row)
+        a_hint = QLabel("Applied immediately — no restart needed.")
+        a_hint.setObjectName("SettingsRowHint")
+        a_l.addWidget(a_hint)
+        layout.addWidget(appearance_card)
+
+        # --- Startup card --------------------------------------------
+        startup_card = QFrame()
+        startup_card.setObjectName("SettingsCard")
+        s_l = QVBoxLayout(startup_card)
+        s_l.setContentsMargins(18, 16, 18, 16)
+        s_l.setSpacing(6)
+        s_label = QLabel("STARTUP")
+        s_label.setObjectName("SettingsCardLabel")
+        s_l.addWidget(s_label)
+        # Three optional checkboxes (functionality stubbed for now -- saved
+        # but not yet read by the launcher).
+        self._start_with_windows = QCheckBox("Start NOC_Beam when I sign in to Windows")
+        self._start_minimized = QCheckBox("Start minimized to the system tray")
+        self._restore_window_pos = QCheckBox("Restore previous window position")
+        for box in (self._start_with_windows, self._start_minimized, self._restore_window_pos):
+            box.setObjectName("SettingsCheckbox")
+            s_l.addWidget(box)
+        layout.addWidget(startup_card)
+
+        # --- About card ----------------------------------------------
+        about_card = QFrame()
+        about_card.setObjectName("SettingsCard")
+        ab_l = QVBoxLayout(about_card)
+        ab_l.setContentsMargins(18, 16, 18, 16)
+        ab_l.setSpacing(8)
+        ab_label = QLabel("ABOUT")
+        ab_label.setObjectName("SettingsCardLabel")
+        ab_l.addWidget(ab_label)
+        ver_row = QHBoxLayout()
+        ver_lbl = QLabel(f"{__app_name__}")
+        ver_lbl.setObjectName("SettingsRowLabel")
+        ver_lbl.setMinimumWidth(140)
+        ver_val = QLabel(f"v{__version__}")
+        ver_val.setObjectName("SettingsRowValue")
+        ver_row.addWidget(ver_lbl)
+        ver_row.addWidget(ver_val, 1)
+        ab_l.addLayout(ver_row)
+        # Open log / data folder shortcuts -- one of the most-requested
+        # NOC affordances per the audit.
+        link_row = QHBoxLayout()
+        link_row.setContentsMargins(0, 4, 0, 0)
+        link_row.setSpacing(12)
+        open_data_btn = QPushButton("Open user data folder")
+        open_data_btn.setObjectName("SettingsLinkBtn")
+        open_data_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        def _open_data_folder() -> None:
+            import os
+            import subprocess
+            p = str(data_dir())
+            try:
+                os.startfile(p)  # noqa: S606
+            except AttributeError:
+                subprocess.Popen(["xdg-open", p])
+            except Exception:
+                pass
+        open_data_btn.clicked.connect(_open_data_folder)
+        link_row.addWidget(open_data_btn)
+        link_row.addStretch(1)
+        ab_l.addLayout(link_row)
+        layout.addWidget(about_card)
+
         layout.addStretch(1)
         return w
 

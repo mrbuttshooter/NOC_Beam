@@ -931,13 +931,17 @@ QFrame#AcctRow {
     padding: 10px 12px;
 }
 QFrame#AcctRow:hover { background-color: #F5F6F8; }
+/* Softer focused state: pale-orange wash instead of the hot amber
+   #FFE0CC -- the previous fill made the gray URI text unreadable
+   on the focused row. */
 QFrame#AcctRow[state="focused"] {
-    background-color: #FFE0CC;
+    background-color: #FFF4EB;
     border-left: 3px solid #E85D04;
 }
 QFrame#AcctRow[state="error"] { background-color: #FDF1F2; }
 
 QLabel#AcctRowName  { color: #1F2933; font-size: 13px; font-weight: 600; }
+QFrame#AcctRow[state="focused"] QLabel#AcctRowName { color: #0F172A; }
 QLabel#AcctRowStatus {
     color: #94A0AD;
     font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
@@ -947,11 +951,16 @@ QLabel#AcctRowStatus {
     padding-left: 4px;
 }
 QLabel#AcctRowUri   {
-    color: #57606A;
+    background-color: transparent;
+    color: #4B5563;
     font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
     font-size: 11px;
     padding-left: 18px;
+    border: none;
 }
+/* Darker URI text on the focused row -- gray-on-amber was the
+   "white text field is very bad" complaint. */
+QFrame#AcctRow[state="focused"] QLabel#AcctRowUri { color: #1F2933; }
 QLabel#AcctRowMeta  {
     color: #94A0AD;
     font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
@@ -1908,59 +1917,79 @@ QLabel#AudioMeterLabel {
     min-width: 18px;
 }
 
-/* ---------- Multi-call strip (panel 1 multi-call rework) ---------- */
+/* ---------- Unified Call Stack (Dial page multi-call) ---------- */
 QFrame#CallStrips {
     background-color: transparent;
 }
+/* Header bar: "N calls" left + End-all ghost link right. Only shown
+   when there are 2+ active calls. */
+QFrame#CallStackHeader {
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid #EEF0F2;
+}
+QLabel#CallStackHeaderLabel {
+    color: #57606A;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+QPushButton#CallStackEndAllLink {
+    background: transparent;
+    border: none;
+    color: #D33841;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0 4px;
+}
+QPushButton#CallStackEndAllLink:hover {
+    color: #A02129;
+    text-decoration: underline;
+}
+/* Compact call card (36px) for OTHER calls. White surface, hairline,
+   colored state-dot on the left. Selected (top, expanded) call
+   lives in the main CallWidget. */
 QFrame#CallStripRow {
-    background-color: #F4F6F9;
-    border: 1px solid #D8DEE4;
-    border-left: 3px solid transparent;
-    border-radius: 3px;
+    background-color: #FFFFFF;
+    border: none;
+    border-bottom: 1px solid #EEF0F2;
     margin: 0;
 }
-QFrame#CallStripRow[selected="true"] {
-    background-color: #DCEEFC;
-    border-left: 3px solid #1A6FA0;
-}
 QFrame#CallStripRow:hover {
-    background-color: #EAF0F6;
+    background-color: #F7F8FA;
 }
+QLabel#CallStripDot {
+    color: #C9CDD3;        /* idle */
+    font-size: 14px;
+    font-weight: 700;
+}
+QLabel#CallStripDot[state="confirmed"] { color: #2EBD5C; }
+QLabel#CallStripDot[state="held"]      { color: #E08A1A; }
+QLabel#CallStripDot[state="incoming"]  { color: #D33841; }
+QLabel#CallStripDot[state="calling"]   { color: #E85D04; }
+QLabel#CallStripDot[state="early"]     { color: #E85D04; }
 QLabel#CallStripPeer {
-    color: #1F2933;
-    font-weight: 600;
-    font-size: 11px;
+    color: #1F2328;
+    font-size: 13px;
+    font-weight: 500;
 }
-QLabel#CallStripState {
+QLabel#CallStripDuration {
     color: #57606A;
     font-family: "Cascadia Mono", "Consolas", monospace;
-    font-size: 10px;
+    font-size: 12px;
 }
 QToolButton#CallStripEndBtn {
-    background-color: #D33841;
-    color: #FFFFFF;
-    border: none;
-    border-radius: 2px;
+    background-color: transparent;
+    color: #D33841;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    font-size: 12px;
     font-weight: 700;
-    font-size: 10px;
-    padding: 0;
 }
 QToolButton#CallStripEndBtn:hover {
-    background-color: #B22D35;
-}
-QFrame#CallStripFooter {
-    background-color: transparent;
-}
-QPushButton#CallStripEndAllBtn {
-    background-color: #D33841;
-    color: #FFFFFF;
-    border: none;
-    border-radius: 4px;
-    padding: 4px 12px;
-    font-weight: 700;
-}
-QPushButton#CallStripEndAllBtn:hover {
-    background-color: #B22D35;
+    background-color: #FFEBEC;
+    border-color: #F2C0C4;
+    color: #A02129;
 }
 
 /* ---------- Audio strip mic-mute checked + chevron ---------- */
@@ -2051,4 +2080,137 @@ QLabel#TraceMsgDelta {
     font-family: "Cascadia Mono", "Consolas", monospace;
     font-size: 10px;
     letter-spacing: 0.04em;
+}
+
+/* ---------- Modernized Settings panes (card-based) ---------- */
+QWidget#SettingsPane {
+    background-color: #F6F7F9;
+}
+QLabel#SettingsTitle {
+    color: #1F2328;
+    font-size: 22px;
+    font-weight: 600;
+    padding-bottom: 2px;
+}
+QLabel#SettingsSubtitle {
+    color: #57606A;
+    font-size: 12px;
+    line-height: 1.4em;
+    padding-bottom: 4px;
+}
+QFrame#SettingsCard {
+    background-color: #FFFFFF;
+    border: 1px solid #ECEEF1;
+    border-radius: 6px;
+}
+QFrame#SettingsCard QLabel#SettingsCardLabel {
+    color: #57606A;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #EEF0F2;
+    margin-bottom: 4px;
+}
+QLabel#SettingsRowLabel {
+    color: #57606A;
+    font-size: 13px;
+    font-weight: 500;
+}
+QLabel#SettingsRowValue {
+    color: #1F2328;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 12px;
+}
+QLabel#SettingsRowHint {
+    color: #8C959F;
+    font-size: 11px;
+    padding-top: 2px;
+}
+QCheckBox#SettingsCheckbox {
+    color: #1F2328;
+    font-size: 13px;
+    padding: 2px 0;
+    spacing: 8px;
+}
+QPushButton#SettingsLinkBtn {
+    background: transparent;
+    border: none;
+    color: #E25A0E;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 2px 6px;
+    text-align: left;
+}
+QPushButton#SettingsLinkBtn:hover {
+    color: #C84E0A;
+    text-decoration: underline;
+}
+
+/* ---------- Modernized Test Runner ---------- */
+QWidget#TestRunnerRoot {
+    background-color: #F6F7F9;
+}
+QSplitter#TestRunnerSplit::handle {
+    background-color: transparent;
+}
+QSplitter#TestRunnerSplit::handle:hover {
+    background-color: #ECEEF1;
+}
+QWidget#TestRunnerLeft {
+    background-color: transparent;
+}
+/* Reuse SettingsCard inside TestRunner. The results card gets a
+   tighter inner padding so the table can breathe. */
+QTextEdit#TestRunnerPasteBox {
+    background-color: #F6F8FA;
+    border: 1px solid #D0D7DE;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 12px;
+    selection-background-color: #DCEEFC;
+    color: #1F2328;
+    min-height: 90px;
+}
+QTextEdit#TestRunnerPasteBox:focus {
+    border-color: #E25A0E;
+    background-color: #FFFFFF;
+}
+QLabel#TestRunnerCountBadge {
+    background-color: #FEEEE3;
+    color: #C84E0A;
+    border-radius: 10px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+/* Results table inside its card */
+QTableWidget#TestRunnerResults {
+    background-color: #FFFFFF;
+    border: none;
+    gridline-color: transparent;
+    alternate-background-color: #FAFBFC;
+    selection-background-color: #FEEEE3;
+    selection-color: #1F2328;
+}
+QTableWidget#TestRunnerResults::item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #F1F3F5;
+}
+QTableWidget#TestRunnerResults::item:hover {
+    background-color: #F9FAFB;
+}
+QTableWidget#TestRunnerResults QHeaderView::section {
+    background-color: #F6F8FA;
+    color: #57606A;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    padding: 10px 12px;
+    border: none;
+    border-bottom: 1px solid #ECEEF1;
+}
+QFrame#TestRunnerFooter {
+    background: transparent;
 }
