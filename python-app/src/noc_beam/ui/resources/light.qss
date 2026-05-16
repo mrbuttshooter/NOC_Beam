@@ -940,27 +940,34 @@ QFrame#AcctRow[state="focused"] {
 }
 QFrame#AcctRow[state="error"] { background-color: #FDF1F2; }
 
-QLabel#AcctRowName  { color: #1F2933; font-size: 13px; font-weight: 600; }
+QLabel#AcctRowName  {
+    background: transparent;
+    border: none;
+    color: #1F2933;
+    font-size: 13px;
+    font-weight: 600;
+}
 QFrame#AcctRow[state="focused"] QLabel#AcctRowName { color: #0F172A; }
 QLabel#AcctRowStatus {
-    color: #94A0AD;
-    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
-    font-size: 10px;
+    background: transparent;
+    border: none;
+    color: #6B7280;
+    font-size: 11px;
     font-weight: 500;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
     padding-left: 4px;
 }
 QLabel#AcctRowUri   {
-    background-color: transparent;
+    background: transparent;
     color: #4B5563;
     font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
     font-size: 11px;
     padding-left: 18px;
     border: none;
+    qproperty-frameShape: NoFrame;
 }
-/* Darker URI text on the focused row -- gray-on-amber was the
-   "white text field is very bad" complaint. */
 QFrame#AcctRow[state="focused"] QLabel#AcctRowUri { color: #1F2933; }
+QLabel#AcctRowMeta { background: transparent; border: none; }
 QLabel#AcctRowMeta  {
     color: #94A0AD;
     font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
@@ -2213,4 +2220,69 @@ QTableWidget#TestRunnerResults QHeaderView::section {
 }
 QFrame#TestRunnerFooter {
     background: transparent;
+}
+
+/* ---------- Modern codec list (Settings → Codecs pane) ---------- */
+QFrame#CodecListHeader {
+    background-color: #FAFBFC;
+    border: none;
+    border-bottom: 1px solid #EEF0F2;
+}
+QLabel#CodecListHeaderLabel {
+    color: #57606A;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+}
+QFrame#CodecRow {
+    background-color: #FFFFFF;
+    border: none;
+    border-bottom: 1px solid #F1F3F5;
+}
+QFrame#CodecRow:hover {
+    background-color: #F9FAFB;
+}
+QLabel#CodecRowName {
+    background: transparent;
+    border: none;
+    color: #1F2328;
+    font-size: 13px;
+    font-weight: 600;
+}
+QLabel#CodecRowSub {
+    background: transparent;
+    border: none;
+    color: #8C959F;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 11px;
+}
+QSpinBox#CodecRowPriority {
+    background-color: #FFFFFF;
+    border: 1px solid #D0D7DE;
+    border-radius: 6px;
+    padding: 4px 10px;
+    color: #1F2328;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 26px;
+}
+QSpinBox#CodecRowPriority:focus {
+    border-color: #E25A0E;
+}
+QToolButton#CodecRowReorderBtn {
+    background-color: #F6F8FA;
+    border: 1px solid #D0D7DE;
+    border-radius: 6px;
+    color: #57606A;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0;
+}
+QToolButton#CodecRowReorderBtn:hover {
+    background-color: #EAF0F6;
+    border-color: #B7C0CB;
+    color: #1F2328;
+}
+QToolButton#CodecRowReorderBtn:pressed {
+    background-color: #DDE3E8;
 }

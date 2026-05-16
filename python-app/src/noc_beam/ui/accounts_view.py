@@ -130,7 +130,11 @@ class AcctRow(QFrame):
         uri_text = f"sip:{account.username}@{account.domain}"
         self.uri = QLabel(uri_text, self)
         self.uri.setObjectName("AcctRowUri")
-        self.uri.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        # Do NOT enable TextSelectableByMouse here -- on Windows it
+        # makes Qt render the QLabel like a QLineEdit (white inset
+        # box, flat border) which was the "white text field" complaint.
+        # Right-click → Copy URI on the kebab still works for selection.
+        self.uri.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
         # ---- Tier 3: badges row
         self.badges_layout = QHBoxLayout()

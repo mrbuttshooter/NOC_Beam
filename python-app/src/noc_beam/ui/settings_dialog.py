@@ -213,13 +213,28 @@ class SettingsDialog(QDialog):
         self._general_theme_combo.addItem("Dark", "dark")
         # Mirror current selection from the main theme_combo.
         try:
-            self._general_theme_combo.setCurrentText(
-                "Dark" if getattr(self._settings.appearance, "theme", "light") == "dark"
-                else "Light"
-            )
-            self._general_theme_combo.currentTextChanged.connect(
-                lambda t: self.theme_combo.setCurrentText(t) if hasattr(self, "theme_combo") else None
-            )
+            current_theme = getattr(self._settings.appearance, "theme", "light")
+            idx = self._general_theme_combo.findData(current_theme)
+            if idx >= 0:
+                self._general_theme_combo.setCurrentIndex(idx)
+
+            # Sync the General combo's pick onto theme_combo via DATA,
+            # not display text. Appearance pane's theme_combo items are
+            # labeled "Light (Bria-style)" / "Dark (NOC dashboard)" so
+            # setCurrentText("Dark") used to fail silently -- which is
+            # why picking Dark in General never actually changed the
+            # theme.
+            def _sync_theme_to_appearance(text: str) -> None:
+                if not hasattr(self, "theme_combo"):
+                    return
+                # Map our label ("Light" / "Dark") -> data key.
+                data = self._general_theme_combo.currentData()
+                if not data:
+                    return
+                idx = self.theme_combo.findData(data)
+                if idx >= 0:
+                    self.theme_combo.setCurrentIndex(idx)
+            self._general_theme_combo.currentTextChanged.connect(_sync_theme_to_appearance)
         except Exception:
             pass
         theme_row = QHBoxLayout()
@@ -350,35 +365,122 @@ class SettingsDialog(QDialog):
         return w
 
     def _build_codec_pane(self) -> QWidget:
+        from PySide6.QtWidgets import QScrollArea
         w = QWidget()
         w.setObjectName("SettingsPane")
         outer = QVBoxLayout(w)
-        outer.setContentsMargins(20, 18, 20, 18)
-        outer.setSpacing(10)
+        outer.setContentsMargins(24, 20, 24, 20)
+        outer.setSpacing(12)
+
         title = QLabel("Codecs")
         title.setObjectName("SettingsTitle")
         outer.addWidget(title)
-        hint = QLabel("Higher priority = preferred earlier in offers/answers. 0 disables.")
-        hint.setObjectName("ViewHint")
-        hint.setWordWrap(True)
-        outer.addWidget(hint)
+        subtitle = QLabel(
+            "Higher priority = preferred earlier in SIP offers/answers. "
+            "0 disables. Use ▲ / ▼ to bump priority by 5."
+        )
+        subtitle.setObjectName("SettingsSubtitle")
+        subtitle.setWordWrap(True)
+        outer.addWidget(subtitle)
+
+        # Single card wraps the codec list (modern, card-based UI).
+        card = QFrame()
+        card.setObjectName("SettingsCard")
+        card_l = QVBoxLayout(card)
+        card_l.setContentsMargins(0, 0, 0, 0)
+        card_l.setSpacing(0)
+
+        # Header strip
+        header = QFrame()
+        header.setObjectName("CodecListHeader")
+        h_l = QHBoxLayout(header)
+        h_l.setContentsMargins(18, 12, 18, 12)
+        h_l.setSpacing(12)
+        h_name = QLabel("CODEC")
+        h_name.setObjectName("CodecListHeaderLabel")
+        h_prio = QLabel("PRIORITY")
+        h_prio.setObjectName("CodecListHeaderLabel")
+        h_prio.setFixedWidth(110)
+        h_prio.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        h_actions = QLabel("")
+        h_actions.setFixedWidth(70)
+        h_l.addWidget(h_name, 1)
+        h_l.addWidget(h_prio)
+        h_l.addWidget(h_actions)
+        card_l.addWidget(header)
+
+        # codec_id → QSpinBox map for apply_to to read directly.
+        self._codec_priority_spins: dict[str, QSpinBox] = {}
 
         codecs = list_codecs()
-        self.codec_table = QTableWidget(len(codecs), 2)
-        self.codec_table.setHorizontalHeaderLabels(["Codec", "Priority (0=off, 255=max)"])
-        self.codec_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.codec_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        for row, c in enumerate(codecs):
-            item = QTableWidgetItem(c.display_name)
-            item.setData(Qt.UserRole, c.codec_id)
-            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-            self.codec_table.setItem(row, 0, item)
+        for c in codecs:
+            row = QFrame()
+            row.setObjectName("CodecRow")
+            row_l = QHBoxLayout(row)
+            row_l.setContentsMargins(18, 10, 18, 10)
+            row_l.setSpacing(12)
+
+            # Name column
+            name_col = QFrame()
+            name_col_l = QVBoxLayout(name_col)
+            name_col_l.setContentsMargins(0, 0, 0, 0)
+            name_col_l.setSpacing(2)
+            name_lbl = QLabel(c.codec_id.split("/", 1)[0])
+            name_lbl.setObjectName("CodecRowName")
+            sub_lbl = QLabel(c.display_name)
+            sub_lbl.setObjectName("CodecRowSub")
+            name_col_l.addWidget(name_lbl)
+            name_col_l.addWidget(sub_lbl)
+
+            # Priority spin
             spin = QSpinBox()
             spin.setRange(0, 255)
             stored = self._lookup_stored_priority(c.codec_id)
             spin.setValue(stored if stored is not None else c.priority)
-            self.codec_table.setCellWidget(row, 1, spin)
-        outer.addWidget(self.codec_table, 1)
+            spin.setFixedWidth(110)
+            spin.setObjectName("CodecRowPriority")
+            spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._codec_priority_spins[c.codec_id] = spin
+
+            # Reorder buttons
+            up_btn = QToolButton()
+            up_btn.setObjectName("CodecRowReorderBtn")
+            up_btn.setText("▲")
+            up_btn.setFixedSize(28, 28)
+            up_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            up_btn.setToolTip("Boost priority by 5")
+            up_btn.clicked.connect(
+                lambda _checked=False, s=spin: s.setValue(min(255, s.value() + 5))
+            )
+            down_btn = QToolButton()
+            down_btn.setObjectName("CodecRowReorderBtn")
+            down_btn.setText("▼")
+            down_btn.setFixedSize(28, 28)
+            down_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            down_btn.setToolTip("Lower priority by 5")
+            down_btn.clicked.connect(
+                lambda _checked=False, s=spin: s.setValue(max(0, s.value() - 5))
+            )
+            reorder_wrap = QFrame()
+            reorder_l = QHBoxLayout(reorder_wrap)
+            reorder_l.setContentsMargins(0, 0, 0, 0)
+            reorder_l.setSpacing(4)
+            reorder_l.addWidget(up_btn)
+            reorder_l.addWidget(down_btn)
+            reorder_wrap.setFixedWidth(70)
+
+            row_l.addWidget(name_col, 1)
+            row_l.addWidget(spin)
+            row_l.addWidget(reorder_wrap)
+            card_l.addWidget(row)
+
+        outer.addWidget(card)
+        outer.addStretch(1)
+        # Legacy compat shim: apply_to in older revisions iterated
+        # codec_table.rowCount() / cellWidget. We now read from
+        # _codec_priority_spins directly; keep a None-valued table
+        # alias to avoid AttributeError from any external caller.
+        self.codec_table = None
         return w
 
     def _build_appearance_pane(self) -> QWidget:
@@ -643,21 +745,18 @@ class SettingsDialog(QDialog):
 
         new_priorities: dict[str, int] = {}
         codec_map: dict[str, int] = {}
-        for row in range(self.codec_table.rowCount()):
-            item = self.codec_table.item(row, 0)
-            spin = self.codec_table.cellWidget(row, 1)
-            if item is None or spin is None:
+        # Read from the codec_id -> QSpinBox dict built by the new
+        # _build_codec_pane. Falls back to {} if PJSIP wasn't loaded
+        # when Settings opened (empty dict = don't overwrite).
+        spins = getattr(self, "_codec_priority_spins", {})
+        for codec_id, spin in spins.items():
+            try:
+                prio = int(spin.value())
+            except Exception:
                 continue
-            codec_id = item.data(Qt.UserRole)
-            prio = int(spin.value())
             codec_map[codec_id] = prio
-            # Key by full codec_id so opus/48000/1 and opus/48000/2
-            # don't collide and overwrite each other (last-write-wins
-            # bug from the trimmed "/".join(...[:2]) prefix key).
             new_priorities[codec_id] = prio
-        # Guard against the "opened Settings before PJSIP loaded" case:
-        # an empty codec table would overwrite the user's saved
-        # priorities with {} and silently destroy their tuning.
-        if self.codec_table.rowCount() > 0:
+        # Guard: empty codec list = don't wipe saved priorities.
+        if spins:
             settings.codecs.priorities = new_priorities
         return codec_map
