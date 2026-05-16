@@ -55,7 +55,6 @@ from noc_beam.sip.events import sip_events
 from noc_beam.sip.quality import CallQualitySampler
 from noc_beam.sip.registration_retry import RegistrationRetry
 from noc_beam.ui.account_dialog import AccountDialog
-from noc_beam.ui.account_settings_dialog import AccountSettingsDialog
 from noc_beam.ui.accounts_view import AccountsView
 from noc_beam.ui.audio_strip import AudioStrip
 from noc_beam.ui.bottom_tabs import BottomTabs, Tab
@@ -192,7 +191,6 @@ class PhoneShell(QMainWindow):
             ("Softphone", [
                 ("Add account...",            self._on_add_account),
                 ("Edit active account...",    self._on_edit_account),
-                ("Account settings...",       self._on_account_settings),
                 ("Remove active account...",  self._on_remove_account),
                 ("---", None),
                 ("Settings...",               self._on_settings),
@@ -206,7 +204,6 @@ class PhoneShell(QMainWindow):
                 ("Diagnostics...",            self._on_diagnostics),
                 ("---", None),
                 ("Always on Top",             self._on_toggle_always_on_top),
-                ("Open wide dashboard...",    self._on_open_wide),
             ]),
             ("Help", [
                 ("About NOC_Beam",            self._on_about),
@@ -638,21 +635,6 @@ class PhoneShell(QMainWindow):
         # delete-in-call guard, registering-banner, and re-register
         # handling.
         self._edit_account_by_id(acc.id)
-
-    def _on_account_settings(self):
-        acc = self._selected_account()
-        if acc is None:
-            QMessageBox.information(self, "Account settings", "Select an account first."); return
-        dlg = AccountSettingsDialog(account=acc, parent=self)
-        if _open_modal(dlg):
-            new_cfg = dlg.result_account()
-            accounts = [new_cfg if a.id == acc.id else a for a in self.accounts]
-            if not self._save_accounts_or_warn(accounts):
-                return
-            self.accounts = accounts
-            SipEndpoint.instance().remove_account(acc.id)
-            if new_cfg.enabled: self._add_account_to_endpoint(new_cfg)
-            self._refresh_accounts()
 
     def _on_remove_account(self):
         acc = self._selected_account()
@@ -1522,10 +1504,6 @@ class PhoneShell(QMainWindow):
                 self.settings.appearance.high_contrast,
                 theme=theme,
             )
-        wide_window = getattr(self, "_wide_window", None)
-        drawer = getattr(wide_window, "drawer", None)
-        if drawer is not None:
-            drawer.set_reduced_motion(self.settings.appearance.reduced_motion)
 
     def _on_diagnostics(self):
         from noc_beam.ui.diagnostics_view import DiagnosticsView
@@ -1633,13 +1611,6 @@ class PhoneShell(QMainWindow):
             if self._always_on_top:
                 self.raise_()
                 self.activateWindow()
-
-    def _on_open_wide(self):
-        from noc_beam.ui.main_window import MainWindow
-        if not hasattr(self, "_wide_window"):
-            self._wide_window = MainWindow()
-        self._wide_window.show()
-        self._wide_window.raise_(); self._wide_window.activateWindow()
 
     def _on_about(self):
         QMessageBox.about(
