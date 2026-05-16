@@ -1431,8 +1431,11 @@ class PhoneShell(QMainWindow):
             )
         # 3. If a CONFIRMED call is in progress, defer the audio/codec
         # apply -- swapping devices mid-call kills the live conf bridge.
+        # HELD calls also own a media slot (resumes back to CONFIRMED
+        # which re-uses the bridge), so they need the same protection.
         in_call = any(
-            r.state == CallState.CONFIRMED for r in self.calls.active()
+            r.state in (CallState.CONFIRMED, CallState.HELD)
+            for r in self.calls.active()
         )
         if in_call:
             self._set_status(
