@@ -38,18 +38,24 @@ def expand(spec: TestSpec) -> list[TestCall]:
     if spec.mode not in ("matrix", "paired", "fan-out", "fan-in"):
         raise ValueError(f"Unknown test plan mode: {spec.mode}")
 
-    if not spec.callers or not spec.targets:
+    if not spec.targets:
         return []
+    # Empty callers list -> treat as a single wildcard caller so the
+    # runner's _resolve_account falls through to "use the active
+    # account". The common demo workflow is "paste 20 numbers into
+    # targets, leave callers blank, click Run" -- previously this
+    # silently returned [] (no calls).
+    callers = spec.callers if spec.callers else ["*"]
 
     pairs: list[tuple[str, str]]
     if spec.mode == "matrix":
-        pairs = [(caller, target) for caller in spec.callers for target in spec.targets]
+        pairs = [(caller, target) for caller in callers for target in spec.targets]
     elif spec.mode == "paired":
-        pairs = list(zip(spec.callers, spec.targets, strict=False))
+        pairs = list(zip(callers, spec.targets, strict=False))
     elif spec.mode == "fan-out":
-        pairs = [(spec.callers[0], target) for target in spec.targets]
+        pairs = [(callers[0], target) for target in spec.targets]
     else:
-        pairs = [(caller, spec.targets[0]) for caller in spec.callers]
+        pairs = [(caller, spec.targets[0]) for caller in callers]
 
     return [
         TestCall(index=index, caller_number=caller, target_number=target)

@@ -1620,7 +1620,22 @@ class PhoneShell(QMainWindow):
         except Exception: log.exception("send_dtmf failed")
 
     def _on_settings(self):
-        dlg = SettingsDialog(self.settings, parent=self)
+        # Pass the active account so the Account pane renders its
+        # full identity + server + registration sections instead of
+        # the empty "Add an account from the brand row" copy when
+        # the user already HAS accounts configured.
+        active_acct = None
+        try:
+            if self._active_account_id:
+                active_acct = next(
+                    (a for a in self.accounts if a.id == self._active_account_id),
+                    None,
+                )
+            if active_acct is None and self.accounts:
+                active_acct = self.accounts[0]
+        except Exception:
+            active_acct = None
+        dlg = SettingsDialog(self.settings, account=active_acct, parent=self)
         # Apply-without-close: lets the user click Apply and watch the
         # change land while the dialog stays open. Wrapped because the
         # unit-test FakeDialog stand-in doesn't define apply_requested.
@@ -1643,6 +1658,16 @@ class PhoneShell(QMainWindow):
              abort the rest; each call is its own try
         """
         from noc_beam.codecs.manager import set_priority
+        # Snapshot audio device indexes BEFORE apply_to mutates them
+        # so we can skip the costly set_active_devices() call when
+        # only the theme / appearance changed. Without this guard
+        # every Apply re-opened WASAPI handles (100-400ms each on
+        # Windows), making theme-only swaps feel laggy.
+        try:
+            _prev_in = self.settings.audio.input_device
+            _prev_out = self.settings.audio.output_device
+        except Exception:
+            _prev_in, _prev_out = -1, -1
         # 1. Always mutate the in-memory GlobalSettings + collect codec map.
         try:
             codec_map = dlg.apply_to(self.settings)
@@ -1678,13 +1703,19 @@ class PhoneShell(QMainWindow):
                     set_priority(cid, prio)
                 except Exception:
                     log.exception("set_priority(%s) failed", cid)
-            try:
-                set_active_devices(
-                    self.settings.audio.input_device,
-                    self.settings.audio.output_device,
-                )
-            except Exception:
-                log.exception("set_active_devices failed")
+            # Only re-bind audio devices when the indexes actually
+            # changed. Re-binding the same device on Windows takes
+            # 100-400ms re-opening the WASAPI handle -- noticeable
+            # lag for users who only touched the theme.
+            if (self.settings.audio.input_device != _prev_in
+                    or self.settings.audio.output_device != _prev_out):
+                try:
+                    set_active_devices(
+                        self.settings.audio.input_device,
+                        self.settings.audio.output_device,
+                    )
+                except Exception:
+                    log.exception("set_active_devices failed")
             self._set_status("Settings applied", "ok", transient=True)
         # 4. Theme/reduced-motion is always safe to apply -- no audio
         # path involved.

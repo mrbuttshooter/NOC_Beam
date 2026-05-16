@@ -109,6 +109,14 @@ class AudioSettings:
     ringer_device: int = -1
     ec_tail_ms: int = 200
     clock_rate: int = 16000
+    # Persisted volumes 0..100 -- the AudioStrip top-bar sliders
+    # write these on every adjust. Without declaring them on the
+    # dataclass, the writer succeeds at runtime (Python allows
+    # arbitrary attribute creation) but `asdict()` in save_settings
+    # only emits declared fields, so the value gets silently
+    # dropped on disk and the sliders reset to 75 on every restart.
+    master_volume_pct: int = 75
+    mic_volume_pct: int = 75
 
 
 @dataclass

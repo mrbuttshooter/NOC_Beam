@@ -832,41 +832,30 @@ class SipEndpoint:
     def _build_info_param(content_type: str, body: str):  # type: ignore[no-untyped-def]
         """Construct a pjsua2.CallSendRequestParam for a SIP INFO with body.
 
-        Field-name compatibility across pjsua2 builds:
-          * 2.10-2.12  : prm.txOption is a SipTxOption with
-                         contentType + msgBody
-          * 2.13+      : prm.msgData is a SipMsgData (NOT SipTxOption!)
-                         with its own contentType + msgBody
-        Earlier this assigned a SipTxOption to msgData on 2.13+ builds
-        which SWIG-rejected (TypeError), so _send_dtmf_info silently
-        fell back to RFC2833 every time -- defeating the user's
-        explicit DTMF=INFO config.
+        Both `prm.msgData` (2.13+) and `prm.txOption` (2.10-2.12)
+        are typed as `SipTxOption` -- the slot was renamed across
+        versions but the underlying struct is the same. The earlier
+        attempt to instantiate `pj.SipMsgData()` for the msgData
+        branch was wrong: SipMsgData is a separate type used for
+        incoming-message delivery, not outgoing-request bodies.
+        SWIG would TypeError on the assignment.
         """
         prm = pj.CallSendRequestParam()
         prm.method = "INFO"
-        # Carrier-attribute first: pick msgData on 2.13+ (with its
-        # native SipMsgData type) or txOption on 2.10-2.12 (with
-        # SipTxOption). We instantiate the RIGHT type per branch.
-        if hasattr(prm, "msgData") and hasattr(pj, "SipMsgData"):
-            data = pj.SipMsgData()
-            if not hasattr(data, "contentType") or not hasattr(data, "msgBody"):
-                raise RuntimeError(
-                    "pjsua2 SipMsgData is missing contentType/msgBody"
-                )
-            data.contentType = content_type
-            data.msgBody = body
-            prm.msgData = data
-            log.debug("SIP INFO DTMF using msgData/SipMsgData (pjsua2 >= 2.13)")
-        elif hasattr(prm, "txOption") and hasattr(pj, "SipTxOption"):
-            opt = pj.SipTxOption()
-            if not hasattr(opt, "contentType") or not hasattr(opt, "msgBody"):
-                raise RuntimeError(
-                    "pjsua2 SipTxOption is missing contentType/msgBody"
-                )
-            opt.contentType = content_type
-            opt.msgBody = body
+        opt = pj.SipTxOption()
+        if not hasattr(opt, "contentType") or not hasattr(opt, "msgBody"):
+            raise RuntimeError(
+                "pjsua2 SipTxOption is missing contentType/msgBody"
+            )
+        opt.contentType = content_type
+        opt.msgBody = body
+        # The slot is `msgData` on pjsua2 2.13+, `txOption` before.
+        if hasattr(prm, "msgData"):
+            prm.msgData = opt
+            log.debug("SIP INFO DTMF using msgData slot (pjsua2 >= 2.13)")
+        elif hasattr(prm, "txOption"):
             prm.txOption = opt
-            log.debug("SIP INFO DTMF using txOption/SipTxOption (pjsua2 <= 2.12)")
+            log.debug("SIP INFO DTMF using txOption slot (pjsua2 <= 2.12)")
         else:
             raise RuntimeError(
                 "pjsua2 CallSendRequestParam exposes neither msgData nor "

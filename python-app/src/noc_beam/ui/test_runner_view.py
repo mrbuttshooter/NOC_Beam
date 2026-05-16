@@ -62,9 +62,20 @@ class TestRunnerView(QMainWindow):
         self.callers_edit = QTextEdit()
         self.callers_edit.setObjectName("TestRunnerPasteBox")
         self.callers_edit.setAcceptRichText(False)
+        # Leaving the callers field blank dispatches via the first
+        # enabled account. Otherwise paste one account username per
+        # line (or `*` / `auto`). Stops the silent "no matching
+        # account" failure when users paste dial-target lists into
+        # the callers box by mistake.
+        self.callers_edit.setPlaceholderText(
+            "Account usernames (one per line) — leave blank to use the active account"
+        )
         self.targets_edit = QTextEdit()
         self.targets_edit.setObjectName("TestRunnerPasteBox")
         self.targets_edit.setAcceptRichText(False)
+        self.targets_edit.setPlaceholderText(
+            "Target numbers or full SIP URIs (one per line)"
+        )
 
         self.mode_combo = QComboBox()
         for label, value in (

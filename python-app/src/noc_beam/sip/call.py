@@ -31,10 +31,18 @@ if PJSUA2_AVAILABLE:
         """A single dialog. Lifecycle ends at DISCONNECTED."""
 
         def __init__(self, account, call_id: int = -1, account_id: str = "") -> None:  # noqa: ANN001
-            super().__init__(account, call_id)
+            # Stash account ref BEFORE super().__init__ so PJSIP
+            # callbacks (onCallState etc.) that may fire on a worker
+            # thread during the C++ super-init have access to it.
+            # Previously the assignment ran AFTER super().__init__,
+            # so a fast onCallState (e.g. an incoming INVITE that's
+            # already disconnected by the time we wrap it) could see
+            # getattr(self, "_account", None) == None and skip the
+            # "remove self from acc.calls" cleanup branch.
             self._account = account
             self._account_id = account_id
             self.remote_uri = ""
+            super().__init__(account, call_id)
 
         # ------------------------------------------------------------------
         # pjsua2 callbacks (PJSIP thread)

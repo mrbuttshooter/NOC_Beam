@@ -478,8 +478,36 @@ class TestRunner(QObject):
         return timer
 
     def _resolve_account(self, caller_number: str) -> AccountConfig | None:
+        """Resolve a caller token into a registered AccountConfig.
+
+        Acceptance order:
+          1. Blank / "*" / "auto" -> first enabled account (most common
+             demo case: user pastes a target list, doesn't fill callers,
+             expects "use my one account")
+          2. Exact username match
+          3. Exact id match (account UUID)
+          4. account_id match (for multi-account dispatch where the
+             caller column carries the account selector)
+        Previously this required exact username equality only, so
+        a user who pasted a list of numbers into the callers field
+        (e.g. their own dial-out numbers, not the account username)
+        got "no matching account" on every row -- silent total
+        failure across the whole Test Runner job.
+        """
+        if not self.accounts:
+            return None
+        token = (caller_number or "").strip()
+        # Empty / wildcard -> first enabled account
+        if not token or token in ("*", "auto", "any"):
+            for account in self.accounts:
+                if getattr(account, "enabled", True):
+                    return account
+            return self.accounts[0]
         for account in self.accounts:
-            if account.username == caller_number:
+            if account.username == token:
+                return account
+        for account in self.accounts:
+            if getattr(account, "id", None) == token:
                 return account
         return None
 
