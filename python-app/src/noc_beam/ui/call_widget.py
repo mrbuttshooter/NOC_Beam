@@ -137,9 +137,14 @@ class CallWidget(QWidget):
             "phone-down", "End call", checkable=False, color="#FFFFFF",
             object_name="CallRowEndBtn",
         )
-        # End button is a touch wider (visual rank > Hold/Mute/Transfer)
-        # but matches the new 36 px height for vertical alignment.
-        self.hangup_btn.setFixedSize(60, 36)
+        # End button: 48 px wide (down from 60). At 60 px the four
+        # action buttons + 4 px spacing + avatar + peer + duration
+        # column pushed the card past the parent's content width,
+        # clipping the End button off the right edge in the
+        # ~420 px softphone window. 48 still reads as wider /
+        # higher visual rank than the 36 px square Mute/Hold/Transfer
+        # while leaving room inside the layout.
+        self.hangup_btn.setFixedSize(48, 36)
 
         # Speaker stays around for the QSS contract / API but is
         # hidden by default in compact mode -- speaker mute already

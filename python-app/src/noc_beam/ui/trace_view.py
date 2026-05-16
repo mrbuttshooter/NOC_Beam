@@ -286,8 +286,29 @@ class TraceMsgRow(QFrame):
         self.customContextMenuRequested.connect(self._show_menu)
 
     def mousePressEvent(self, event):  # noqa: N802, ANN001
+        # Only toggle expansion when the click lands on the SUMMARY
+        # (the header row) -- NOT on the expanded body itself. Was
+        # collapsing the body the moment the user clicked anywhere
+        # inside it (selecting text, copying), making the row feel
+        # impossible to read. Also accept() the event so it doesn't
+        # bubble up to TraceDialogRow.mousePressEvent and collapse
+        # the dialog row too (the "whole trace closes" bug).
         if event.button() == Qt.MouseButton.LeftButton:
-            self.body.setVisible(not self.body.isVisible())
+            try:
+                hit = self.childAt(event.position().toPoint())
+            except Exception:
+                hit = None
+            # If the click landed inside the body widget (or any of
+            # its descendants), do nothing -- let the click select
+            # text inside the body.
+            on_body = (
+                hit is self.body
+                or (hit is not None and self.body.isAncestorOf(hit))
+            )
+            if not on_body:
+                self.body.setVisible(not self.body.isVisible())
+            event.accept()
+            return
         super().mousePressEvent(event)
 
     def _show_menu(self, pos) -> None:
@@ -458,10 +479,27 @@ class TraceDialogRow(QFrame):
         self.style().unpolish(self); self.style().polish(self)
 
     def mousePressEvent(self, event):  # noqa: N802, ANN001
+        # Toggle ONLY when the click is on the dialog row's own
+        # summary line (the call-ID header bar at the top), NOT on
+        # the expanded body's content. Without this, clicking any
+        # child TraceMsgRow bubbled up here and collapsed the
+        # entire dialog (the "whole trace closes" UX bug). Same
+        # accept() pattern as TraceMsgRow above.
         if event.button() == Qt.MouseButton.LeftButton:
-            self._expanded = not self._expanded
-            self._body.setVisible(self._expanded)
-            self._caret.setText("▾" if self._expanded else "▸")
+            try:
+                hit = self.childAt(event.position().toPoint())
+            except Exception:
+                hit = None
+            on_body = (
+                hit is self._body
+                or (hit is not None and self._body.isAncestorOf(hit))
+            )
+            if not on_body:
+                self._expanded = not self._expanded
+                self._body.setVisible(self._expanded)
+                self._caret.setText("▾" if self._expanded else "▸")
+            event.accept()
+            return
         super().mousePressEvent(event)
 
     # Filter helpers --------------------------------------------------
