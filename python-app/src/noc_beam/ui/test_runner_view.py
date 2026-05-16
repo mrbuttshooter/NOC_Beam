@@ -254,7 +254,10 @@ class TestRunnerView(QMainWindow):
             self._append_call_row(call)
 
         self.export_btn.setEnabled(False)
-        self.cancel_btn.setEnabled(True)
+        # Stop (header) toggles with run state; Close (footer) stays
+        # always enabled -- user should always be able to close the
+        # window even between runs.
+        self.stop_btn.setEnabled(True)
         self._refresh_summary()
 
         self.runner = Runner(spec, self.accounts, self)
@@ -286,7 +289,7 @@ class TestRunnerView(QMainWindow):
     def _on_run_complete(self, results: list[RunnerResult]) -> None:
         self.results = list(results)
         self.runner = None
-        self.cancel_btn.setEnabled(False)
+        self.stop_btn.setEnabled(False)
         self.export_btn.setEnabled(bool(self.results))
         self._refresh_plan_preview()
         self._refresh_summary()
