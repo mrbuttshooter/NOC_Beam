@@ -502,13 +502,35 @@ class SipEndpoint:
             acc = self._accounts.get(account_id)
             if acc is None:
                 raise ValueError(f"Unknown account {account_id}")
-            if not target_uri.startswith(("sip:", "sips:", "tel:")):
-                target_uri = f"sip:{target_uri}@{acc.cfg.domain}"
+            target_uri = self._normalize_dial_target(target_uri, acc.cfg.domain)
             call = SipCall(acc, account_id=account_id)
             prm = pj.CallOpParam(True)
             call.makeCall(target_uri, prm)
             acc.calls.append(call)
             return call
+
+    @staticmethod
+    def _normalize_dial_target(target: str, account_domain: str) -> str:
+        """Turn a user-typed dial string into a valid SIP target URI.
+
+        Rules:
+          - Already a sip:/sips:/tel: URI -> return unchanged.
+          - Contains `@` (e.g. "music@iptel.org") -> assumed
+            user@host, just prepend "sip:" to make it a real URI.
+            Without this branch, the bare-number fallback below
+            would produce "sip:music@iptel.org@account_domain"
+            with TWO @ signs, which pjsua2 rejects (empty-string
+            exception -> blank "Call failed" dialog).
+          - Bare userpart / number -> sip:{target}@{account_domain}.
+        """
+        t = (target or "").strip()
+        if not t:
+            raise ValueError("Empty dial target")
+        if t.startswith(("sip:", "sips:", "tel:")):
+            return t
+        if "@" in t:
+            return f"sip:{t}"
+        return f"sip:{t}@{account_domain}"
 
     def answer_call(self, call: SipCall, code: int = 200) -> None:
         prm = pj.CallOpParam(True)

@@ -1018,7 +1018,20 @@ class PhoneShell(QMainWindow):
             self.bottom_tabs.select(int(Tab.DIALPAD))
         except Exception as e:
             log.exception("make_call failed")
-            QMessageBox.warning(self, "Call failed", str(e))
+            # Build a guaranteed-non-empty message. Some pjsua2
+            # exceptions stringify to "" which produced an empty
+            # dialog with no actionable hint (just a warning icon
+            # and an OK button). Include the exception type and
+            # the target so the user can at least see what
+            # they tried to call.
+            msg = str(e).strip()
+            if not msg:
+                msg = f"{type(e).__name__} (no message)"
+            QMessageBox.warning(
+                self,
+                "Call failed",
+                f"Could not place call to:\n\n  {target}\n\n{msg}",
+            )
 
     def _selected_pjsua_call(self):
         if self._selected_call_id is None: return None
