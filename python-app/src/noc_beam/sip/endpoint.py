@@ -33,6 +33,50 @@ log = logging.getLogger(__name__)
 _SIP_STATUS_RE = re.compile(r"^SIP/2\.0\s+(\d{3})(?:\s+(.*))?$", re.IGNORECASE)
 
 
+def _system_nameservers() -> list[str]:
+    """Return the system's DNS resolvers in IP form for PJSIP.
+
+    PJSIP's resolver needs explicit nameserver IPs; it does NOT
+    consult the OS resolver by default. On Windows we read the
+    active adapters' DNS entries via WMI/getaddrinfo. As a
+    last-resort fallback we add public resolvers (Google + Cloudflare)
+    so a misconfigured box still gets external SIP DNS instead of
+    silently failing every non-registered domain.
+    """
+    out: list[str] = []
+    try:
+        import subprocess
+        # `nslookup` parses the default DNS server out of ipconfig
+        # cheaply; we just need it for PJSIP. Wrapped tight so an
+        # antivirus quarantining the binary or a non-Windows port
+        # falls straight through to the public fallback below.
+        result = subprocess.run(
+            ["nslookup", "google.com"],
+            capture_output=True, text=True, timeout=3,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        for line in (result.stdout or "").splitlines():
+            s = line.strip()
+            if s.lower().startswith("address:") and "#" not in s:
+                ip = s.split(":", 1)[1].strip()
+                # Skip the resolved answer (after "Name:" line);
+                # the first "Address:" before "Name:" is the
+                # resolver itself.
+                if ip and ip not in out:
+                    out.append(ip)
+                # We only want the first one (the active resolver).
+                if len(out) >= 1:
+                    break
+    except Exception:
+        log.debug("Could not detect system DNS via nslookup; using public fallback")
+    # Public-resolver fallback so PJSIP DNS always works even if
+    # we couldn't read the system config (e.g. corporate sandbox).
+    for fallback in ("8.8.8.8", "1.1.1.1"):
+        if fallback not in out:
+            out.append(fallback)
+    return out
+
+
 def collect_stun_servers(accounts: list[AccountConfig] | None) -> list[str]:
     if not accounts:
         return []
@@ -98,6 +142,23 @@ class SipEndpoint:
                 for stun_server in collect_stun_servers(accounts):
                     ep_cfg.uaConfig.stunServer.append(stun_server)
                 ep_cfg.uaConfig.stunIgnoreFailure = True
+                # DNS nameservers for PJSIP's resolver. Without this,
+                # gethostbyname() on non-cached SIP domains returns
+                # PJ_ERESOLVE and outbound INVITEs to e.g.
+                # sip.linphone.org fail before they leave the box --
+                # the registrar's IP is the only host PJSIP knows
+                # because that's what REGISTER cached.
+                # Read the system resolvers and pass them in so
+                # external SIP URIs (anonymous test targets, peer
+                # accounts on other domains) actually resolve.
+                for ns in _system_nameservers():
+                    try:
+                        ep_cfg.uaConfig.nameserver.append(ns)
+                    except Exception:
+                        # Older pjsua2 builds may not expose
+                        # nameserver as a list-append container.
+                        log.warning("pjsua2 doesn't accept nameserver entries on this build")
+                        break
                 ep_cfg.logConfig.level = settings.log_level
                 ep_cfg.logConfig.consoleLevel = settings.log_level
                 ep_cfg.medConfig.clockRate = settings.audio.clock_rate
