@@ -403,6 +403,9 @@ class TestRunnerView(QMainWindow):
             # for badge text "RUNNING") never matched, so the "running"
             # chip was stuck at 0 throughout the run.
             self._set_result_badge(row, "running")
+        # Integer counter -- see _refresh_summary docstring for why
+        # this beats scanning every table row's findChild on each event.
+        self._running_count = getattr(self, "_running_count", 0) + 1
         self._refresh_summary()
 
     def _on_call_completed(self, result: RunnerResult) -> None:
@@ -412,11 +415,23 @@ class TestRunnerView(QMainWindow):
             row = self._append_call_row(result.call)
         self._populate_result_row(row, result)
         self.export_btn.setEnabled(True)
+        self._running_count = max(0, getattr(self, "_running_count", 0) - 1)
         self._refresh_summary()
 
     def _on_run_complete(self, results: list[RunnerResult]) -> None:
         self.results = list(results)
+        # Reclaim the Runner promptly. parent=self pins it to the
+        # window until window-close otherwise; deleteLater fires the
+        # destroyed signal NOW so subscribers tear down before the
+        # next Run cycle stacks a fresh Runner.
+        if self.runner is not None:
+            try:
+                self.runner.deleteLater()
+            except Exception:
+                pass
         self.runner = None
+        # Reset the running counter for the next cycle.
+        self._running_count = 0
         self.stop_btn.setEnabled(False)
         self.export_btn.setEnabled(bool(self.results))
         self._refresh_plan_preview()
@@ -535,15 +550,11 @@ class TestRunnerView(QMainWindow):
     def _refresh_summary(self) -> None:
         passed = sum(1 for result in self.results if result.result == "PASS")
         failed = sum(1 for result in self.results if result.result == "FAIL")
-        # Running / pending now read from the RESULT cell widget (a QLabel
-        # badge) rather than a text item, since we switched to coloured pills.
-        running = 0
-        for row in range(self.table.rowCount()):
-            w = self.table.cellWidget(row, 3)
-            if w is not None:
-                badge = w.findChild(QLabel, "TestRunnerBadge")
-                if badge is not None and badge.text() == "RUNNING":
-                    running += 1
+        # Running count maintained as an integer (incremented in
+        # _on_call_started, decremented in _on_call_completed). Was
+        # scanning every table row's findChild(QLabel) on every signal
+        # tick -- O(N) per event, quadratic over the whole run.
+        running = getattr(self, "_running_count", 0)
         completed = passed + failed + running
         pending = max(0, self.table.rowCount() - completed)
         self.summary_passed.setText(f"{passed} passed")

@@ -66,9 +66,31 @@ class CallQualitySampler(QObject):
         # auto-arm whenever a call is added or its state changes
         # toward CONFIRMED.
         self._started = False
+        # Store the lambda references so destroyed-time teardown can
+        # disconnect them by slot. Without this each PhoneShell
+        # instance leaked a pair of lambdas onto the singleton
+        # call_manager (same class of bug as the strip-refresh
+        # lambdas the v3 audit identified as the test-hang root cause).
+        self._arm_on_added = lambda _cid: self._ensure_running()
+        self._arm_on_updated = lambda _cid: self._ensure_running()
         try:
-            manager.call_added.connect(lambda _cid: self._ensure_running())
-            manager.call_updated.connect(lambda _cid: self._ensure_running())
+            manager.call_added.connect(self._arm_on_added)
+            manager.call_updated.connect(self._arm_on_updated)
+        except Exception:
+            pass
+        self.destroyed.connect(self._disconnect)
+
+    def _disconnect(self, *_args) -> None:
+        try:
+            self._manager.call_added.disconnect(self._arm_on_added)
+        except Exception:
+            pass
+        try:
+            self._manager.call_updated.disconnect(self._arm_on_updated)
+        except Exception:
+            pass
+        try:
+            self._timer.stop()
         except Exception:
             pass
 
@@ -142,8 +164,18 @@ class CallQualitySampler(QObject):
             if rx is None:
                 return None
             loss_pkts = float(getattr(rx, "loss", 0))
-            total_pkts = float(getattr(rx, "pkt", 0)) + loss_pkts
-            loss_pct = (100.0 * loss_pkts / total_pkts) if total_pkts > 0 else 0.0
+            received = float(getattr(rx, "pkt", 0))
+            total_pkts = received + loss_pkts
+            # When PJSIP reports loss > 0 with received == 0 (burst-
+            # loss start, or stream just primed), total_pkts == loss
+            # would yield 100% loss every poll until the first packet
+            # actually lands. Treat that case as "unknown" (0%) until
+            # at least one packet arrives, so MOS doesn't fall off
+            # a cliff on every call's first RTCP tick.
+            if total_pkts > 0 and received > 0:
+                loss_pct = 100.0 * loss_pkts / total_pkts
+            else:
+                loss_pct = 0.0
 
             jitter_us = float(getattr(getattr(rx, "jitterUsec", None), "mean", 0) or 0)
             jitter_ms = jitter_us / 1000.0

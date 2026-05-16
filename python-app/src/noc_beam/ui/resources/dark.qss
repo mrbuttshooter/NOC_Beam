@@ -1107,14 +1107,13 @@ QFrame#FooterActionBar {
     background-color: #0D1117;
     border-top: 1px solid #3B4654;
 }
+/* PrimaryAction was redefined here in orange (#E85D04). The cyan
+   block above at line ~551 is the canonical Bria-palette rule;
+   keep ONLY the footer sizing tweaks here, not the colour. */
 QPushButton#PrimaryAction {
     min-height: 32px;
     border-radius: 4px;
     padding: 0 14px;
-    background-color: #E85D04;
-    border: 1px solid #FF8A3D;
-    color: #FFFFFF;
-    font-weight: 700;
 }
 QPushButton#SecondaryAction {
     min-height: 32px;
@@ -1140,11 +1139,9 @@ QToolButton#TabBtn:checked {
     border-top-color: #FF8A3D;
     color: #FF8A3D;
 }
-QLineEdit#DialInput {
-    min-height: 32px;
-    max-height: 36px;
-    border-radius: 4px;
-}
+/* DialInput sizing was redeclared here (and again at line ~1317).
+   Defer to the canonical late-block at the bottom of this file so
+   there's a single source of truth. CallButton sizing stays. */
 QPushButton#CallButton {
     min-height: 32px;
     max-height: 36px;
@@ -1568,17 +1565,21 @@ QToolButton#AccountChip[health="muted"] {
 /* VolumeSlider (inside the audio-strip popover) -- dark theme had
    no rule and was falling through to native Qt slider. Mirror the
    dark-hc.qss treatment with palette tokens. */
-QSlider#VolumeSlider::groove:vertical {
+/* AudioStrip's popover sliders are HORIZONTAL (audio_strip.py uses
+   Qt.Orientation.Horizontal) so vertical-suffixed selectors never
+   matched. Drop the orientation suffix entirely so the rules apply
+   to whichever direction the widget is in. */
+QSlider#VolumeSlider::groove:horizontal {
     background: #0B1118;
-    width: 6px;
+    height: 6px;
     border-radius: 3px;
 }
-QSlider#VolumeSlider::handle:vertical {
+QSlider#VolumeSlider::handle:horizontal {
     background: #7FD3FF;
     border: 1px solid #7FD3FF;
-    height: 14px;
-    margin: 0 -6px;
+    width: 14px;
+    margin: -6px 0;
     border-radius: 7px;
 }
-QSlider#VolumeSlider::sub-page:vertical { background: #2C3C50; }
-QSlider#VolumeSlider::add-page:vertical { background: #7FD3FF; }
+QSlider#VolumeSlider::sub-page:horizontal { background: #7FD3FF; }
+QSlider#VolumeSlider::add-page:horizontal { background: #2C3C50; }

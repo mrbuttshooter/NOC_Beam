@@ -158,6 +158,14 @@ class AcctRow(QFrame):
         self.actions = QFrame(self)
         self.actions.setObjectName("AcctRowActions")
         self.actions.setVisible(False)  # only on hover
+        # Reserve the action row's height even when hidden so the row
+        # geometry doesn't jump +28px on hover (which used to shove
+        # every row below downward, creating the layout jitter the
+        # round-4/5/6 audits flagged). retainSizeWhenHidden keeps the
+        # layout space allocated.
+        sp = self.actions.sizePolicy()
+        sp.setRetainSizeWhenHidden(True)
+        self.actions.setSizePolicy(sp)
         ar = QHBoxLayout(self.actions)
         ar.setContentsMargins(0, 0, 0, 0)
         ar.setSpacing(2)

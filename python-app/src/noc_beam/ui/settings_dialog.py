@@ -625,6 +625,43 @@ class SettingsDialog(QDialog):
         status_pill.setObjectName("SettingsRegPill")
         status_pill.setProperty("level", "muted")
         self._reg_status_pill = status_pill
+        # Live-update the pill from sip_events for the current account.
+        # Was stuck at "Unknown" forever -- a dead control. Now it
+        # mirrors the registrar state in real time while the dialog
+        # is open.
+        from noc_beam.sip.events import sip_events as _sev
+        def _update_pill(account_id: str, code: int, _reason: str,
+                         _pill=status_pill, _aid=self._account.id):
+            if account_id != _aid:
+                return
+            if code == 0:
+                _pill.setText("● Unknown"); level = "muted"
+            elif 200 <= code < 300:
+                _pill.setText(f"● Registered ({code})"); level = "ok"
+            elif code in (401, 403, 407):
+                _pill.setText(f"● Auth failed ({code})"); level = "danger"
+            else:
+                _pill.setText(f"● Error ({code})"); level = "warn"
+            _pill.setProperty("level", level)
+            _pill.style().unpolish(_pill); _pill.style().polish(_pill)
+        self._pill_slot = _update_pill
+        _sev().registration_changed.connect(_update_pill)
+        # Disconnect when the dialog goes away (it's modal but still
+        # outlives a single tick; without disconnect we'd leak a
+        # subscriber per Settings open).
+        self.destroyed.connect(
+            lambda *_: self._safe_disconnect_pill()
+        )
+
+    def _safe_disconnect_pill(self) -> None:
+        from noc_beam.sip.events import sip_events as _sev
+        slot = getattr(self, "_pill_slot", None)
+        if slot is None:
+            return
+        try:
+            _sev().registration_changed.disconnect(slot)
+        except Exception:
+            pass
         reg.addRow("Status",     status_pill)
         reg.addRow("Expires In", QLabel("—"))
         outer.addLayout(reg)

@@ -271,12 +271,21 @@ class AccountDetail(QWidget):
         target_id = cfg.id
         for call_id, buf in self._quality_buf.items():
             owner = self._call_account.get(call_id)
-            # If we don't yet know the owner, prefer to exclude rather
-            # than mis-attribute. The CallManager wires the mapping
-            # within ~one event tick of call_added.
-            if owner is not None and owner != target_id:
-                continue
+            # Match samples whose owner is THIS account. For samples
+            # whose owner mapping hasn't landed yet (the first ~1-2
+            # ticks after a call is added), include them ONLY when
+            # this is the only account currently shown -- prevents
+            # cross-account leakage on multi-account setups but
+            # avoids the first-second "—" gap a strict drop produced.
             if owner is None:
+                # Sole-account fallback: if there's only one ownership
+                # mapping in flight and it points here, count the
+                # unknown samples too. Otherwise skip to avoid
+                # mis-attribution.
+                known_owners = set(self._call_account.values())
+                if known_owners and known_owners != {target_id}:
+                    continue
+            elif owner != target_id:
                 continue
             for _, mos, _loss, _jit, rtt in buf:
                 mos_vals.append(mos)

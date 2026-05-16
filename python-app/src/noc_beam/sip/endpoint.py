@@ -169,6 +169,12 @@ class SipEndpoint:
         except Exception:
             log.exception("libDestroy raised")
         self._ep = None
+        # Drop our reference to the TraceLogWriter too -- the C++
+        # side from the destroyed lib may still hold its vtable
+        # pointer; re-entering start() would otherwise rebind a new
+        # writer while leaving the old one pinned in Python and
+        # potentially racing the new pjsua2 instance's logging.
+        self._log_writer = None
 
     # ------------------------------------------------------------------
     # Transports
@@ -423,7 +429,19 @@ class SipEndpoint:
                 self.remove_account(cfg.id)
             acc = SipAccount(cfg, self._transports)
             ac_cfg = acc.configure()
-            acc.create(ac_cfg)
+            try:
+                acc.create(ac_cfg)
+            except Exception:
+                # acc.create can raise on bad cred / refused transport
+                # AFTER the SipAccount has been partially built. Without
+                # this clean-up the SWIG-shadow pj.Account leaks until
+                # libDestroy. Pair shutdown() with the failed create()
+                # and re-raise so the caller still sees the error.
+                try:
+                    acc.shutdown()
+                except Exception:
+                    log.exception("Cleanup of partially-created account failed")
+                raise
             self._accounts[cfg.id] = acc
             # Drain any deferred diagnostic the configure() step set
             # (e.g. requested transport not bound). Capture under the
