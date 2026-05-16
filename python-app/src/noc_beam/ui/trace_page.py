@@ -36,13 +36,17 @@ from noc_beam.ui.trace_view import TraceView
 # filter -- TraceView only supports a single substring, so we join
 # selected chip substrings with " " and pass them as the filter; the
 # free-text input takes precedence when present.
+# Chip label → TraceView method-chip key. Drives the structural
+# method/status filter in TraceView (not the free-text substring
+# filter, which was the old hack that matched "192.168.4.x" for the
+# 4xx chip and "Content-Length: 451" for any body starting with " 4").
 _PRESETS: tuple[tuple[str, str], ...] = (
     ("INVITE",   "INVITE"),
     ("REGISTER", "REGISTER"),
     ("OPTIONS",  "OPTIONS"),
     ("BYE",      "BYE"),
-    ("4xx",      " 4"),  # leading space to avoid matching "401" inside arbitrary text
-    ("5xx",      " 5"),
+    ("4xx",      "4xx"),
+    ("5xx",      "5xx"),
 )
 
 
@@ -94,24 +98,26 @@ class TracePage(QWidget):
 
     # ------------------------------------------------------------------
     def _on_chip_toggled(self, _checked: bool) -> None:
-        """Combine the selected chips into the free-text filter.
-
-        Skip if the user has typed their own filter -- their explicit
-        input wins over chip presets to avoid stomping on focused work.
+        """Forward the page-level preset chip state to TraceView's own
+        structural method chips. Old version stuffed substrings into
+        the free-text filter, which produced false positives (the 4xx
+        chip matched "192.168.4.x" peers, etc).
         """
-        typed = self.trace.filter_edit.text().strip()
-        if typed and not any(
-            preset_text in typed for _label, preset_text in _PRESETS
-        ):
-            # User has a custom filter that doesn't include any preset.
-            # Don't override; let them work.
-            return
-        active = " ".join(
-            preset_text
-            for btn, (_label, preset_text) in zip(self._chip_btns, _PRESETS)
-            if btn.isChecked()
-        )
-        self.trace.filter_edit.setText(active.strip())
+        # Mirror each page chip onto the matching TraceView chip and
+        # let TraceView's existing matches_method() do the real work.
+        for btn, (_label, key) in zip(self._chip_btns, _PRESETS):
+            target = self.trace._method_chips.get(key)
+            if target is None:
+                continue
+            if target.isChecked() != btn.isChecked():
+                target.blockSignals(True)
+                target.setChecked(btn.isChecked())
+                target.blockSignals(False)
+        # Trigger a single re-filter pass.
+        try:
+            self.trace._reapply_filters()
+        except Exception:
+            pass
 
     # Forward attribute access to the underlying TraceView so existing
     # MainWindow wiring (export_failed signal, etc.) keeps working.

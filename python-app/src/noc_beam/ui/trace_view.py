@@ -9,9 +9,14 @@ Method-filter chips at the top (INVITE / REGISTER / OPTIONS / 4xx /
 5xx) toggle whole dialogs in or out — the existing free-text filter
 still works for finer-grained search.
 
-Public API kept identical to the previous version so the toolbar
-widgets (chk_rx, chk_tx, filter_edit, export_btn, clear_btn) can still
-be re-parented by TracePage.
+Public API: chk_rx, chk_tx, filter_edit, export_btn, clear_btn are
+exposed as instance attributes so TracePage (the wide-window wrapper)
+can re-parent the toolbar widgets into its own toolbar row.
+
+The phone_shell entry point uses TraceView directly (tab + pop-out
+window). The wide-window dashboard wraps it via TracePage (with an
+extra preset-chip bar) and TraceDrawer (slide-in companion on the
+dial page).
 """
 from __future__ import annotations
 
