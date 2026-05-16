@@ -237,10 +237,19 @@ def load_settings() -> GlobalSettings:
         audio = _filter(AudioSettings, raw.get("audio", {}))
         codecs = _filter(CodecSettings, raw.get("codecs", {}))
         appearance = _filter(AppearanceSettings, raw.get("appearance", {}))
+        # New sections (added in audit rounds 11 + ship-blockers).
+        # Without explicit unmarshal here, load_settings silently
+        # returned the dataclass defaults -- making the Startup
+        # checkboxes + Compliance toggles look functional in the UI
+        # but resetting every launch.
+        startup = _filter(StartupSettings, raw.get("startup", {}))
+        compliance = _filter(ComplianceSettings, raw.get("compliance", {}))
         return GlobalSettings(
             audio=audio,
             codecs=codecs,
             appearance=appearance,
+            startup=startup,
+            compliance=compliance,
             sip_port=raw.get("sip_port", 0),
             log_level=raw.get("log_level", 4),
             user_agent=raw.get("user_agent", "NOC_Beam/0.1"),
@@ -257,6 +266,11 @@ def save_settings(settings: GlobalSettings) -> None:
         "audio": asdict(settings.audio),
         "codecs": asdict(settings.codecs),
         "appearance": asdict(settings.appearance),
+        # Persist startup + compliance so toggles in Settings actually
+        # round-trip across launches. Pre-fix, these were silently
+        # dropped on save; UI looked functional, behavior was nil.
+        "startup": asdict(settings.startup),
+        "compliance": asdict(settings.compliance),
         "sip_port": settings.sip_port,
         "log_level": settings.log_level,
         "user_agent": settings.user_agent,

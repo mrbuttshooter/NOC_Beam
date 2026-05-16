@@ -243,7 +243,13 @@ class TraceMsgRow(QFrame):
 
         summary = QLabel(msg.summary, self)
         summary.setObjectName("TraceMsgSummary")
-        summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        # NOT TextSelectableByMouse: when the flag is set, QLabel
+        # consumes left-clicks before they bubble to our row's
+        # mousePressEvent, so clicking the most visible part of the
+        # row (the SIP first-line text) silently does nothing
+        # instead of expanding the body. Copy-text is available via
+        # the row's right-click context menu (Copy full message /
+        # Copy headers only) so we lose nothing.
         summary.setMinimumWidth(120)
         # Operator-grade tooltip: From / To headers parsed out of the
         # body so the row is scannable without expanding.

@@ -62,9 +62,22 @@ def _system_nameservers() -> list[str]:
                 # Skip the resolved answer (after "Name:" line);
                 # the first "Address:" before "Name:" is the
                 # resolver itself.
-                if ip and ip not in out:
+                # ALSO skip loopback resolvers -- on corp VPN /
+                # split-DNS / Pi-hole setups, the system DNS may
+                # be 127.0.0.x but PJSIP runs in-process and can't
+                # reach the host's stub resolver on 127.0.0.1:53.
+                # Using it would cause every external SIP DNS query
+                # to time out for 5s before falling back to the
+                # 8.8.8.8/1.1.1.1 fallback list below.
+                if not ip:
+                    continue
+                if (ip.startswith("127.") or ip == "::1"
+                        or ip.startswith("0.0.0.0")):
+                    continue
+                if ip not in out:
                     out.append(ip)
-                # We only want the first one (the active resolver).
+                # We only want the first usable one (the active
+                # routable resolver).
                 if len(out) >= 1:
                     break
     except Exception:
@@ -185,18 +198,25 @@ class SipEndpoint:
             except Exception as e:
                 log.exception("Failed to start PJSIP endpoint")
                 sip_events().endpoint_error.emit(str(e))
-                # Full state reset on partial start. _safe_destroy
-                # first so a PJSIP callback that races teardown
-                # still sees our _accounts dict intact (so it can
-                # look itself up); THEN clear the dicts and reset
-                # _started so the next start() inherits a clean
-                # slate. _safe_destroy also nulls _ep and
-                # _log_writer to prevent the destroyed pj.Endpoint
-                # from outliving anything Python.
-                self._safe_destroy()
+                # CRITICAL ordering: shutdown + drop SipAccount
+                # objects BEFORE libDestroy. SipAccount inherits
+                # from pj.Account whose __del__ calls back into
+                # the library; if libDestroy runs first, the
+                # implicit Python GC of _accounts (when .clear()
+                # drops the last refs) hits a destroyed lib and
+                # spams "Endpoint has not been created" or segfaults
+                # on some pjsua2 builds. Same shape as the stop()
+                # path: shut accounts down, clear dicts, THEN
+                # _safe_destroy.
+                for acc in list(self._accounts.values()):
+                    try:
+                        acc.shutdown()
+                    except Exception:
+                        log.exception("Account shutdown error in start() exc path")
                 self._accounts.clear()
                 self._transports.clear()
                 self._started = False
+                self._safe_destroy()
 
     def stop(self) -> None:
         with self._lock:
@@ -559,6 +579,12 @@ class SipEndpoint:
     # Calls
     # ------------------------------------------------------------------
     def make_call(self, account_id: str, target_uri: str) -> SipCall:
+        # Resolve everything we need under the lock, then RELEASE the
+        # lock before invoking pjsua2.makeCall. makeCall does
+        # synchronous DNS (A-record / NAPTR), which on a slow corp
+        # VPN / captive portal can take 5-30 s. Holding the endpoint
+        # lock across it froze every concurrent add_account / remove
+        # / hangup / stop call -- the UI looked hung mid-demo.
         with self._lock:
             acc = self._accounts.get(account_id)
             if acc is None:
@@ -566,9 +592,22 @@ class SipEndpoint:
             target_uri = self._normalize_dial_target(target_uri, acc.cfg.domain)
             call = SipCall(acc, account_id=account_id)
             prm = pj.CallOpParam(True)
-            call.makeCall(target_uri, prm)
+            # Append to acc.calls under the lock so concurrent
+            # find_call / set_call_mute / quality sampling sees a
+            # consistent list.
             acc.calls.append(call)
-            return call
+        # makeCall outside the lock. If it raises mid-DNS we tear
+        # down the half-registered SipCall we just appended.
+        try:
+            call.makeCall(target_uri, prm)
+        except Exception:
+            with self._lock:
+                try:
+                    acc.calls.remove(call)
+                except Exception:
+                    pass
+            raise
+        return call
 
     @staticmethod
     def _normalize_dial_target(target: str, account_domain: str) -> str:
@@ -794,36 +833,43 @@ class SipEndpoint:
         """Construct a pjsua2.CallSendRequestParam for a SIP INFO with body.
 
         Field-name compatibility across pjsua2 builds:
-          * 2.10-2.12  : prm.txOption.{contentType, msgBody}
-          * 2.13+      : prm.msgData.{contentType, msgBody}
-          * some SWIG-rebuilt forks rename to ctType/msgBody
-        Feature-detect by attribute existence rather than version
-        sniffing; log which path we took so build-mismatch DTMF
-        regressions don't silently fall back to RFC2833.
+          * 2.10-2.12  : prm.txOption is a SipTxOption with
+                         contentType + msgBody
+          * 2.13+      : prm.msgData is a SipMsgData (NOT SipTxOption!)
+                         with its own contentType + msgBody
+        Earlier this assigned a SipTxOption to msgData on 2.13+ builds
+        which SWIG-rejected (TypeError), so _send_dtmf_info silently
+        fell back to RFC2833 every time -- defeating the user's
+        explicit DTMF=INFO config.
         """
         prm = pj.CallSendRequestParam()
         prm.method = "INFO"
-        opt = pj.SipTxOption()
-        # Most builds expose contentType + msgBody on SipTxOption
-        # directly. If those aren't present, give up cleanly.
-        if not hasattr(opt, "contentType") or not hasattr(opt, "msgBody"):
-            raise RuntimeError(
-                "pjsua2 SipTxOption is missing contentType/msgBody; "
-                "this build does not support SIP INFO body payloads"
-            )
-        opt.contentType = content_type
-        opt.msgBody = body
-        # Carrier-attribute: try the new msgData slot first (2.13+),
-        # then fall back to txOption (2.10-2.12).
-        if hasattr(prm, "msgData"):
-            prm.msgData = opt
-            log.debug("SIP INFO DTMF using msgData (pjsua2 >= 2.13 layout)")
-        elif hasattr(prm, "txOption"):
+        # Carrier-attribute first: pick msgData on 2.13+ (with its
+        # native SipMsgData type) or txOption on 2.10-2.12 (with
+        # SipTxOption). We instantiate the RIGHT type per branch.
+        if hasattr(prm, "msgData") and hasattr(pj, "SipMsgData"):
+            data = pj.SipMsgData()
+            if not hasattr(data, "contentType") or not hasattr(data, "msgBody"):
+                raise RuntimeError(
+                    "pjsua2 SipMsgData is missing contentType/msgBody"
+                )
+            data.contentType = content_type
+            data.msgBody = body
+            prm.msgData = data
+            log.debug("SIP INFO DTMF using msgData/SipMsgData (pjsua2 >= 2.13)")
+        elif hasattr(prm, "txOption") and hasattr(pj, "SipTxOption"):
+            opt = pj.SipTxOption()
+            if not hasattr(opt, "contentType") or not hasattr(opt, "msgBody"):
+                raise RuntimeError(
+                    "pjsua2 SipTxOption is missing contentType/msgBody"
+                )
+            opt.contentType = content_type
+            opt.msgBody = body
             prm.txOption = opt
-            log.debug("SIP INFO DTMF using txOption (pjsua2 <= 2.12 layout)")
+            log.debug("SIP INFO DTMF using txOption/SipTxOption (pjsua2 <= 2.12)")
         else:
             raise RuntimeError(
                 "pjsua2 CallSendRequestParam exposes neither msgData nor "
-                "txOption; cannot attach DTMF INFO body"
+                "txOption; cannot attach DTMF INFO body on this build"
             )
         return prm

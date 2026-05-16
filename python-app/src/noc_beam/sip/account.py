@@ -148,20 +148,21 @@ if PJSUA2_AVAILABLE:
             ac.mediaConfig.srtpUse = _srtp_use(cfg.srtp)
             ac.mediaConfig.srtpSecureSignaling = 0 if cfg.srtp != "mandatory" else 1
 
-            # ICE on by default. Without it, calls behind symmetric NAT
-            # produce one-way-audio after the SDP exchange because the
-            # remote side has no candidate for our internal address.
-            # ICE solves this universally and PJSIP supports it out of
-            # the box; we just have to flip the flag.
+            # ICE only when a STUN server is configured. Earlier we
+            # enabled ICE unconditionally to fix one-way audio behind
+            # symmetric NAT. The cost was a 1-3 s candidate-gathering
+            # delay before EVERY first INVITE -- noticeable on the
+            # demo / typical LAN-to-LAN case where ICE provides no
+            # benefit. ICE without STUN only knows host candidates,
+            # which is the same routing PJSIP would do without ICE
+            # anyway, so flipping the flag was pure latency cost.
             try:
-                ac.natConfig.iceEnabled = True
-                # 50ms ICE check pacing -- pjsua2 default is reasonable
-                # but be explicit so a future EpConfig change can't
-                # silently slow this down.
-                ac.natConfig.iceMaxHostCands = 32
+                if cfg.stun_server:
+                    ac.natConfig.iceEnabled = True
+                    ac.natConfig.iceMaxHostCands = 32
+                else:
+                    ac.natConfig.iceEnabled = False
             except Exception:
-                # Older pjsua2 builds may not expose iceEnabled on
-                # AccountConfig; degrade gracefully.
                 log.warning("ICE config not available on this pjsua2 build")
 
             if cfg.stun_server:

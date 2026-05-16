@@ -32,6 +32,7 @@ if PJSUA2_AVAILABLE:
 
         def __init__(self, account, call_id: int = -1, account_id: str = "") -> None:  # noqa: ANN001
             super().__init__(account, call_id)
+            self._account = account
             self._account_id = account_id
             self.remote_uri = ""
 
@@ -52,6 +53,19 @@ if PJSUA2_AVAILABLE:
                 )
                 if info.state == 6:  # PJSIP_INV_STATE_DISCONNECTED
                     sip_events().call_ended.emit(info.id)
+                    # Drop from the account's calls list so find_call
+                    # doesn't return this stale instance when PJSIP
+                    # later reuses the same internal call-id slot
+                    # for a new call. Without this, mute / hangup /
+                    # quality-sample can act on a destroyed SipCall
+                    # whose media indices are stale -- subtle race
+                    # in long-running test sessions.
+                    try:
+                        acc = getattr(self, "_account", None)
+                        if acc is not None and self in acc.calls:
+                            acc.calls.remove(self)
+                    except Exception:
+                        log.exception("Could not remove disconnected SipCall from acc.calls")
             except Exception:
                 log.exception("onCallState error")
 

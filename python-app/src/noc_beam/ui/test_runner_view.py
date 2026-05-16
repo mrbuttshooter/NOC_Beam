@@ -378,6 +378,14 @@ class TestRunnerView(QMainWindow):
         for call in calls:
             self._append_call_row(call)
 
+        # Reset the integer running counter at the start of every run.
+        # If a stale call_started signal from a previous run arrived
+        # after run_complete (queued Qt signals + deferred deleteLater
+        # of the parent-pinned runner), _running_count could leak a
+        # non-zero baseline into the new run -- the "running" chip
+        # would be wrong from the first tick.
+        self._running_count = 0
+
         self.export_btn.setEnabled(False)
         # Stop (header) toggles with run state; Close (footer) stays
         self._refresh_summary()
@@ -438,6 +446,12 @@ class TestRunnerView(QMainWindow):
         self._refresh_summary()
 
     def _on_cancel_clicked(self) -> None:
+        # Disable Stop immediately so a double-click can't re-trigger
+        # cancel() while the first cancel is still unwinding the
+        # _active dict (which iterates with a list() snapshot but
+        # any handler that runs in between via processEvents could
+        # otherwise re-enter and misbehave).
+        self.stop_btn.setEnabled(False)
         if self.runner is not None:
             self.runner.cancel()
 
@@ -468,7 +482,22 @@ class TestRunnerView(QMainWindow):
         if filename:
             self.export_csv(Path(filename))
 
+    @staticmethod
+    def _csv_safe(value):
+        """Prefix `'` when a CSV field starts with a character Excel/Sheets
+        would interpret as a formula trigger. Same logic the
+        cdr_detail_dialog.py export already uses -- mirrors OWASP
+        CSV-injection guidance. A malicious dial-string like
+        ``=cmd|'/c calc'!A1`` would otherwise execute on open."""
+        if value is None:
+            return ""
+        s = str(value)
+        if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+            return "'" + s
+        return s
+
     def export_csv(self, path: Path) -> None:
+        safe = self._csv_safe
         with path.open("w", encoding="utf-8", newline="") as handle:
             writer = csv.writer(handle, lineterminator="\n")
             writer.writerow(CSV_HEADER)
@@ -478,14 +507,14 @@ class TestRunnerView(QMainWindow):
                     [
                         f"nb-{started:%Y%m%d-%H%M%S}-{result.call.index:03d}",
                         self._format_started_at(started),
-                        result.from_account,
-                        result.to_uri,
-                        result.result,
+                        safe(result.from_account),
+                        safe(result.to_uri),
+                        safe(result.result),
                         "" if result.sip_code is None else result.sip_code,
-                        result.sip_reason,
+                        safe(result.sip_reason),
                         "" if result.rtt_ms is None else int(result.rtt_ms),
                         f"{result.duration_s:.1f}",
-                        result.notes,
+                        safe(result.notes),
                     ]
                 )
 

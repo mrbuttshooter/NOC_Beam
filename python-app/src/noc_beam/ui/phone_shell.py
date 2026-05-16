@@ -993,15 +993,25 @@ class PhoneShell(QMainWindow):
             # Stale-peer fix: when remote_uri lands AFTER show_outgoing
             # (e.g. PJSIP populates it after the first 18x or 200), the
             # peer column was set once at register time and never
-            # refreshed. Re-render here whenever the URI differs from
-            # what's currently shown.
+            # refreshed. Re-render only when the actual remote_uri
+            # changes. Previously we compared against
+            # call_widget.peer_label.text() -- which holds the
+            # already-STRIPPED headline (just the user-part, no sip:
+            # prefix, no @domain). That comparison was always true
+            # because peer_label never equals the raw `sip:user@host`
+            # URI, so every call_updated triggered a full
+            # show_outgoing rebuild of the card -- visible flicker
+            # mid-call and lost scroll/focus state.
             try:
-                cur_peer = self.call_widget.peer_label.text()
-                if rec.remote_uri and rec.remote_uri != cur_peer:
+                last_peer = getattr(self, "_last_call_peer", {}).get(call_id, "")
+                if rec.remote_uri and rec.remote_uri != last_peer:
                     if rec.direction == "in" and rec.state == CallState.INCOMING:
                         self.call_widget.show_incoming(call_id, rec.remote_uri)
                     else:
                         self.call_widget.show_outgoing(call_id, rec.remote_uri)
+                    if not hasattr(self, "_last_call_peer"):
+                        self._last_call_peer = {}
+                    self._last_call_peer[call_id] = rec.remote_uri
             except Exception:
                 pass
             self.call_widget.update_state(rec.state.value, rec.last_code, rec.last_reason)
@@ -1035,6 +1045,13 @@ class PhoneShell(QMainWindow):
             detail = getattr(self, "_accounts_detail", None)
             if detail is not None:
                 detail.forget_call_account(call_id)
+        except Exception:
+            pass
+        # Drop the peer-staleness cache so it doesn't grow unbounded.
+        try:
+            cache = getattr(self, "_last_call_peer", None)
+            if cache is not None:
+                cache.pop(call_id, None)
         except Exception:
             pass
 
