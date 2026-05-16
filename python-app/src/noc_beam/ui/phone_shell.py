@@ -1487,7 +1487,10 @@ class PhoneShell(QMainWindow):
 
     @staticmethod
     def _short_peer(uri: str) -> str:
-        """Trim sip: prefix and host for compact display."""
+        """Trim sip: prefix AND @domain for compact strip-row display.
+        Same rule as quick_dial._short_uri: rows show the user-part
+        only since the @domain is implicit (your active account's
+        domain). The full URI stays on the row's tooltip."""
         if not uri:
             return "..."
         s = uri.strip()
@@ -1497,6 +1500,10 @@ class PhoneShell(QMainWindow):
             s = s[5:]
         if "<" in s:
             s = s.split("<", 1)[1].rstrip(">")
+        s = s.split(";", 1)[0]
+        if "@" in s:
+            user, _, host = s.partition("@")
+            return user or host or s
         return s
 
     @staticmethod

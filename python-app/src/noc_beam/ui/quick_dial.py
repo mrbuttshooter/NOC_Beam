@@ -31,7 +31,12 @@ from noc_beam.config.history import CdrEntry, load_history
 # --- helpers ---------------------------------------------------------
 
 def _short_uri(uri: str) -> str:
-    """Strip sip:/sips: scheme and ;params for compact display."""
+    """Strip sip:/sips: scheme, ;params, AND @domain for compact list
+    display. Compact rows in History + Recent Calls + Multi-call
+    strip want just the user-part since the active account's domain
+    is implicit (you dialled '200' -> 'sip:200@your-pbx' so '200'
+    is what you typed). Full URI is preserved separately as a
+    tooltip on each row for the curious."""
     if not uri:
         return ""
     s = uri.strip()
@@ -39,7 +44,16 @@ def _short_uri(uri: str) -> str:
         s = s[4:]
     elif s.startswith("sips:"):
         s = s[5:]
-    return s.split(";", 1)[0]
+    s = s.split(";", 1)[0]
+    # Drop the @domain. If a SIP URI has no userpart (rare; e.g.
+    # `sip:gateway.example.com`) keep the host so the row isn't
+    # empty.
+    if "@" in s:
+        user, _, host = s.partition("@")
+        if user:
+            return user
+        return host
+    return s
 
 
 def _arrow(entry: CdrEntry) -> tuple[str, str]:

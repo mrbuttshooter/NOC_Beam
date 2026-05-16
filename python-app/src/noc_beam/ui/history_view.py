@@ -131,13 +131,16 @@ class HistoryRow(QFrame):
         # this, the labels enforce their full text-width as a hard
         # minimum and the badge / info / call buttons get clipped off
         # the right edge (same root cause as the call-card overflow
-        # fixed in 11c7ca6). The tooltip carries the full URI.
+        # fixed in 11c7ca6). The tooltip carries the FULL URI so the
+        # @domain is one hover away when needed.
         from PySide6.QtWidgets import QSizePolicy as _SP
-        peer_text = entry.peer_uri or "(unknown)"
-        peer_lbl = QLabel(peer_text)
+        from noc_beam.ui.quick_dial import _short_uri as _strip_uri
+        peer_full = entry.peer_uri or "(unknown)"
+        peer_display = _strip_uri(peer_full) or peer_full
+        peer_lbl = QLabel(peer_display)
         peer_lbl.setObjectName("HistoryRowPeer")
         peer_lbl.setProperty("result", _result_class(entry))
-        peer_lbl.setToolTip(peer_text)
+        peer_lbl.setToolTip(peer_full)
         peer_lbl.setSizePolicy(_SP.Policy.Ignored, _SP.Policy.Preferred)
 
         when = _fmt_when(entry.ended_at or entry.started_at)
