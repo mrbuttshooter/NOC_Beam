@@ -998,18 +998,24 @@ class PhoneShell(QMainWindow):
             s = suppliers.get(self._active_supplier_id)
             if s is None:
                 return
-            new_auth = s.routed(getattr(acc, "routing_format", "") or "")
-            if not new_auth or new_auth == acc.auth_user:
+            new_uid = s.routed(getattr(acc, "routing_format", "") or "")
+            if not new_uid or (new_uid == acc.username and new_uid == acc.auth_user):
                 return
-            log.info("Teles supplier swap: auth_user %r -> %r",
-                     acc.auth_user, new_auth)
-            acc.auth_user = new_auth
+            # Swap BOTH username and auth_user so the on-wire From: URI
+            # and Authorization header agree (e.g. From: sip:U138@... +
+            # Authorization: username="U138"). Operator workflow puts
+            # the Uid in the "User name" field in Eyebeam, so a supplier
+            # change must rewrite that field, not just the auth side.
+            log.info("Teles supplier swap: username %r->%r, auth_user %r->%r",
+                     acc.username, new_uid, acc.auth_user, new_uid)
+            acc.username = new_uid
+            acc.auth_user = new_uid
             # Re-register with new credentials. SipEndpoint.update_account
             # handles the modify+register cycle.
             try:
                 SipEndpoint.instance().update_account(acc)
             except Exception:
-                log.exception("Failed to re-register account %s with new auth_user", acc.id)
+                log.exception("Failed to re-register account %s with new Uid", acc.id)
         except Exception:
             log.exception("Teles auth swap failed for supplier %s", self._active_supplier_id)
 

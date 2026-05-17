@@ -98,7 +98,15 @@ if PJSUA2_AVAILABLE:
             transport = (cfg.transport or "udp").lower()
             scheme = "sips" if transport == "tls" else "sip"
             transport_param = f";transport={transport}" if transport in ("tcp", "tls") else ""
-            ac.idUri = f"{scheme}:{cfg.username}@{host}{transport_param}"
+            # If display_name is set, render the SIP id-URI as
+            #   "Display Name" <sip:user@host;transport=tcp>
+            # so carriers that read the A-number from the From: header's
+            # display string (Eyebeam wire compatibility) see it. We
+            # strip any embedded " or angle-bracket chars to keep the
+            # header well-formed.
+            _bare_uri = f"{scheme}:{cfg.username}@{host}{transport_param}"
+            _dn = (cfg.display_name or "").replace('"', "").replace("<", "").replace(">", "").strip()
+            ac.idUri = f'"{_dn}" <{_bare_uri}>' if _dn else _bare_uri
             ac.regConfig.registrarUri = f"{scheme}:{host}{transport_param}"
             ac.regConfig.registerOnAdd = cfg.register
 
