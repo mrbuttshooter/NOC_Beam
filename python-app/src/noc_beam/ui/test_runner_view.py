@@ -517,8 +517,9 @@ class TestRunnerView(QMainWindow):
             self._batch_supplier_id = ""
             return
         try:
-            from noc_beam.config.suppliers import load_suppliers
-            suppliers = load_suppliers()
+            from noc_beam.config.suppliers import load_valid_suppliers
+            # Only valid suppliers reach the picker; full list is in Settings.
+            suppliers = load_valid_suppliers()
         except Exception:
             self.supplier_row.setVisible(False)
             return

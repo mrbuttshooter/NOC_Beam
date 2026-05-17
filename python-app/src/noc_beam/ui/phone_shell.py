@@ -773,9 +773,11 @@ class PhoneShell(QMainWindow):
             self._active_supplier_id = ""
             return
         from PySide6.QtGui import QStandardItem
-        from noc_beam.config.suppliers import load_suppliers
+        from noc_beam.config.suppliers import load_valid_suppliers
 
-        suppliers = load_suppliers()
+        # Only valid-marked suppliers reach the picker; the full list
+        # (including invalid) lives in Settings -> Suppliers.
+        suppliers = load_valid_suppliers()
         # Block signals so populating doesn't fire _on_supplier_changed
         # repeatedly during fill.
         self.supplier_combo.blockSignals(True)

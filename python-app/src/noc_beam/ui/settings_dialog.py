@@ -184,11 +184,14 @@ class SettingsDialog(QDialog):
 
     def _build_suppliers_pane(self) -> QWidget:
         """Editable list of carriers shared across all accounts.
-        Each row is a (id, name) pair. Add / Edit-in-place / Delete.
+        Each row is (Valid, ID, Name). Valid is a checkbox: unchecked
+        suppliers are hidden from the picker but kept in the data so
+        you can re-enable them later. Add / Edit-in-place / Delete.
         Changes are persisted to %APPDATA%/NOC_Beam/suppliers.json.
         """
+        from PySide6.QtCore import Qt as _Qt
         from PySide6.QtWidgets import (
-            QHeaderView, QPushButton, QTableWidget, QTableWidgetItem,
+            QHeaderView, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
         )
 
         from noc_beam.config.suppliers import Supplier, load_suppliers, save_suppliers
@@ -206,51 +209,103 @@ class SettingsDialog(QDialog):
         blurb = QLabel(
             "Shared list of carrier IDs and names. Each account's routing "
             "format converts the ID into either an auth username (Teles) "
-            "or a dial prefix (Genband)."
+            "or a dial prefix (Genband). Uncheck a supplier to hide it "
+            "from the dial-bar / Test Runner pickers without deleting it."
         )
         blurb.setObjectName("SettingsBlurb")
         blurb.setWordWrap(True)
         layout.addWidget(blurb)
 
-        table = QTableWidget(0, 2)
-        table.setHorizontalHeaderLabels(["ID", "Name"])
+        # Live filter so 352 suppliers stay browsable.
+        search = QLineEdit()
+        search.setPlaceholderText("Filter (name or C-code)...")
+        layout.addWidget(search)
+
+        # Count summary updates as user toggles checkboxes.
+        summary = QLabel("")
+        summary.setObjectName("SettingsBlurb")
+        layout.addWidget(summary)
+
+        table = QTableWidget(0, 3)
+        table.setHorizontalHeaderLabels(["Valid", "ID", "Name"])
         table.verticalHeader().setVisible(False)
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(table, 1)
 
-        # Helpers
+        def _update_summary():
+            total = table.rowCount()
+            valid = sum(
+                1 for r in range(total)
+                if (it := table.item(r, 0)) is not None
+                and it.checkState() == _Qt.CheckState.Checked
+            )
+            summary.setText(f"{valid} valid / {total} total carriers")
+
         def _reload():
+            table.blockSignals(True)
             table.setRowCount(0)
             for s in load_suppliers():
                 row = table.rowCount()
                 table.insertRow(row)
-                table.setItem(row, 0, QTableWidgetItem(s.id))
-                table.setItem(row, 1, QTableWidgetItem(s.name))
+                # Valid checkbox column (use checkable QTableWidgetItem so
+                # it sits cleanly inside the table row).
+                valid_item = QTableWidgetItem()
+                valid_item.setFlags(
+                    _Qt.ItemFlag.ItemIsUserCheckable
+                    | _Qt.ItemFlag.ItemIsEnabled
+                    | _Qt.ItemFlag.ItemIsSelectable
+                )
+                valid_item.setCheckState(
+                    _Qt.CheckState.Checked if s.valid else _Qt.CheckState.Unchecked
+                )
+                valid_item.setTextAlignment(_Qt.AlignmentFlag.AlignCenter)
+                table.setItem(row, 0, valid_item)
+                table.setItem(row, 1, QTableWidgetItem(s.id))
+                table.setItem(row, 2, QTableWidgetItem(s.name))
+            table.blockSignals(False)
+            _update_summary()
 
         def _read_all() -> list:
             out = []
             for r in range(table.rowCount()):
-                sid_item = table.item(r, 0)
-                name_item = table.item(r, 1)
+                valid_item = table.item(r, 0)
+                sid_item = table.item(r, 1)
+                name_item = table.item(r, 2)
                 sid = (sid_item.text() if sid_item else "").strip()
                 name = (name_item.text() if name_item else "").strip()
+                valid = (
+                    valid_item is not None
+                    and valid_item.checkState() == _Qt.CheckState.Checked
+                )
                 if not sid:
                     continue
-                out.append(Supplier(id=sid, name=name))
+                out.append(Supplier(id=sid, name=name, valid=valid))
             return out
 
         def _add():
             row = table.rowCount()
             table.insertRow(row)
-            table.setItem(row, 0, QTableWidgetItem(""))
+            valid_item = QTableWidgetItem()
+            valid_item.setFlags(
+                _Qt.ItemFlag.ItemIsUserCheckable
+                | _Qt.ItemFlag.ItemIsEnabled
+                | _Qt.ItemFlag.ItemIsSelectable
+            )
+            valid_item.setCheckState(_Qt.CheckState.Checked)
+            valid_item.setTextAlignment(_Qt.AlignmentFlag.AlignCenter)
+            table.setItem(row, 0, valid_item)
             table.setItem(row, 1, QTableWidgetItem(""))
-            table.editItem(table.item(row, 0))
+            table.setItem(row, 2, QTableWidgetItem(""))
+            table.editItem(table.item(row, 1))
+            _update_summary()
 
         def _delete():
             rows = sorted({i.row() for i in table.selectedIndexes()}, reverse=True)
             for r in rows:
                 table.removeRow(r)
+            _update_summary()
 
         def _save():
             try:
@@ -262,18 +317,56 @@ class SettingsDialog(QDialog):
                 log.exception("Failed to save suppliers")
                 save_btn.setText("Save FAILED")
 
+        def _bulk(check: bool):
+            """Set Valid checkbox on all CURRENTLY VISIBLE rows."""
+            table.blockSignals(True)
+            state = _Qt.CheckState.Checked if check else _Qt.CheckState.Unchecked
+            for r in range(table.rowCount()):
+                if table.isRowHidden(r):
+                    continue
+                it = table.item(r, 0)
+                if it is not None:
+                    it.setCheckState(state)
+            table.blockSignals(False)
+            _update_summary()
+
+        def _filter(txt: str):
+            needle = txt.lower().strip()
+            for r in range(table.rowCount()):
+                if not needle:
+                    table.setRowHidden(r, False)
+                    continue
+                sid = (table.item(r, 1).text() if table.item(r, 1) else "").lower()
+                name = (table.item(r, 2).text() if table.item(r, 2) else "").lower()
+                # Match against name OR "C###" form OR raw id.
+                visible = (
+                    needle in name
+                    or needle in sid
+                    or needle in f"c{sid}"
+                )
+                table.setRowHidden(r, not visible)
+
+        search.textChanged.connect(_filter)
+        table.itemChanged.connect(lambda _it: _update_summary())
+
         _reload()
 
         row_btns = QHBoxLayout()
         add_btn = QPushButton("Add carrier")
         del_btn = QPushButton("Delete selected")
+        check_all_btn = QPushButton("Check visible")
+        uncheck_all_btn = QPushButton("Uncheck visible")
         save_btn = QPushButton("Save")
         save_btn.setObjectName("PrimaryAction")
         add_btn.clicked.connect(_add)
         del_btn.clicked.connect(_delete)
+        check_all_btn.clicked.connect(lambda: _bulk(True))
+        uncheck_all_btn.clicked.connect(lambda: _bulk(False))
         save_btn.clicked.connect(_save)
         row_btns.addWidget(add_btn)
         row_btns.addWidget(del_btn)
+        row_btns.addWidget(check_all_btn)
+        row_btns.addWidget(uncheck_all_btn)
         row_btns.addStretch(1)
         row_btns.addWidget(save_btn)
         layout.addLayout(row_btns)

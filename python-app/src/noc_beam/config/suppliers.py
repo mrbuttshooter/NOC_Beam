@@ -34,9 +34,13 @@ class Supplier:
     `id` is a string (preserves leading zeros like "005") because the
     routing format substitutes it as-is: format="U{id}", id="005"
     -> "U005". Storing as int would silently break that.
+
+    `valid` toggles whether the supplier shows up in the picker. Older
+    saved JSON files without this field default to True.
     """
     id: str
     name: str
+    valid: bool = True
 
     def display(self) -> str:
         """How the picker shows it: 'Telecom Egypt — C303'.
@@ -152,7 +156,19 @@ def _parse(raw: list) -> list[Supplier]:
         name = entry.get("name", "")
         if sid is None:
             continue
+        # `valid` defaults to True for older files that don't carry it.
+        valid = bool(entry.get("valid", True))
         # Preserve string form; ints get coerced to str so leading-zero
         # IDs that round-trip through other tooling stay intact.
-        out.append(Supplier(id=str(sid), name=str(name)))
+        out.append(Supplier(id=str(sid), name=str(name), valid=valid))
     return out
+
+
+def load_valid_suppliers() -> list[Supplier]:
+    """Same as `load_suppliers()` but filters out invalid ones.
+
+    Used by the picker widgets (dialpad + Test Runner) so operators
+    only see suppliers their org has actually authorised. Settings
+    has the full list with a checkbox per row.
+    """
+    return [s for s in load_suppliers() if s.valid]
