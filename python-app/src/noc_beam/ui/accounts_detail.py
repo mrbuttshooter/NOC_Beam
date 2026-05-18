@@ -100,12 +100,19 @@ class AccountDetail(QWidget):
 
         sip_events().registration_changed.connect(self._on_reg_changed)
         sip_events().call_quality.connect(self._on_call_quality)
-        # Disconnect on destruction so the singleton sip_events doesn't
-        # keep firing into a dead AccountDetail when the accounts
-        # window is closed and re-opened (signal-leak audit fix).
-        self.destroyed.connect(self._disconnect_signals)
+        # Subscriber-teardown: use closeEvent + an explicit shutdown()
+        # method instead of `destroyed.connect`. PySide6 does not
+        # reliably fire `destroyed` for parented QWidgets that get
+        # accept()/reject()'d or GC'd off the main loop — the slot
+        # then never runs and the sip_events singleton accumulates
+        # dead closures. The parent (PhoneShell) calls .shutdown()
+        # on its own closeEvent for the embedded case where this
+        # widget never closes on its own.
 
-    def _disconnect_signals(self, *_args) -> None:
+    def shutdown(self) -> None:
+        """Drop the sip_events subscribers. Idempotent. Called by
+        closeEvent (top-level case) and by parent's closeEvent
+        (embedded case)."""
         try:
             sip_events().registration_changed.disconnect(self._on_reg_changed)
         except Exception:
@@ -114,6 +121,15 @@ class AccountDetail(QWidget):
             sip_events().call_quality.disconnect(self._on_call_quality)
         except Exception:
             pass
+
+    # Back-compat alias — older code paths may still reference the
+    # original method name; keep so any in-flight call still works.
+    def _disconnect_signals(self, *_args) -> None:
+        self.shutdown()
+
+    def closeEvent(self, ev):  # noqa: N802 (Qt naming)
+        self.shutdown()
+        super().closeEvent(ev)
 
     # ------------------------------------------------------------------
     def _build_empty(self) -> QWidget:

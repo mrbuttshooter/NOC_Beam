@@ -86,18 +86,25 @@ if PJSUA2_AVAILABLE:
                 log.exception("onCallState error")
 
         def onCallMediaState(self, prm) -> None:  # noqa: N802, ANN001
+            # This callback runs on the PJSIP worker thread. It MUST NOT
+            # call startTransmit / stopTransmit on the conference bridge
+            # itself -- doing so unconditionally wires the new audio media
+            # to both capture and playback, which (a) defeats the audio-
+            # focus router (set_call_audio_focus) by overriding focus
+            # state for ~200 ms after every multi-call answer, leaking
+            # the mic into the unfocused trunk, and (b) touches the
+            # device manager from a non-Qt thread.
+            #
+            # Instead, emit `call_media_active` and let the main-thread
+            # handler in PhoneShell (`_on_call_media`) call
+            # set_call_audio_focus, which correctly wires only the
+            # currently-focused call's audio. FAS attachment also moves
+            # to the main thread for the same reason.
             try:
                 info = self.getInfo()
                 for mi in info.media:
                     # type 1 == audio, status 1 == active
                     if mi.type == 1 and mi.status == 1:
-                        aud = self.getAudioMedia(mi.index)
-                        # Hook into the default audio device manager
-                        ep = pj.Endpoint.instance()
-                        dev_mgr = ep.audDevManager()
-                        dev_mgr.getCaptureDevMedia().startTransmit(aud)
-                        aud.startTransmit(dev_mgr.getPlaybackDevMedia())
-
                         codec = ""
                         clock = 0
                         chans = 0
@@ -109,24 +116,12 @@ if PJSUA2_AVAILABLE:
                             chans = getattr(stat, "audChannelCount", 1)
                         except Exception:
                             pass
+                        # Main-thread handler will:
+                        #   1. set_call_audio_focus(currently_focused)
+                        #   2. attach FAS engine to this call (via the
+                        #      _attach_fas_after_media slot wired in
+                        #      PhoneShell._on_call_media).
                         sip_events().call_media_active.emit(info.id, codec, clock, chans)
-
-                        # FAS tap: pipe the call's downlink audio into the
-                        # detection engine. No-op if FAS is disabled. Wrap
-                        # tight -- the engine must NEVER prevent the
-                        # capture/playback wiring above from completing.
-                        try:
-                            from noc_beam.audio.fas_engine import attach_fas_to_call
-
-                            attach_fas_to_call(
-                                info.id,
-                                aud,
-                                account_id=self._account_id,
-                                remote_uri=self.remote_uri,
-                                codec=codec,
-                            )
-                        except Exception:
-                            log.exception("FAS attach raised on call %s", info.id)
             except Exception:
                 log.exception("onCallMediaState error")
 

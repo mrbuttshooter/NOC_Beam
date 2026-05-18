@@ -706,24 +706,35 @@ class TraceView(QWidget):
             self._on_sip_message,
             type=Qt.ConnectionType.QueuedConnection,
         )
-        # Disconnect on destruction. Without this, every TraceView
-        # constructed (in-shell + popup + any future) leaves a permanent
-        # subscriber on the singleton sip_events. A single open/close
-        # cycle of the trace popup doubles per-message processing for
-        # the rest of the session.
-        self.destroyed.connect(self._disconnect_signals)
+        # Subscriber teardown: use closeEvent + explicit shutdown()
+        # instead of `destroyed.connect`. PySide6 doesn't reliably fire
+        # `destroyed` for parented widgets — the old pattern silently
+        # left a permanent subscriber on the sip_events singleton for
+        # every TraceView constructed (in-shell + each popup open/close
+        # cycle), doubling per-message processing for the rest of the
+        # session. closeEvent fires reliably on the popup case; for the
+        # embedded in-shell instance, PhoneShell.closeEvent calls
+        # .shutdown() explicitly.
 
-    def _disconnect_signals(self, *_args) -> None:
+    def shutdown(self) -> None:
+        """Drop the sip_events subscriber + stop pending debounce.
+        Idempotent. Called by closeEvent and by parent on app exit."""
         try:
             sip_events().sip_message.disconnect(self._on_sip_message)
         except Exception:
             pass
-        # Stop the debounce timer so its queued timeout can't fire
-        # _reapply_filters on a half-destroyed widget after closeEvent.
         try:
             self._filter_debounce.stop()
         except Exception:
             pass
+
+    # Back-compat alias for any in-flight callers.
+    def _disconnect_signals(self, *_args) -> None:
+        self.shutdown()
+
+    def closeEvent(self, ev):  # noqa: N802 (Qt naming)
+        self.shutdown()
+        super().closeEvent(ev)
 
     # ------------------------------------------------------------------
     def _on_sip_message(self, ts: float, direction: str, peer: str, body: str) -> None:

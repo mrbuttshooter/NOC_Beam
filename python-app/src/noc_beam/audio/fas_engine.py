@@ -66,6 +66,16 @@ def stop_fas_engine() -> None:
     if _worker_started:
         shutdown_fas_worker()
         _worker_started = False
+    # Release ONNX InferenceSession refs held by module-level singletons
+    # (_silero / _aasist / _panns). Without this, restarting the worker
+    # in the same Python interpreter (test runs, hot reload) leaks the
+    # native sessions. Best-effort -- if fas_models lacks the symbol
+    # (older build) we just skip.
+    try:
+        from noc_beam.audio.fas_models import shutdown_models
+        shutdown_models()
+    except Exception:
+        pass
     _enabled = False
 
 

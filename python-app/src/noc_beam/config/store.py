@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import sys
+import time
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -364,16 +365,28 @@ def save_accounts(accounts: list[AccountConfig]) -> None:
 def _atomic_write(path: Path, content: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(content, encoding="utf-8")
-    try:
-        tmp.replace(path)
-    except PermissionError:
-        log.warning(
-            "Atomic replace failed for %s; falling back to direct write",
-            path,
-            exc_info=True,
-        )
-        path.write_text(content, encoding="utf-8")
+    # Windows: tmp.replace can transiently fail with PermissionError when
+    # an antivirus scanner or file watcher holds the destination open.
+    # Retry the atomic replace a few times rather than falling back to a
+    # naked open-truncate-write -- the previous fallback (path.write_text)
+    # was NOT atomic and could leave accounts.json empty/half-written on
+    # a crash mid-write, silently wiping every SIP account on next launch.
+    # Mirrors the retry pattern in history.save_history.
+    last_err: BaseException | None = None
+    for _ in range(3):
         try:
-            tmp.unlink(missing_ok=True)
-        except OSError:
-            log.debug("Could not remove temporary config file %s", tmp, exc_info=True)
+            tmp.replace(path)
+            return
+        except PermissionError as exc:
+            last_err = exc
+            time.sleep(0.05)
+    # All retries exhausted -- clean up the orphaned tmp and re-raise so
+    # the caller can decide how to handle it (don't silently degrade).
+    try:
+        tmp.unlink(missing_ok=True)
+    except OSError:
+        log.debug("Could not remove temporary config file %s", tmp, exc_info=True)
+    log.error(
+        "Atomic replace failed for %s after retries: %s", path, last_err
+    )
+    raise last_err  # type: ignore[misc]

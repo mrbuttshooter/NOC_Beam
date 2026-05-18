@@ -169,7 +169,17 @@ def append_entry(entry: CdrEntry) -> None:
     """Append a single CDR row. Safe to call from any UI handler."""
     entries = _ensure_cache()
     entries.append(entry)
-    save_history(entries)
+    try:
+        save_history(entries)
+    except Exception:
+        # Roll back the in-memory append so cache and disk stay in sync.
+        # save_history() retries 3x then raises (AV lock, disk full, etc.);
+        # if we left the entry in _cache, disk would be missing it and the
+        # next successful save would trim from a divergent list, silently
+        # dropping real CDRs. Re-raise so the caller knows the save failed.
+        if _cache is not None and _cache and _cache[-1] is entry:
+            _cache.pop()
+        raise
 
 
 def clear_history() -> None:

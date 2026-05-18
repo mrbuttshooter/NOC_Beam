@@ -955,12 +955,10 @@ class SettingsDialog(QDialog):
             _pill.style().unpolish(_pill); _pill.style().polish(_pill)
         self._pill_slot = _update_pill
         _sev().registration_changed.connect(_update_pill)
-        # Disconnect when the dialog goes away (it's modal but still
-        # outlives a single tick; without disconnect we'd leak a
-        # subscriber per Settings open).
-        self.destroyed.connect(
-            lambda *_: self._safe_disconnect_pill()
-        )
+        # Disconnect is wired via closeEvent (see SettingsDialog.closeEvent
+        # at the bottom of the class) — NOT via destroyed.connect, which
+        # PySide6 doesn't reliably fire for QDialog accept/reject. Old
+        # pattern silently leaked one subscriber per Settings open.
         reg.addRow("Status",     status_pill)
         # Live Expires-In: reads the registrar's granted Expires from
         # SipEndpoint and refreshes on every registration_changed
@@ -1017,9 +1015,9 @@ class SettingsDialog(QDialog):
 
     def _safe_disconnect_pill(self) -> None:
         """Drop the registration_changed subscribers installed in
-        _build_account_pane (pill + expires-in). Hooked from
-        destroyed so the singleton sip_events doesn't keep firing
-        into the dead dialog."""
+        _build_account_pane (pill + expires-in). Called by closeEvent
+        and by reject() — replaces the older destroyed.connect hook
+        which PySide6 didn't reliably fire."""
         from noc_beam.sip.events import sip_events as _sev
         for slot_attr in ("_pill_slot", "_expires_slot"):
             slot = getattr(self, slot_attr, None)
@@ -1029,6 +1027,20 @@ class SettingsDialog(QDialog):
                 _sev().registration_changed.disconnect(slot)
             except Exception:
                 pass
+
+    def closeEvent(self, ev):  # noqa: N802 (Qt naming)
+        # Settings is a QDialog — closeEvent fires reliably whether
+        # the user clicks OK / Cancel / X / Esc. Run subscriber teardown
+        # here instead of via destroyed.connect (unreliable in PySide6).
+        self._safe_disconnect_pill()
+        super().closeEvent(ev)
+
+    def reject(self):  # noqa: D401 (Qt slot)
+        # accept() goes through closeEvent normally, but reject() (Cancel,
+        # Esc) on some PySide6 builds skips closeEvent. Belt-and-braces
+        # disconnect here too — _safe_disconnect_pill is idempotent.
+        self._safe_disconnect_pill()
+        super().reject()
 
     def _build_advanced_pane(self) -> QWidget:
         w = QWidget()

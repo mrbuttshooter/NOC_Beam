@@ -123,6 +123,38 @@ class _SupplierComboFocusFilter(QObject):
         return False
 
 
+class _CallStripRow(QFrame):
+    """One row in the multi-call strip.
+
+    Owns its call_id and a click-handler callback. Replaces the older
+    pattern that monkey-patched `row.mousePressEvent = closure` on each
+    instance — that closure captured `_original = QFrame.mousePressEvent`
+    (unbound) plus `_row = row` as a default arg, keeping the Python
+    wrapper alive past Qt's `deleteLater()`. A queued mouse event landing
+    after deletion then called the unbound method on a dead C++ object
+    and raised `RuntimeError: Internal C++ object already deleted.`
+    """
+
+    def __init__(self, call_id: int, on_select, parent=None):
+        super().__init__(parent)
+        self._call_id = call_id
+        self._on_select = on_select
+
+    def mousePressEvent(self, ev):  # noqa: N802 (Qt naming)
+        # Don't promote the row to selected when the click landed on the
+        # End button — it has its own clicked handler and the parent
+        # _hangup_one shouldn't race the select.
+        end = self.findChild(QToolButton, "CallStripEndBtn")
+        if end is None or not end.geometry().contains(ev.pos()):
+            try:
+                self._on_select(self._call_id)
+            except Exception:
+                pass
+        # Always chain to QFrame's default so Qt's normal click/select
+        # propagation to children (e.g. tooltips) still runs.
+        super().mousePressEvent(ev)
+
+
 class PhoneShell(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -151,7 +183,12 @@ class PhoneShell(QMainWindow):
         self._selected_call_id = None
         self._last_snapshots = {}
         self._really_quitting = False
-        self._reg_state = {}
+        self._reg_state: dict[str, int] = {}
+        # Peer URI cache per call_id, used by _on_call_record_updated to
+        # skip rebuilding the call card when only ancillary fields changed
+        # (state/codec/FAS). Initialized here (not lazy via hasattr in the
+        # hot path) so its lifetime is well-defined and prunable.
+        self._last_call_peer: dict[int, str] = {}
         self._active_account_id = ""
         self._always_on_top = False
         self._always_on_top_action = None
@@ -1092,7 +1129,11 @@ class PhoneShell(QMainWindow):
             acc.username = new_uid
             acc.auth_user = new_uid
             # Re-register with new credentials. SipEndpoint.update_account
-            # handles the modify+register cycle.
+            # handles the modify+register cycle (which is remove+add
+            # internally). Reset retry state first so a pending backoff
+            # timer doesn't fire setRegistration(True) on the rebuilt
+            # account, racing the supplier-swap REGISTER.
+            self.reg_retry.reset(acc.id)
             try:
                 SipEndpoint.instance().update_account(acc)
             except Exception:
@@ -1193,6 +1234,10 @@ class PhoneShell(QMainWindow):
         if not self._save_accounts_or_warn(accounts):
             return
         self.accounts = accounts
+        # Reset retry state before tearing down the PJSIP account so any
+        # pending retry timer doesn't fire setRegistration(True) on the
+        # freshly re-added account, racing the legitimate REGISTER.
+        self.reg_retry.reset(acc.id)
         SipEndpoint.instance().remove_account(acc.id)
         if new_cfg.enabled:
             self._add_account_to_endpoint(new_cfg)
@@ -1225,6 +1270,12 @@ class PhoneShell(QMainWindow):
             self, "Remove account", f"Remove {acc.username}@{acc.domain}?"
         ):
             return
+        # Reset retry state + drop cached registration health so a stale
+        # retry timer doesn't fire setRegistration on the destroyed
+        # account and so _set_active_account doesn't consult stale codes
+        # if the same account_id is ever reused.
+        self.reg_retry.reset(acc.id)
+        self._reg_state.pop(acc.id, None)
         SipEndpoint.instance().remove_account(acc.id)
         accounts = [a for a in self.accounts if a.id != acc.id]
         if not self._save_accounts_or_warn(accounts):
@@ -1251,6 +1302,9 @@ class PhoneShell(QMainWindow):
             )
             return
         try:
+            # Reset retry state so a pending backoff timer doesn't fire
+            # against the freshly-re-added account during the test cycle.
+            self.reg_retry.reset(acc.id)
             SipEndpoint.instance().remove_account(acc.id)
             self._add_account_to_endpoint(acc)
             self._set_status(
@@ -1275,6 +1329,11 @@ class PhoneShell(QMainWindow):
             )
             return
         try:
+            # Reset retry state + drop cached health: the account is now
+            # logically deregistered, no retry should fire and the chip
+            # should not show stale "registered" until next Test.
+            self.reg_retry.reset(acc.id)
+            self._reg_state.pop(acc.id, None)
             SipEndpoint.instance().remove_account(acc.id)
             self._set_status(
                 f"Unregistered {acc.username}@{acc.domain}", "muted"
@@ -1355,16 +1414,46 @@ class PhoneShell(QMainWindow):
 
     def _on_call_media(self, call_id, codec, clock, channels):
         self.calls.update_media(call_id, codec, clock, channels)
-        # PJSIP's onCallMediaState wires every newly-active call to
-        # BOTH the playback and capture devices, which overrides any
-        # prior audio-focus state. Re-apply focus so a brand-new call
-        # that happens to NOT be the selected one stays silent both
-        # ways instead of immediately blaring through the speakers.
+        # Drive audio routing from the MAIN thread (was previously done
+        # unconditionally in PJSIP's onCallMediaState worker callback,
+        # which raced our focus state). set_call_audio_focus walks every
+        # live call and wires only the focused one — so a brand-new
+        # answered call that isn't selected stays silent both ways
+        # instead of blaring through the speakers.
         try:
             from noc_beam.sip.endpoint import SipEndpoint
-            SipEndpoint.instance().set_call_audio_focus(self._selected_call_id)
+            ep = SipEndpoint.instance()
+            ep.set_call_audio_focus(self._selected_call_id)
         except Exception:
-            log.exception("re-apply audio focus after media-active failed")
+            log.exception("set audio focus after media-active failed")
+        # Attach FAS engine to the freshly-active call. Was previously
+        # done inside onCallMediaState (PJSIP thread). Moving it here
+        # keeps the FAS attach on the Qt main thread and ensures it
+        # runs AFTER the audio route is in place.
+        try:
+            from noc_beam.audio.fas_engine import attach_fas_to_call
+            from noc_beam.sip.endpoint import SipEndpoint  # idempotent
+            live = SipEndpoint.instance().find_call(call_id)
+            if live is None:
+                return
+            info = live.getInfo()
+            for mi in info.media:
+                if mi.type != 1 or mi.status != 1:
+                    continue
+                try:
+                    aud = live.getAudioMedia(mi.index)
+                except Exception:
+                    continue
+                attach_fas_to_call(
+                    call_id,
+                    aud,
+                    account_id=getattr(live, "_account_id", "") or "",
+                    remote_uri=getattr(live, "remote_uri", "") or "",
+                    codec=codec or "",
+                )
+                break  # first active audio media is enough
+        except Exception:
+            log.exception("FAS attach after media-active failed (call=%s)", call_id)
 
     def _on_call_quality(self, call_id, mos, loss, jitter_ms, rtt_ms):
         if call_id == self._selected_call_id:
@@ -1521,14 +1610,12 @@ class PhoneShell(QMainWindow):
             # show_outgoing rebuild of the card -- visible flicker
             # mid-call and lost scroll/focus state.
             try:
-                last_peer = getattr(self, "_last_call_peer", {}).get(call_id, "")
+                last_peer = self._last_call_peer.get(call_id, "")
                 if rec.remote_uri and rec.remote_uri != last_peer:
                     if rec.direction == "in" and rec.state == CallState.INCOMING:
                         self.call_widget.show_incoming(call_id, rec.remote_uri)
                     else:
                         self.call_widget.show_outgoing(call_id, rec.remote_uri)
-                    if not hasattr(self, "_last_call_peer"):
-                        self._last_call_peer = {}
                     self._last_call_peer[call_id] = rec.remote_uri
             except Exception:
                 pass
@@ -1576,12 +1663,7 @@ class PhoneShell(QMainWindow):
         except Exception:
             pass
         # Drop the peer-staleness cache so it doesn't grow unbounded.
-        try:
-            cache = getattr(self, "_last_call_peer", None)
-            if cache is not None:
-                cache.pop(call_id, None)
-        except Exception:
-            pass
+        self._last_call_peer.pop(call_id, None)
 
     def _on_dial_input_enter(self):
         target = self.dial_input.text().strip()
@@ -2073,23 +2155,16 @@ class PhoneShell(QMainWindow):
         return header
 
     def _build_strip_row(self, cid: int) -> QFrame:
-        row = QFrame(self.calls_strip)
+        # Use the dedicated subclass below instead of monkey-patching
+        # QFrame.mousePressEvent on an instance: the old pattern captured
+        # _original = QFrame.mousePressEvent in a closure plus _row as a
+        # default arg, keeping the Python wrapper alive past Qt's
+        # deleteLater. A queued mouse event arriving after delete called
+        # the unbound method on a dead C++ object -> RuntimeError.
+        row = _CallStripRow(cid, self._select_call, self.calls_strip)
         row.setObjectName("CallStripRow")
         row.setCursor(Qt.CursorShape.PointingHandCursor)
         row.setFixedHeight(36)
-        # Row click → promote to selected, EXCEPT when click landed
-        # on the End button (which has its own handler). Chain to
-        # super() so Qt's normal click/select propagation still
-        # happens (was swallowing child-widget events otherwise).
-        _original = QFrame.mousePressEvent
-        def _press(ev, _cid=cid, _row=row):
-            end = _row.findChild(QToolButton, "CallStripEndBtn")
-            if end is not None and end.geometry().contains(ev.pos()):
-                _original(_row, ev)
-                return
-            self._select_call(_cid)
-            _original(_row, ev)
-        row.mousePressEvent = _press  # type: ignore[method-assign]
 
         rl = QHBoxLayout(row)
         rl.setContentsMargins(12, 0, 8, 0)
@@ -2482,6 +2557,21 @@ class PhoneShell(QMainWindow):
                 sig.disconnect(slot)
             except Exception:
                 pass
+        # Tell embedded views to drop their sip_events subscribers.
+        # Replaces the old `destroyed.connect` pattern in each view —
+        # PySide6 doesn't reliably fire destroyed on embedded widgets,
+        # so the subscribers used to leak for the whole app lifetime
+        # plus accumulate one per Settings/Trace/Accounts re-open.
+        for view_attr in ("_accounts_detail", "trace_page", "trace_view", "trace_drawer"):
+            view = getattr(self, view_attr, None)
+            if view is None:
+                continue
+            shutdown = getattr(view, "shutdown", None)
+            if callable(shutdown):
+                try:
+                    shutdown()
+                except Exception:
+                    log.exception("shutdown() raised on %s", view_attr)
         # Stop the audio level poll timer so it can't fire into a
         # destroyed widget.
         try:

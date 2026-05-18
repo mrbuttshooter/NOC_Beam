@@ -52,12 +52,19 @@ class _ActiveCall:
 CLEANUP_FALLBACK_SECONDS = 1.0
 
 
-def _apply_routing_to_target(target: str, account: AccountConfig) -> str:
+def _apply_routing_to_target(
+    target: str,
+    account: AccountConfig,
+    supplier_id: str = "",
+) -> str:
     """Mirror PhoneShell._rewrite_dial_target for batch dispatch.
 
     Prepends:
-      1. supplier prefix (Genband only, when active_supplier_id is set
-         on the account at runtime via the runner's supplier picker)
+      1. supplier prefix (Genband only, from the explicit `supplier_id`
+         argument — was previously read from a `_active_supplier_id`
+         attribute stamped onto the shared AccountConfig by the caller,
+         which leaked stale state across runs and risked contaminating
+         the on-disk accounts.json schema)
       2. account dial_prefix
 
     SIP URIs and anything containing '@' are short-circuited above.
@@ -66,19 +73,17 @@ def _apply_routing_to_target(target: str, account: AccountConfig) -> str:
         return target
     out = target
     kind = (getattr(account, "switch_type", "other") or "other").lower()
-    if kind == "genband":
-        sid = getattr(account, "_active_supplier_id", "") or ""
-        if sid:
-            try:
-                from noc_beam.config.suppliers import load_suppliers
-                suppliers = {s.id: s for s in load_suppliers()}
-                s = suppliers.get(sid)
-                if s is not None:
-                    prefix = s.routed(getattr(account, "routing_format", "") or "")
-                    if prefix:
-                        out = f"{prefix}{out}"
-            except Exception:
-                pass
+    if kind == "genband" and supplier_id:
+        try:
+            from noc_beam.config.suppliers import load_suppliers
+            suppliers = {s.id: s for s in load_suppliers()}
+            s = suppliers.get(supplier_id)
+            if s is not None:
+                prefix = s.routed(getattr(account, "routing_format", "") or "")
+                if prefix:
+                    out = f"{prefix}{out}"
+        except Exception:
+            pass
     dial_prefix = (getattr(account, "dial_prefix", "") or "").strip()
     if dial_prefix:
         out = f"{dial_prefix}{out}"
@@ -98,12 +103,19 @@ class TestRunner(QObject):
         *,
         endpoint: object | None = None,
         events: SipEvents | None = None,
+        supplier_id: str = "",
     ) -> None:
         super().__init__(parent)
         self.spec = spec
         self.accounts = accounts
         self.endpoint = endpoint if endpoint is not None else SipEndpoint.instance()
         self.events = events if events is not None else sip_events()
+        # Supplier picked for this batch (Genband prefix routing).
+        # Stored on the runner instance, not stamped onto each
+        # AccountConfig — the older `setattr(acc, "_active_supplier_id",
+        # ...)` pattern leaked stale state into shared mutable accounts
+        # that also persist to disk.
+        self._supplier_id = supplier_id or ""
 
         self._queue: deque[TestCall] = deque()
         self._active: dict[int, _ActiveCall] = {}
@@ -587,7 +599,7 @@ class TestRunner(QObject):
         # Apply account-level dial prefix and (for Genband) the active
         # supplier's routed prefix. The active supplier id is set on the
         # account-bound runner -- if absent we just prepend dial_prefix.
-        target = _apply_routing_to_target(target, account)
+        target = _apply_routing_to_target(target, account, self._supplier_id)
         return f"sip:{target}@{account.domain}"
 
     def _hangup(self, call: object) -> None:

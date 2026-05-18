@@ -792,20 +792,21 @@ class TestRunnerView(QMainWindow):
         # Stop (header) toggles with run state; Close (footer) stays
         self._refresh_summary()
 
-        # Stash the picked supplier id on the relevant accounts so the
-        # runner's _apply_routing_to_target() picks it up. Only meaningful
-        # for teles/genband accounts; "other" accounts ignore it.
-        for acc in self.accounts:
-            kind = (getattr(acc, "switch_type", "other") or "other").lower()
-            if kind in ("teles", "genband"):
-                setattr(acc, "_active_supplier_id", self._batch_supplier_id)
-
         # Construct the runner BEFORE enabling Stop. If Runner.__init__
         # raises (e.g. endpoint=None resolution path) the Stop button
         # used to stick in the enabled state with self.runner=None and
         # clicking it AttributeError'd on .cancel(). Now Stop only
         # turns on once we have an actual Runner to cancel.
-        self.runner = Runner(spec, self.accounts, self)
+        #
+        # Pass the picked supplier_id as an explicit constructor arg
+        # instead of stamping `_active_supplier_id` onto each shared
+        # AccountConfig — the old pattern leaked stale state into
+        # accounts that also persist to disk and contaminated later
+        # non-runner code paths that introspected the same objects.
+        self.runner = Runner(
+            spec, self.accounts, self,
+            supplier_id=self._batch_supplier_id,
+        )
         self.runner.call_started.connect(self._on_call_started)
         self.runner.call_completed.connect(self._on_call_completed)
         self.runner.run_complete.connect(self._on_run_complete)

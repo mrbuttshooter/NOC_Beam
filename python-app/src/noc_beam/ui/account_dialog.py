@@ -290,7 +290,7 @@ class AccountDialog(QDialog):
         # Per-test bookkeeping
         self._test_id: str | None = None
         self._test_timer: QTimer | None = None
-        self._test_conn = None
+        self._test_subscribed: bool = False
 
     def result_account(self) -> AccountConfig:
         port_txt = self.port.text().strip()
@@ -399,7 +399,8 @@ class AccountDialog(QDialog):
         self._set_status("Registering…", ok=None)
         self.test_btn.setEnabled(False)
 
-        self._test_conn = sip_events().registration_changed.connect(self._on_reg_event)
+        sip_events().registration_changed.connect(self._on_reg_event)
+        self._test_subscribed = True
         self._test_timer = QTimer(self)
         self._test_timer.setSingleShot(True)
         self._test_timer.timeout.connect(self._on_test_timeout)
@@ -439,13 +440,13 @@ class AccountDialog(QDialog):
         # before any test was started; the previous unconditional
         # disconnect would raise RuntimeError (caught silently) on
         # every dialog cancel, masking real wiring bugs.
-        if self._test_conn is not None:
+        if self._test_subscribed:
             try:
                 from noc_beam.sip.events import sip_events
                 sip_events().registration_changed.disconnect(self._on_reg_event)
             except Exception:
                 pass
-            self._test_conn = None
+            self._test_subscribed = False
         if self._test_id is not None:
             try:
                 SipEndpoint.instance().remove_account(self._test_id)

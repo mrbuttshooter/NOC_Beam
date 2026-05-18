@@ -196,12 +196,15 @@ class PannsClassifier(_BaseModel):
             x = samples.astype(np.float32) / 32768.0
         else:
             x = samples.astype(np.float32, copy=False)
-        # 1-second clip at 16 kHz = 16000 samples (PANNs default)
-        target = 16000
-        if x.size < target:
-            x = np.pad(x, (0, target - x.size))
+        # PANNs CNN14 trained on ~10s clips; truncating to 1s gave noisy scores.
+        # Take most-recent samples (caller passes a rolling window).
+        # CNN14 accepts variable-length input via its built-in pooling.
+        target = min(x.size, 16000 * 10)
+        if x.size < 16000:
+            # Need at least ~1s to produce meaningful features; pad if shorter.
+            x = np.pad(x, (0, 16000 - x.size))
         else:
-            x = x[:target]
+            x = x[-target:]
         x = x.reshape(1, -1).astype(np.float32)
         try:
             inputs = self._sess.get_inputs()
@@ -246,3 +249,21 @@ def panns_classifier() -> PannsClassifier:
     if _panns is None:
         _panns = PannsClassifier()
     return _panns
+
+
+def shutdown_models() -> None:
+    """Release ONNX InferenceSession references held by module-level singletons.
+
+    Intended to be called from ``fas_engine.stop_fas_engine()`` so that a
+    subsequent worker start (e.g. in test runs reusing the same Python
+    interpreter) re-initialises cleanly instead of retaining stale sessions.
+    Nulls each holder's ``_sess`` attribute first to encourage onnxruntime
+    cleanup before dropping the singleton reference.
+    """
+    global _silero, _aasist, _panns
+    for holder in (_silero, _aasist, _panns):
+        if holder is not None and getattr(holder, "_sess", None) is not None:
+            holder._sess = None
+    _silero = None
+    _aasist = None
+    _panns = None

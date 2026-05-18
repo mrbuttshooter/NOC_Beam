@@ -580,7 +580,12 @@ class SipEndpoint:
                 log.exception("Account shutdown error")
 
     def get_account(self, account_id: str) -> SipAccount | None:
-        return self._accounts.get(account_id)
+        # Brief lock acquisition: add_account / remove_account mutate the
+        # dict from arbitrary threads; a concurrent .get() during dict
+        # rehash can return a partially-built reference. RLock makes this
+        # safe to call from inside other locked critical sections.
+        with self._lock:
+            return self._accounts.get(account_id)
 
     def update_account(self, cfg: AccountConfig) -> SipAccount:
         """Apply a new configuration to an existing account.
@@ -596,7 +601,10 @@ class SipEndpoint:
         return self.add_account(cfg)
 
     def accounts(self) -> list[SipAccount]:
-        return list(self._accounts.values())
+        # Snapshot under the lock — callers (EndpointSupervisor._do_restart,
+        # diagnostic dumps) iterate this freely, racing add/remove.
+        with self._lock:
+            return list(self._accounts.values())
 
     # ------------------------------------------------------------------
     # Calls
@@ -740,9 +748,21 @@ class SipEndpoint:
         call.reinvite(prm)
 
     def find_call(self, call_id: int) -> SipCall | None:
-        """Look up a live SipCall across all accounts by pjsua2 call-id."""
-        for acc in self._accounts.values():
-            for c in acc.calls:
+        """Look up a live SipCall across all accounts by pjsua2 call-id.
+
+        Snapshots the account map AND each account's calls list under the
+        lock before iterating: PJSIP worker threads mutate `acc.calls`
+        from onIncomingCall (append) and onCallState DISCONNECTED
+        (remove). Iterating without the snapshot races those mutations
+        and can RuntimeError ("dict changed size") or deref a freed
+        SipCall (segfault).
+        """
+        with self._lock:
+            snapshot = [
+                (acc, list(acc.calls)) for acc in self._accounts.values()
+            ]
+        for _acc, calls in snapshot:
+            for c in calls:
                 try:
                     if c.getInfo().id == call_id:
                         return c
@@ -813,8 +833,19 @@ class SipEndpoint:
         except Exception:
             log.exception("audio focus: capture/playback dev unavailable")
             return
-        for acc in self._accounts.values():
-            for call in list(acc.calls):
+        # Snapshot the call list under the lock before iterating. PJSIP
+        # worker threads append to acc.calls on onIncomingCall and remove
+        # on onCallState DISCONNECTED -- iterating live can RuntimeError
+        # or, worse, hand us a freed SipCall whose getAudioMedia()
+        # segfaults. We hold the lock only over the snapshot, not over
+        # the startTransmit/stopTransmit calls (which can re-enter via
+        # PJSIP callbacks and risk lock contention).
+        with self._lock:
+            snapshot = [
+                list(acc.calls) for acc in self._accounts.values()
+            ]
+        for calls in snapshot:
+            for call in calls:
                 try:
                     info = call.getInfo()
                 except Exception:
@@ -829,14 +860,18 @@ class SipEndpoint:
                         continue
                     if is_focused:
                         try: capture.startTransmit(aud)
-                        except Exception: pass
+                        except Exception as exc:
+                            log.debug("audio focus startTransmit (mic->call) failed: %s", exc)
                         try: aud.startTransmit(playback)
-                        except Exception: pass
+                        except Exception as exc:
+                            log.debug("audio focus startTransmit (call->speaker) failed: %s", exc)
                     else:
                         try: capture.stopTransmit(aud)
-                        except Exception: pass
+                        except Exception as exc:
+                            log.debug("audio focus stopTransmit (mic->call) failed: %s", exc)
                         try: aud.stopTransmit(playback)
-                        except Exception: pass
+                        except Exception as exc:
+                            log.debug("audio focus stopTransmit (call->speaker) failed: %s", exc)
 
     def set_call_mute(self, call: SipCall, muted: bool) -> None:
         """Stop/resume the capture device → call audio transmit.
