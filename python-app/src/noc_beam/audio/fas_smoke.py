@@ -97,11 +97,15 @@ def _check_fpcalc() -> dict[str, Any]:
         entry["error"] = "fpcalc binary not present (run build/fetch_fas_models.py)"
         return entry
     try:
+        # CREATE_NO_WINDOW: suppress console flash if smoke is ever run
+        # from the windowed PyInstaller build (only fires in --fas-smoke
+        # mode but worth keeping consistent with fas_fingerprint).
         proc = subprocess.run(
             [str(path), "-version"],
             capture_output=True,
             text=True,
             timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if proc.returncode == 0:
             entry["ok"] = True

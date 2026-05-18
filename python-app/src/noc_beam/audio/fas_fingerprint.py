@@ -57,11 +57,18 @@ def fingerprint_clip(samples: np.ndarray, sample_rate: int = 16000) -> str | Non
         return None
     wav_path = _write_wav_temp(samples, sample_rate)
     try:
+        # CREATE_NO_WINDOW (Windows only; falls through to 0 elsewhere)
+        # suppresses the black console flash that fpcalc.exe would
+        # otherwise pop on every fingerprint pass — once per scoring
+        # tick per call, very visible during live calls. The flag is
+        # available since Python 3.7 on Windows; getattr keeps the
+        # call portable for the (currently unused) Linux/macOS path.
         proc = subprocess.run(
             [str(fp_bin), "-raw", "-plain", "-length", "10", str(wav_path)],
             capture_output=True,
             text=True,
             timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         if proc.returncode != 0:
             log.warning("fpcalc exit %s: %s", proc.returncode, proc.stderr.strip())
