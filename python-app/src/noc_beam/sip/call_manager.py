@@ -76,8 +76,10 @@ class CallRecord:
     ended_at: float | None = None
     # FAS (False Answer Supervision) detection. Updated by FasInferenceWorker
     # via sip_events().call_fas_verdict.
-    # verdict: "" before first analysis, then one of
-    #   ANALYZING, INCONCLUSIVE, LIKELY_REAL, SUSPICIOUS, LIKELY_FAS
+    # verdict: "" before first analysis, then a FAS verdict string such as
+    #   ANALYZING, INCONCLUSIVE, HUMAN_LIKELY, MACHINE_OR_VOICEMAIL,
+    #   IVR_OR_ANNOUNCEMENT, SUSPICIOUS, PROBABLE_FAS, CONFIRMED_FAS.
+    # Older persisted/UI paths may still carry LIKELY_REAL / LIKELY_FAS.
     fas_verdict: str = ""
     fas_confidence: float = 0.0      # 0.0..1.0
     fas_reasons: str = ""

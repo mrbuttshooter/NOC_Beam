@@ -192,6 +192,9 @@ class PhoneShell(QMainWindow):
         # hot path) so its lifetime is well-defined and prunable.
         self._last_call_peer: dict[int, str] = {}
         self._active_account_id = ""
+        self._test_runner_call_ids: set[int] = set()
+        self._fas_confirmed_call_ids: set[int] = set()
+        self._pending_fas_media: dict[int, str] = {}
         self._always_on_top = False
         self._always_on_top_action = None
 
@@ -1570,11 +1573,39 @@ class PhoneShell(QMainWindow):
         if self.tray.presence == Presence.AVAILABLE:
             self.ringer.start()
 
+    def _is_test_runner_call(self, call_id: int) -> bool:
+        if call_id in self._test_runner_call_ids:
+            return True
+        try:
+            live = SipEndpoint.instance().find_call(call_id)
+            if getattr(live, "origin", "") == "test_runner":
+                self._test_runner_call_ids.add(call_id)
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _note_fas_call_state(self, call_id: int, new_state: CallState) -> None:
+        if new_state == CallState.CONFIRMED:
+            self._fas_confirmed_call_ids.add(call_id)
+            codec = self._pending_fas_media.pop(call_id, None)
+            if codec is not None:
+                self._attach_fas_to_call_media(call_id, codec)
+        elif new_state == CallState.DISCONNECTED:
+            self._fas_confirmed_call_ids.discard(call_id)
+            self._pending_fas_media.pop(call_id, None)
+
+    def _fas_can_attach(self, call_id: int) -> bool:
+        return call_id in self._fas_confirmed_call_ids
+
     def _on_call_state(self, account_id, call_id, state, code, reason):
         try: new_state = CallState(state)
         except ValueError:
             if call_id == self._selected_call_id:
                 self.call_widget.update_state(state, code, reason)
+            return
+        self._note_fas_call_state(call_id, new_state)
+        if self._is_test_runner_call(call_id):
             return
         if new_state == CallState.DISCONNECTED and self.calls.get(call_id) is None:
             if call_id in self._locally_finished_call_ids:
@@ -1603,7 +1634,58 @@ class PhoneShell(QMainWindow):
         if new_state in (CallState.CONFIRMED, CallState.DISCONNECTED, CallState.EARLY):
             self.ringer.stop()
 
+    def _attach_fas_to_call_media(self, call_id, codec):
+        try:
+            from noc_beam.audio.fas_engine import attach_fas_to_call
+            from noc_beam.sip.endpoint import SipEndpoint  # idempotent
+            live = SipEndpoint.instance().find_call(call_id)
+            if live is None:
+                return
+            rec = self.calls.get(call_id)
+            supplier_id = (
+                (getattr(rec, "supplier_id", "") if rec is not None else "")
+                or getattr(live, "supplier_id", "")
+                or ""
+            )
+            supplier_label = (
+                (getattr(rec, "supplier_label", "") if rec is not None else "")
+                or getattr(live, "supplier_label", "")
+                or supplier_id
+            )
+            info = live.getInfo()
+            for mi in info.media:
+                if mi.type != 1 or mi.status != 1:
+                    continue
+                try:
+                    aud = live.getAudioMedia(mi.index)
+                except Exception:
+                    continue
+                attach_fas_to_call(
+                    call_id,
+                    aud,
+                    account_id=getattr(live, "_account_id", "") or "",
+                    remote_uri=getattr(live, "remote_uri", "") or "",
+                    codec=codec or "",
+                    origin=getattr(live, "origin", "") or "",
+                    supplier=supplier_id or supplier_label or "",
+                    supplier_id=supplier_id,
+                    supplier_label=supplier_label,
+                )
+                break  # first active audio media is enough
+        except Exception:
+            log.exception("FAS attach after media-active failed (call=%s)", call_id)
+
     def _on_call_media(self, call_id, codec, clock, channels):
+        if self._is_test_runner_call(call_id):
+            try:
+                SipEndpoint.instance().set_call_audio_focus(self._selected_call_id)
+            except Exception:
+                log.exception("mute test-runner call audio failed")
+            if not self._fas_can_attach(call_id):
+                self._pending_fas_media[call_id] = codec or ""
+                return
+            self._attach_fas_to_call_media(call_id, codec)
+            return
         self.calls.update_media(call_id, codec, clock, channels)
         # Drive audio routing from the MAIN thread (was previously done
         # unconditionally in PJSIP's onCallMediaState worker callback,
@@ -1621,36 +1703,20 @@ class PhoneShell(QMainWindow):
         # done inside onCallMediaState (PJSIP thread). Moving it here
         # keeps the FAS attach on the Qt main thread and ensures it
         # runs AFTER the audio route is in place.
-        try:
-            from noc_beam.audio.fas_engine import attach_fas_to_call
-            from noc_beam.sip.endpoint import SipEndpoint  # idempotent
-            live = SipEndpoint.instance().find_call(call_id)
-            if live is None:
-                return
-            info = live.getInfo()
-            for mi in info.media:
-                if mi.type != 1 or mi.status != 1:
-                    continue
-                try:
-                    aud = live.getAudioMedia(mi.index)
-                except Exception:
-                    continue
-                attach_fas_to_call(
-                    call_id,
-                    aud,
-                    account_id=getattr(live, "_account_id", "") or "",
-                    remote_uri=getattr(live, "remote_uri", "") or "",
-                    codec=codec or "",
-                )
-                break  # first active audio media is enough
-        except Exception:
-            log.exception("FAS attach after media-active failed (call=%s)", call_id)
+        if not self._fas_can_attach(call_id):
+            self._pending_fas_media[call_id] = codec or ""
+            return
+        self._attach_fas_to_call_media(call_id, codec)
 
     def _on_call_quality(self, call_id, mos, loss, jitter_ms, rtt_ms):
+        if self._is_test_runner_call(call_id):
+            return
         if call_id == self._selected_call_id:
             self.call_widget.update_quality(mos, loss)
 
     def _on_call_fas_verdict(self, call_id, verdict, confidence, reasons):
+        if self._is_test_runner_call(call_id):
+            return
         # FAS engine fires this from a worker thread; Qt queues it onto
         # the main thread before delivery. Push to the call_manager so
         # any widget bound to call_updated re-renders with the new badge.
@@ -1661,6 +1727,11 @@ class PhoneShell(QMainWindow):
 
 
     def _on_call_ended(self, call_id):
+        self._fas_confirmed_call_ids.discard(call_id)
+        self._pending_fas_media.pop(call_id, None)
+        if self._is_test_runner_call(call_id):
+            self._test_runner_call_ids.discard(call_id)
+            return
         # If the call ended with a SIP failure code, play the matching
         # PSTN-style tone (busy / reorder / reject) so the operator
         # knows by ear without watching the screen. 200/auth/etc are
@@ -1865,6 +1936,8 @@ class PhoneShell(QMainWindow):
             pass
         # Drop the peer-staleness cache so it doesn't grow unbounded.
         self._last_call_peer.pop(call_id, None)
+        self._fas_confirmed_call_ids.discard(call_id)
+        self._pending_fas_media.pop(call_id, None)
 
     def _on_dial_input_enter(self):
         target = self.dial_input.text().strip()

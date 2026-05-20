@@ -36,6 +36,10 @@ class FeatureBundle:
     energy_stability: float         # 0..1, 1 = flat/repetitive energy
     speech_run_count: int           # number of contiguous speech segments
     rms_db: float                   # mean RMS in dBFS (-inf .. 0)
+    tone_label: str = ""            # RINGBACK / BUSY_OR_REORDER / SIT_NO_SERVICE / ...
+    tone_score: float = 0.0         # 0..1 confidence for tone_label
+    tone_freq_hz: float = 0.0       # representative detected frequency
+    tone_cadence: str = ""          # human-readable cadence summary
 
 
 def _rms(samples: np.ndarray) -> float:
@@ -189,6 +193,12 @@ def extract_features(samples: np.ndarray, sample_rate: int = 16000) -> FeatureBu
             rms_db=rms_db,
         )
     rb_score, rb_freq = ringback_detect(samples, sample_rate)
+    try:
+        from noc_beam.audio.fas_tones import detect_call_progress_tone
+
+        tone = detect_call_progress_tone(samples, sample_rate)
+    except Exception:
+        tone = None
     e_stability = energy_stability(samples, sample_rate)
     levels = energy_windows(samples, sample_rate)
     runs = speech_runs(levels)
@@ -199,4 +209,8 @@ def extract_features(samples: np.ndarray, sample_rate: int = 16000) -> FeatureBu
         energy_stability=e_stability,
         speech_run_count=runs,
         rms_db=rms_db,
+        tone_label=tone.label if tone is not None else "",
+        tone_score=tone.score if tone is not None else 0.0,
+        tone_freq_hz=tone.freq_hz if tone is not None else 0.0,
+        tone_cadence=tone.cadence if tone is not None else "",
     )

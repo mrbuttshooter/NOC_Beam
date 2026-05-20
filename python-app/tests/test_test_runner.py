@@ -55,7 +55,7 @@ class StubEndpoint:
         self.hung_up: list[object] = []
         self.max_active = 0
 
-    def make_call(self, account_id: str, target_uri: str) -> StubCall:
+    def make_call(self, account_id: str, target_uri: str, **_kwargs) -> StubCall:
         call = StubCall(self.next_call_id)
         self.next_call_id += 1
         self.calls[call.getInfo().id] = (account_id, target_uri, call)
@@ -385,7 +385,7 @@ class BrokenInfoEndpoint(StubEndpoint):
         super().__init__()
         self.broken_call = BrokenInfoCall()
 
-    def make_call(self, account_id: str, target_uri: str) -> BrokenInfoCall:
+    def make_call(self, account_id: str, target_uri: str, **_kwargs) -> BrokenInfoCall:
         return self.broken_call
 
 
@@ -455,11 +455,11 @@ class FirstBrokenThenNormalEndpoint(StubEndpoint):
         self.broken_call = BrokenInfoCall()
         self.make_call_count = 0
 
-    def make_call(self, account_id: str, target_uri: str) -> object:
+    def make_call(self, account_id: str, target_uri: str, **_kwargs) -> object:
         self.make_call_count += 1
         if self.make_call_count == 1:
             return self.broken_call
-        return super().make_call(account_id, target_uri)
+        return super().make_call(account_id, target_uri, **_kwargs)
 
 
 def test_getinfo_failure_holds_parallel_slot_until_cleanup_release(

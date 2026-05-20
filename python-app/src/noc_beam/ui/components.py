@@ -145,8 +145,13 @@ class FasBadge(QLabel):
         "ANALYZING":     ("Analyzing",   "progress"),
         "INCONCLUSIVE":  ("Inconclusive", "muted"),
         "LIKELY_REAL":   ("Real",        "ok"),
+        "HUMAN_LIKELY":  ("Human",       "ok"),
+        "MACHINE_OR_VOICEMAIL": ("Machine", "warn"),
+        "IVR_OR_ANNOUNCEMENT": ("IVR",    "warn"),
         "SUSPICIOUS":    ("Suspicious",  "warn"),
         "LIKELY_FAS":    ("Likely FAS",  "danger"),
+        "PROBABLE_FAS":  ("Probable FAS", "danger"),
+        "CONFIRMED_FAS": ("FAS",         "danger"),
     }
 
     def __init__(self, verdict: str = "", parent: QWidget | None = None) -> None:

@@ -110,14 +110,16 @@ def attach_fas_to_call(call_id: int, call_audio: Any, **meta: Any) -> None:
         from noc_beam.audio.fas_tap import FasWavTap
 
         tap = FasWavTap(call_id, call_audio, retain_on_disk=True)
+        fas_router().attach(call_id, **meta)
         if not tap.start():
             log.warning("FAS WAV tap start failed for call %s", call_id)
+            fas_router().detach(call_id)
             return
         _per_call[call_id] = {"tap": tap, "audio": call_audio}
-        fas_router().attach(call_id, **meta)
         fas_worker().track(call_id)
         log.debug("FAS attached to call %s", call_id)
     except Exception:
+        fas_router().detach(call_id)
         log.exception("Failed to attach FAS to call %s", call_id)
 
 

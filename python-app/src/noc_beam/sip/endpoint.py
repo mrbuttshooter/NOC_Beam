@@ -714,7 +714,14 @@ class SipEndpoint:
     # ------------------------------------------------------------------
     # Calls
     # ------------------------------------------------------------------
-    def make_call(self, account_id: str, target_uri: str) -> SipCall:
+    def make_call(
+        self,
+        account_id: str,
+        target_uri: str,
+        *,
+        origin: str = "manual",
+        origin_meta: dict[str, str] | None = None,
+    ) -> SipCall:
         # Resolve everything we need under the lock, then RELEASE the
         # lock before invoking pjsua2.makeCall. makeCall does
         # synchronous DNS (A-record / NAPTR), which on a slow corp
@@ -727,6 +734,10 @@ class SipEndpoint:
                 raise ValueError(f"Unknown account {account_id}")
             target_uri = self._normalize_dial_target(target_uri, acc.cfg.domain)
             call = SipCall(acc, account_id=account_id)
+            call.origin = origin or "manual"
+            if origin_meta:
+                for key, value in origin_meta.items():
+                    setattr(call, key, value)
             prm = pj.CallOpParam(True)
             local_uri = self._format_invite_local_uri(acc.cfg)
             if local_uri:

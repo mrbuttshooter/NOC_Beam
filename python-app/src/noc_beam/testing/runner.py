@@ -152,6 +152,13 @@ class TestRunner(QObject):
         # the verdict into TestResult at completion time (CallManager
         # record is dropped on DISCONNECTED before we finalise).
         self._fas_by_call_id: dict[int, tuple[str, float, str]] = {}
+        try:
+            from noc_beam.config.store import load_settings
+
+            self._auto_pause_on_fas_count = int(load_settings().fas.auto_pause_on_fas_count)
+        except Exception:
+            self._auto_pause_on_fas_count = 0
+        self._consecutive_likely_fas = 0
 
         self.events.call_state_changed.connect(self._on_call_state_changed)
         try:
@@ -162,6 +169,8 @@ class TestRunner(QObject):
     def _on_fas_verdict(self, call_id: int, verdict: str, confidence: float, reasons: str) -> None:
         """Cache the latest FAS verdict per call so completion-time
         TestResult records it even after the CallRecord is gone."""
+        if call_id not in self._active:
+            return
         self._fas_by_call_id[call_id] = (verdict, float(confidence), reasons or "")
 
     def start(self) -> None:
@@ -279,7 +288,14 @@ class TestRunner(QObject):
 
         target_uri = self._build_target_uri(call.target_number, account)
         try:
-            sip_call = self.endpoint.make_call(account.id, target_uri)
+            sip_call = self.endpoint.make_call(
+                account.id,
+                target_uri,
+                origin="test_runner",
+                origin_meta={
+                    "supplier_id": self._supplier_id,
+                },
+            )
         except Exception as exc:
             text = str(exc)
             notes = (
@@ -444,7 +460,7 @@ class TestRunner(QObject):
         active.timeout_timer.stop()
         if active.hold_timer is not None:
             active.hold_timer.stop()
-        self._emit_result(
+        test_result = self._emit_result(
             call=active.call,
             result=result,
             sip_code=sip_code,
@@ -457,6 +473,7 @@ class TestRunner(QObject):
             to_uri=active.target_uri,
             sip_call_id=active.call_id,
         )
+        self._maybe_auto_pause_for_fas(test_result)
 
         if hangup:
             self._hangup(active.sip_call)
@@ -467,6 +484,7 @@ class TestRunner(QObject):
     def _release_active(self, active: _ActiveCall, *, fill_slots: bool = True) -> None:
         if self._active.pop(active.call_id, None) is None:
             return
+        self._fas_by_call_id.pop(active.call_id, None)
         active.timeout_timer.stop()
         if active.hold_timer is not None:
             active.hold_timer.stop()
@@ -522,7 +540,7 @@ class TestRunner(QObject):
         from_account: str,
         to_uri: str,
         sip_call_id: int = -1,
-    ) -> None:
+    ) -> TestResult:
         # Look up the last FAS verdict seen for this call_id (cached by
         # _on_fas_verdict). If the call never reached CONFIRMED no verdict
         # was emitted; fields stay empty and the runner UI renders "—".
@@ -550,6 +568,42 @@ class TestRunner(QObject):
         )
         self._results.append(test_result)
         self.call_completed.emit(test_result)
+        return test_result
+
+    def _maybe_auto_pause_for_fas(self, result: TestResult) -> None:
+        threshold = self._auto_pause_on_fas_count
+        if threshold <= 0 or self._cancelled:
+            return
+        if result.fas_verdict in {"LIKELY_FAS", "PROBABLE_FAS", "CONFIRMED_FAS"}:
+            self._consecutive_likely_fas += 1
+        else:
+            self._consecutive_likely_fas = 0
+            return
+        if self._consecutive_likely_fas < threshold:
+            return
+
+        self._cancelled = True
+        note = f"auto-paused after {self._consecutive_likely_fas} consecutive FAS verdicts"
+        while self._queue:
+            call = self._queue.popleft()
+            account = self._resolve_account(call.caller_number)
+            target_uri = (
+                self._build_target_uri(call.target_number, account)
+                if account is not None
+                else call.target_number
+            )
+            self._emit_result(
+                call=call,
+                result="FAIL",
+                sip_code=0,
+                sip_reason="Auto-paused",
+                rtt_ms=None,
+                duration_s=0.0,
+                notes=note,
+                started_at=time.time(),
+                from_account=account.id if account is not None else call.caller_number,
+                to_uri=target_uri,
+            )
 
     def _maybe_emit_run_complete(self) -> None:
         if self._run_complete_emitted:

@@ -258,7 +258,8 @@ class FasSettings:
     FAS = supplier returns SIP 200 OK but the audio is fake (silence,
     ringback, looped recording, music-on-hold). NOC_Beam taps each call's
     downlink, runs offline ONNX classifiers + a rules engine, and
-    classifies the answer as LIKELY_REAL / SUSPICIOUS / LIKELY_FAS.
+    classifies the answer with evidence-backed verdicts such as
+    HUMAN_LIKELY / MACHINE_OR_VOICEMAIL / PROBABLE_FAS / CONFIRMED_FAS.
 
     Sensitivity preset adjusts the score thresholds:
         conservative -- fewer false alarms, may miss subtle FAS
@@ -273,7 +274,7 @@ class FasSettings:
     clip_retention_count: int = 200
     clip_retention_mb: int = 500
     # Block runs of N consecutive automated test calls when a supplier
-    # crosses LIKELY_FAS. 0 = never auto-pause.
+    # crosses a FAS verdict. 0 = never auto-pause.
     auto_pause_on_fas_count: int = 0
 
 

@@ -5,14 +5,12 @@ feature pipeline + ONNX models, synthesises a verdict via the rules
 engine, and emits the result on sip_events().call_fas_verdict for Qt
 to deliver on the main thread.
 
-Schedule: per active call, score at t=3s, 8s, 13s, then every 10s.
+Schedule: per active call, score at t=4s, 8s, 13s, then every 10s.
 Never downgrade past a deterministic positive signal (ringback /
 fingerprint match).
 
-Chunk 2 status: skeleton only. The actual feature extraction and ONNX
-inference land in Chunk 3; here we wire the threading + Qt-signal path
-and produce a placeholder "INCONCLUSIVE" verdict so downstream UI
-(Chunk 5) can be developed against the same shape.
+The worker emits a compact verdict/reasons signal; structured evidence stays
+inside the audio layer for now so the existing Qt signal remains stable.
 """
 from __future__ import annotations
 
@@ -27,7 +25,7 @@ from noc_beam.sip.events import sip_events
 log = logging.getLogger(__name__)
 
 # Score-time schedule in seconds after a call enters CONFIRMED.
-SCORE_TIMES_S = [3.0, 8.0, 13.0]
+SCORE_TIMES_S = [4.0, 8.0, 13.0]
 SCORE_INTERVAL_S = 10.0
 
 # Verdict severity rank for monotonic locking. Higher = more severe.
@@ -38,9 +36,14 @@ _SEVERITY = {
     "": 0,
     "ANALYZING": 0,
     "INCONCLUSIVE": 1,
-    "LIKELY_REAL": 2,
+    "LIKELY_REAL": 2,  # legacy spelling
+    "HUMAN_LIKELY": 2,
+    "MACHINE_OR_VOICEMAIL": 2,
+    "IVR_OR_ANNOUNCEMENT": 2,
     "SUSPICIOUS": 3,
-    "LIKELY_FAS": 4,
+    "LIKELY_FAS": 4,  # legacy spelling
+    "PROBABLE_FAS": 4,
+    "CONFIRMED_FAS": 5,
 }
 
 # Per-verdict minimum confidence required to surface it on the live
@@ -53,15 +56,21 @@ _SEVERITY = {
 _MIN_CONFIDENCE_TO_SURFACE = {
     "INCONCLUSIVE": 0.0,
     "LIKELY_REAL": 0.30,
+    "HUMAN_LIKELY": 0.30,
+    "MACHINE_OR_VOICEMAIL": 0.45,
+    "IVR_OR_ANNOUNCEMENT": 0.45,
     "SUSPICIOUS": 0.25,
     "LIKELY_FAS": 0.40,
+    "PROBABLE_FAS": 0.40,
+    "CONFIRMED_FAS": 0.55,
 }
 
 
 class _CallScoreState:
     __slots__ = ("started_at", "next_score_idx", "last_score_at", "last_verdict",
                  "last_confidence", "last_reasons", "deterministic_positive",
-                 "committed_severity")
+                 "committed_severity", "consecutive_silence_seconds",
+                 "evidence_accumulator")
 
     def __init__(self) -> None:
         self.started_at = time.monotonic()
@@ -75,6 +84,10 @@ class _CallScoreState:
         # committed it never downgrades in severity. Stored as the severity
         # rank to make comparisons trivial.
         self.committed_severity = 0  # 0=none, 1=INCONCLUSIVE, 2=LIKELY_REAL, 3=SUSPICIOUS, 4=LIKELY_FAS
+        self.consecutive_silence_seconds = 0.0
+        from noc_beam.audio.fas_evidence import FasEvidenceAccumulator
+
+        self.evidence_accumulator = FasEvidenceAccumulator()
 
     def due(self, now: float) -> bool:
         elapsed = now - self.started_at
@@ -177,10 +190,10 @@ class FasInferenceWorker(QThread):
             call_id, total_samples, clip.size, active,
         )
 
-        # Need at least 1 second of audio to attempt a verdict. The
+        # Need at least 2 seconds of answered-call audio to attempt a verdict. The
         # AudioMediaRecorder writes WAV at the bridge's native rate
         # (16 kHz on this PJSIP build); FAS_SAMPLE_RATE mirrors that.
-        min_samples = FAS_SAMPLE_RATE
+        min_samples = FAS_SAMPLE_RATE * 2
         if clip.size == 0 or total_samples < min_samples:
             verdict_obj = None
             verdict, confidence, reasons = "ANALYZING", 0.0, "warming up"
@@ -189,6 +202,15 @@ class FasInferenceWorker(QThread):
             # codec rate). Feature extractors and model wrappers handle
             # resampling to their expected rates internally.
             features = extract_features(clip, sample_rate=FAS_SAMPLE_RATE)
+            window_seconds = clip.size / float(FAS_SAMPLE_RATE)
+            if features.silence_score >= 0.85:
+                if state.last_score_at > 0:
+                    elapsed_since_last_score = max(0.0, time.monotonic() - state.last_score_at)
+                    state.consecutive_silence_seconds += min(window_seconds, elapsed_since_last_score)
+                else:
+                    state.consecutive_silence_seconds = window_seconds
+            else:
+                state.consecutive_silence_seconds = 0.0
 
             # ONNX models -- each returns None if unavailable; rules
             # engine tolerates None for every signal independently.
@@ -202,13 +224,22 @@ class FasInferenceWorker(QThread):
             supplier = meta.get("supplier", "")
             fp = fingerprint_clip(clip, sample_rate=FAS_SAMPLE_RATE)
             fp_sim = 0.0
+            entry = None
             if fp:
-                fp_sim, _entry = fingerprint_memory().match(
+                fp_sim, entry = fingerprint_memory().match(
                     fp, call_id=call_id, account_id=account_id, supplier=supplier,
                 )
                 fingerprint_memory().add(
                     fp, call_id=call_id, account_id=account_id, supplier=supplier,
                 )
+
+            fingerprint_match = None
+            if entry is not None:
+                fingerprint_match = {
+                    "matched_call_id": entry.call_id,
+                    "matched_account_id": entry.account_id,
+                    "matched_supplier": entry.supplier,
+                }
 
             verdict_obj = synthesise(
                 features=features,
@@ -216,15 +247,20 @@ class FasInferenceWorker(QThread):
                 aasist_spoof_prob=aasist_p,
                 panns=panns_out,
                 fingerprint_sim=fp_sim,
+                fingerprint_match=fingerprint_match,
                 sensitivity=self._sensitivity(),
+                analyzed_seconds=total_samples / float(FAS_SAMPLE_RATE),
+                sustained_silence_seconds=state.consecutive_silence_seconds,
             )
+            state.evidence_accumulator.add_many(verdict_obj.evidence)
             verdict = verdict_obj.verdict
             confidence = verdict_obj.confidence
-            reasons = verdict_obj.reasons_text()
+            accumulated_reasons = state.evidence_accumulator.reasons_text()
+            reasons = accumulated_reasons or verdict_obj.reasons_text()
 
             # Lock in deterministic positives so the next score interval
             # doesn't downgrade past a fingerprint / ringback trigger.
-            if "matches a previous call" in reasons or "ringback tone" in reasons:
+            if state.evidence_accumulator.has_sticky_positive():
                 state.deterministic_positive = True
 
         # ----- Confidence gate ---------------------------------------

@@ -145,6 +145,12 @@ class FingerprintMemory:
     def add(self, fp: str, *, call_id: int, account_id: str = "", supplier: str = "") -> None:
         if not fp:
             return
+        # One call is scored repeatedly; keep its newest fingerprint only
+        # so a long call does not crowd out recent calls from the memory.
+        self._entries = deque(
+            (entry for entry in self._entries if entry.call_id != call_id),
+            maxlen=self._entries.maxlen,
+        )
         self._entries.append(
             FingerprintEntry(
                 fp=fp, when=time.time(), call_id=call_id,
@@ -172,7 +178,9 @@ class FingerprintMemory:
         for e in self._entries:
             if e.call_id == call_id:
                 continue
-            if account_id and e.account_id and e.account_id != account_id:
+            if account_id and e.account_id != account_id:
+                continue
+            if supplier and e.supplier != supplier:
                 continue
             sim = fingerprint_similarity(fp, e.fp)
             if sim > best_sim:

@@ -44,7 +44,10 @@ class SipEvents(QObject):
 
     # --- FAS detection verdict (False Answer Supervision) ---
     # call_id, verdict, confidence (0.0..1.0), reasons (human-readable)
-    # verdict is one of: ANALYZING, INCONCLUSIVE, LIKELY_REAL, SUSPICIOUS, LIKELY_FAS
+    # verdict examples: ANALYZING, INCONCLUSIVE, HUMAN_LIKELY,
+    # MACHINE_OR_VOICEMAIL, IVR_OR_ANNOUNCEMENT, SUSPICIOUS,
+    # PROBABLE_FAS, CONFIRMED_FAS. Legacy LIKELY_REAL / LIKELY_FAS may
+    # appear in older persisted rows.
     call_fas_verdict = Signal(int, str, float, str)
 
     # --- generic log line (pjsip log_cb) ---
