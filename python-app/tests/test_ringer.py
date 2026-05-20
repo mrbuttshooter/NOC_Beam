@@ -17,3 +17,18 @@ def test_generate_ringtone_writes_valid_wav(tmp_path: Path) -> None:
         # ~4 seconds of audio
         frames = w.getnframes()
         assert frames == int(ringer.SAMPLE_RATE * 4.0)
+
+
+def test_loop_count_int_accepts_pyside_enum_value_attribute() -> None:
+    class LoopEnum:
+        value = -2
+
+    assert ringer._loop_count_int(LoopEnum()) == -2
+
+
+def test_loop_count_int_accepts_pyside_enum_value_method() -> None:
+    class LoopEnum:
+        def value(self) -> int:
+            return -2
+
+    assert ringer._loop_count_int(LoopEnum()) == -2

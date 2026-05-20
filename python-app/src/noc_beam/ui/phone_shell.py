@@ -182,6 +182,7 @@ class PhoneShell(QMainWindow):
         self.sip_supervisor = EndpointSupervisor(self)
         self._selected_call_id = None
         self._last_snapshots = {}
+        self._final_call_results: dict[int, tuple[int, bool]] = {}
         self._really_quitting = False
         self._reg_state: dict[str, int] = {}
         # Peer URI cache per call_id, used by _on_call_record_updated to
@@ -1476,6 +1477,12 @@ class PhoneShell(QMainWindow):
             return
         if self.calls.get(call_id) is None:
             self.calls.register(CallRecord(call_id=call_id, account_id=account_id, direction="out"))
+        if new_state == CallState.DISCONNECTED:
+            rec = self.calls.get(call_id)
+            self._final_call_results[call_id] = (
+                code,
+                bool(rec is not None and rec.connected_at is not None),
+            )
         self.calls.update_state(call_id, new_state, code, reason)
         # Pull the remote URI off the live SipCall and stash it on the
         # record so the CDR snapshot taken on DISCONNECTED carries the
@@ -1554,9 +1561,13 @@ class PhoneShell(QMainWindow):
         # silent. See audio.ringer.FailureTone._tone_for_code for the
         # full mapping.
         try:
-            rec = self.calls.get(call_id)
-            code = rec.last_code if rec is not None else 0
-            answered = getattr(rec, "was_answered", False) if rec is not None else False
+            final = self._final_call_results.pop(call_id, None)
+            if final is None:
+                rec = self.calls.get(call_id)
+                code = rec.last_code if rec is not None else 0
+                answered = bool(rec is not None and rec.connected_at is not None)
+            else:
+                code, answered = final
             if code and code >= 400 and not answered:
                 if getattr(self, "failure_tone", None) is not None:
                     self.failure_tone.play_for_code(code)

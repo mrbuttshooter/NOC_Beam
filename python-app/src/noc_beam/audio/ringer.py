@@ -73,6 +73,14 @@ def ensure_default_ringtone() -> Path:
     return path
 
 
+def _loop_count_int(value: object) -> int:
+    """Return a plain int for PySide enum/int loop count values."""
+    raw = getattr(value, "value", value)
+    if callable(raw):
+        raw = raw()
+    return int(raw)
+
+
 class Ringer:
     """Loops the default ringtone until stopped. Safe to stop when not playing."""
 
@@ -86,14 +94,12 @@ class Ringer:
             path = ensure_default_ringtone()
             self._effect = QSoundEffect()
             self._effect.setSource(QUrl.fromLocalFile(str(path)))
-            # Loop forever. PySide6 6.7+ wraps Infinite in an enum class
-            # but QSoundEffect.setLoopCount expects a plain int -- use the
-            # enum's .value so we work on every PySide6.
-            try:
-                infinite = QSoundEffect.Loop.Infinite.value  # PySide6 6.7+
-            except AttributeError:
-                infinite = QSoundEffect.Infinite             # PySide6 <= 6.6
-            self._effect.setLoopCount(infinite)
+            # Loop forever. Some PySide6 builds expose Infinite as an
+            # enum object even though setLoopCount() accepts only int.
+            infinite = getattr(QSoundEffect, "Infinite", None)
+            if infinite is None:
+                infinite = QSoundEffect.Loop.Infinite
+            self._effect.setLoopCount(_loop_count_int(infinite))
             self._effect.setVolume(0.7)
             self._available = True
         except Exception:
