@@ -5,11 +5,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
-    QCompleter,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -25,31 +24,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
-
-class _SupplierComboFocusFilter(QObject):
-    """Select-all-on-focus + clear-proxy-filter for the SUPPLIER combo.
-
-    Mirrors the dial-bar combo in phone_shell: click or tab in ->
-    existing supplier name is wiped, leftover proxy filter is reset.
-    """
-
-    def __init__(self, combo):
-        super().__init__(combo)
-        self._combo = combo
-
-    def eventFilter(self, obj, event):
-        et = event.type()
-        if et in (QEvent.Type.FocusIn, QEvent.Type.MouseButtonPress):
-            QTimer.singleShot(0, obj.selectAll)
-            try:
-                from PySide6.QtCore import QSortFilterProxyModel as _QSFPM
-                model = self._combo.model()
-                if isinstance(model, _QSFPM):
-                    QTimer.singleShot(0, lambda m=model: m.setFilterFixedString(""))
-            except Exception:
-                pass
-        return False
 
 
 class _PasteAtEndTextEdit(QTextEdit):
@@ -83,6 +57,7 @@ from noc_beam.testing.plan import TestSpec as PlanSpec
 from noc_beam.testing.plan import expand, normalise_lines
 from noc_beam.testing.runner import TestResult as RunnerResult
 from noc_beam.testing.runner import TestRunner as Runner
+from noc_beam.ui.supplier_dropdown import SupplierDropdown
 
 
 CSV_HEADER = [
@@ -258,7 +233,7 @@ class TestRunnerView(QMainWindow):
         Footer: sticky -- ghost actions on left, primary Run + Stop on right.
         """
         from PySide6.QtWidgets import (
-            QButtonGroup, QComboBox as _QComboBox, QSplitter, QStackedWidget,
+            QButtonGroup, QSplitter, QStackedWidget,
             QToolButton, QWidget as _QWidget,
         )
         central = QWidget(self)
@@ -306,30 +281,16 @@ class TestRunnerView(QMainWindow):
         self.supplier_label = QLabel("SUPPLIER")
         self.supplier_label.setObjectName("TestRunnerToolbarLabel")
         self.supplier_label.setMinimumWidth(80)
-        self.supplier_combo = _QComboBox()
+        self.supplier_combo = SupplierDropdown()
         self.supplier_combo.setObjectName("TestRunnerSupplier")
-        self.supplier_combo.setEditable(True)
-        self.supplier_combo.setInsertPolicy(_QComboBox.InsertPolicy.NoInsert)
+        self.supplier_combo.setMinimumContentsLength(18)
+        self.supplier_combo.setMaxVisibleItems(18)
         self.supplier_combo.setMinimumWidth(280)
         self.supplier_combo.setSizePolicy(_SP.Policy.Expanding, _SP.Policy.Fixed)
-        # ARCHITECTURE: ditch QCompleter, use QSortFilterProxyModel +
-        # the combo's OWN popup. The QCompleter popup is impossible to
-        # dismiss programmatically after a commit; the combo's popup
-        # obeys hidePopup() reliably. See phone_shell for full notes.
-        from PySide6.QtCore import QSortFilterProxyModel as _QSFPM
-        from PySide6.QtGui import QStandardItemModel as _QSIM
-        self._supplier_source_model = _QSIM(self.supplier_combo)
-        self._supplier_proxy = _QSFPM(self.supplier_combo)
-        self._supplier_proxy.setSourceModel(self._supplier_source_model)
-        self._supplier_proxy.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self.supplier_combo.setModel(self._supplier_proxy)
-        self.supplier_combo.setCompleter(None)
         self._all_suppliers: list[tuple[str, str]] = []
         _le = self.supplier_combo.lineEdit()
         if _le is not None:
-            _le.setCompleter(None)
-            self._supplier_combo_filter = _SupplierComboFocusFilter(self.supplier_combo)
-            _le.installEventFilter(self._supplier_combo_filter)
+            _le.setPlaceholderText("Search supplier or C080")
             _le.textEdited.connect(self._on_supplier_text_edited)
             _le.returnPressed.connect(self._on_supplier_return_pressed)
         self.supplier_combo.currentIndexChanged.connect(self._on_supplier_changed)
@@ -622,16 +583,9 @@ class TestRunnerView(QMainWindow):
         except Exception:
             self.supplier_row.setVisible(False)
             return
-        from PySide6.QtGui import QStandardItem
         self.supplier_combo.blockSignals(True)
-        self._supplier_source_model.clear()
-        self._all_suppliers.clear()
-        for s in suppliers:
-            item = QStandardItem(s.display())
-            item.setData(s.id, Qt.ItemDataRole.UserRole)
-            self._supplier_source_model.appendRow(item)
-            self._all_suppliers.append((s.display(), s.id))
-        self._supplier_proxy.setFilterFixedString("")
+        self._all_suppliers = [(s.display(), str(s.id)) for s in suppliers]
+        self.supplier_combo.set_items(self._all_suppliers, self._batch_supplier_id)
         if self.supplier_combo.count():
             idx = self.supplier_combo.findData(self._batch_supplier_id)
             if idx < 0:
@@ -653,12 +607,14 @@ class TestRunnerView(QMainWindow):
         text_lower = (text or "").strip().lower()
         if not text_lower:
             return ""
+        code_text = text_lower[1:] if text_lower.startswith("c") else text_lower
         for display, sid in self._all_suppliers:
-            if display.lower() == text_lower:
-                return sid
+            sid_lower = str(sid).lower()
+            if display.lower() == text_lower or sid_lower == code_text:
+                return str(sid)
         for display, sid in self._all_suppliers:
             if text_lower in display.lower():
-                return sid
+                return str(sid)
         return ""
 
     def _commit_supplier_text(self, *, focus_targets: bool = False) -> None:
@@ -671,10 +627,6 @@ class TestRunnerView(QMainWindow):
         target_id = self._supplier_id_from_text(text)
         if not target_id:
             return
-        try:
-            self._supplier_proxy.setFilterFixedString("")
-        except Exception:
-            pass
         resolved_idx = self.supplier_combo.findData(target_id)
         if resolved_idx >= 0:
             self.supplier_combo.setCurrentIndex(resolved_idx)
@@ -693,7 +645,7 @@ class TestRunnerView(QMainWindow):
     def _on_supplier_text_edited(self, text: str) -> None:
         if not text:
             self._supplier_filtering_text = False
-            self._supplier_proxy.setFilterFixedString("")
+            self.supplier_combo.set_filter("")
             try:
                 self.supplier_combo.hidePopup()
             except Exception:
@@ -709,7 +661,7 @@ class TestRunnerView(QMainWindow):
             try:
                 self.supplier_combo.blockSignals(True)
                 le.blockSignals(True)
-                self._supplier_proxy.setFilterFixedString(text)
+                self.supplier_combo.set_filter(text)
                 if le.text() != saved_text:
                     le.setText(saved_text)
                     le.setCursorPosition(saved_cursor)
@@ -719,7 +671,7 @@ class TestRunnerView(QMainWindow):
                 le.blockSignals(False)
                 self.supplier_combo.blockSignals(False)
             try:
-                if self._supplier_proxy.rowCount() > 0:
+                if self.supplier_combo.set_filter(text) > 0:
                     self._show_supplier_popup_preserving_edit(le)
                 else:
                     self.supplier_combo.hidePopup()
@@ -748,27 +700,10 @@ class TestRunnerView(QMainWindow):
 
         try:
             if not self.supplier_combo.view().isVisible():
-                self._prepare_supplier_popup_window()
                 self.supplier_combo.showPopup()
         except Exception:
             return
         QTimer.singleShot(0, _restore_edit_state)
-
-    def _prepare_supplier_popup_window(self) -> None:
-        """Keep the supplier popup frameless instead of a tiny window."""
-        view = self.supplier_combo.view()
-        try:
-            view.setWindowFlags(
-                Qt.WindowType.Popup
-                | Qt.WindowType.FramelessWindowHint
-                | Qt.WindowType.NoDropShadowWindowHint
-            )
-        except Exception:
-            pass
-        try:
-            view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        except Exception:
-            pass
 
     def _on_supplier_activated(self, index: int) -> None:
         """Commit an explicit popup selection while search filtering."""

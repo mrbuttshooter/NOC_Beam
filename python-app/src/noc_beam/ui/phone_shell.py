@@ -400,18 +400,15 @@ class PhoneShell(QMainWindow):
         top_l.addLayout(acct_row)
 
         # SUPPLIER picker -- shown only when active account has
-        # switch_type in {teles, genband}. Editable combo so the user
-        # can type to filter the 400+ supplier list. Hidden by default;
-        # _refresh_supplier_picker() shows / populates it when an account
-        # is selected (and on app boot if an account is already saved).
-        from PySide6.QtWidgets import QComboBox as _QComboBox
+        # switch_type in {teles, genband}. The custom picker filters
+        # while typing without changing the active supplier until the
+        # user explicitly commits.
+        from noc_beam.ui.supplier_dropdown import SupplierDropdown
         supp_row = QHBoxLayout(); supp_row.setContentsMargins(0, 4, 0, 0); supp_row.setSpacing(8)
         self.supplier_kicker = QLabel("SUPPLIER", top)
         self.supplier_kicker.setObjectName("AccountKicker")
-        self.supplier_combo = _QComboBox(top)
+        self.supplier_combo = SupplierDropdown(top)
         self.supplier_combo.setObjectName("SupplierCombo")
-        self.supplier_combo.setEditable(True)
-        self.supplier_combo.setInsertPolicy(_QComboBox.InsertPolicy.NoInsert)
         self.supplier_combo.setMinimumContentsLength(18)
         self.supplier_combo.setMaxVisibleItems(18)
         self.supplier_combo.setAccessibleName("Active supplier")
@@ -419,35 +416,12 @@ class PhoneShell(QMainWindow):
             "Pick a supplier from the active account's switch. "
             "Type any part of the name to filter the list."
         )
-        # ARCHITECTURE NOTE: we deliberately do NOT use QCompleter here.
-        # Qt's QCompleter popup has a focus-grab + auto-reattach behavior
-        # that makes it impossible to dismiss programmatically after a
-        # commit. Instead we drive a QSortFilterProxyModel wrapping the
-        # combo's source model and use the combo's OWN popup (which IS
-        # dismissible via hidePopup()) for the filtered match list.
-        from PySide6.QtCore import (
-            QSortFilterProxyModel as _QSFPM,
-            Qt as _Qt,
-        )
-        from PySide6.QtGui import QStandardItemModel as _QSIM
-        self._supplier_source_model = _QSIM(self.supplier_combo)
-        self._supplier_proxy = _QSFPM(self.supplier_combo)
-        self._supplier_proxy.setSourceModel(self._supplier_source_model)
-        self._supplier_proxy.setFilterCaseSensitivity(_Qt.CaseSensitivity.CaseInsensitive)
-        self.supplier_combo.setModel(self._supplier_proxy)
-        # Force-detach any default completer Qt attached to the editable
-        # combo or its line edit. Either or both being present re-triggers
-        # the popup-stuck-open bug.
-        self.supplier_combo.setCompleter(None)
         # Cache of (display, id) for autofill -- independent of the proxy
         # filter so unique-match detection always sees the full set.
         self._all_suppliers: list[tuple[str, str]] = []
         _le = self.supplier_combo.lineEdit()
         if _le is not None:
-            _le.setCompleter(None)
             _le.setPlaceholderText("Search supplier or C080")
-            self._supplier_combo_filter = _SupplierComboFocusFilter(self.supplier_combo)
-            _le.installEventFilter(self._supplier_combo_filter)
             _le.textEdited.connect(self._on_supplier_text_edited)
             _le.returnPressed.connect(self._on_supplier_return_pressed)
         self.supplier_combo.currentIndexChanged.connect(self._on_supplier_changed)
@@ -921,7 +895,6 @@ class PhoneShell(QMainWindow):
             self.supplier_row_widget.setVisible(False)
             self._active_supplier_id = ""
             return
-        from PySide6.QtGui import QStandardItem
         from noc_beam.config.suppliers import load_valid_suppliers
 
         # Only valid-marked suppliers reach the picker; the full list
@@ -930,18 +903,10 @@ class PhoneShell(QMainWindow):
         # Block signals so populating doesn't fire _on_supplier_changed
         # repeatedly during fill.
         self.supplier_combo.blockSignals(True)
-        # Populate the SOURCE model directly (the combo's model is the
-        # proxy; addItem on the proxy isn't safe). Also rebuild the
-        # display+id cache for autofill.
-        self._supplier_source_model.clear()
-        self._all_suppliers.clear()
-        for s in suppliers:
-            item = QStandardItem(s.display())
-            item.setData(s.id, Qt.ItemDataRole.UserRole)
-            self._supplier_source_model.appendRow(item)
-            self._all_suppliers.append((s.display(), s.id))
-        # Clear any stale filter so findData sees every row.
-        self._supplier_proxy.setFilterFixedString("")
+        # Rebuild the display+id cache for filtering and restore the
+        # last-selected supplier if it still exists.
+        self._all_suppliers = [(s.display(), s.id) for s in suppliers]
+        self.supplier_combo.set_items(self._all_suppliers, self._active_supplier_id)
         # Restore last-selected supplier if it's still in the list.
         idx = self.supplier_combo.findData(self._active_supplier_id)
         if idx >= 0:
@@ -1001,11 +966,6 @@ class PhoneShell(QMainWindow):
         target_id = self._supplier_id_from_text(text)
         if not target_id:
             return False
-        # Clear filter so findData sees every row, then commit.
-        try:
-            self._supplier_proxy.setFilterFixedString("")
-        except Exception:
-            pass
         resolved_idx = self.supplier_combo.findData(target_id)
         if resolved_idx >= 0:
             self.supplier_combo.setCurrentIndex(resolved_idx)
@@ -1032,7 +992,7 @@ class PhoneShell(QMainWindow):
             self._supplier_filtering_text = False
             self._supplier_last_fill = ""
             self._supplier_typed_len = 0
-            self._supplier_proxy.setFilterFixedString("")
+            self.supplier_combo.set_filter("")
             try:
                 self.supplier_combo.hidePopup()
             except Exception:
@@ -1050,7 +1010,7 @@ class PhoneShell(QMainWindow):
             try:
                 self.supplier_combo.blockSignals(True)
                 le.blockSignals(True)
-                self._supplier_proxy.setFilterFixedString(text)
+                self.supplier_combo.set_filter(text)
                 # Restore the line edit display + selection state.
                 if le.text() != saved_text:
                     le.setText(saved_text)
@@ -1061,7 +1021,7 @@ class PhoneShell(QMainWindow):
                 le.blockSignals(False)
                 self.supplier_combo.blockSignals(False)
             try:
-                rc = self._supplier_proxy.rowCount()
+                rc = self.supplier_combo.set_filter(text)
                 if rc > 0:
                     self._show_supplier_popup_preserving_edit(le)
                 else:
@@ -1091,27 +1051,10 @@ class PhoneShell(QMainWindow):
 
         try:
             if not self.supplier_combo.view().isVisible():
-                self._prepare_supplier_popup_window()
                 self.supplier_combo.showPopup()
         except Exception:
             return
         QTimer.singleShot(0, _restore_edit_state)
-
-    def _prepare_supplier_popup_window(self) -> None:
-        """Keep the supplier popup frameless instead of a tiny window."""
-        view = self.supplier_combo.view()
-        try:
-            view.setWindowFlags(
-                Qt.WindowType.Popup
-                | Qt.WindowType.FramelessWindowHint
-                | Qt.WindowType.NoDropShadowWindowHint
-            )
-        except Exception:
-            pass
-        try:
-            view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        except Exception:
-            pass
 
     def _on_supplier_activated(self, index: int) -> None:
         """Commit an explicit popup selection while search filtering."""
