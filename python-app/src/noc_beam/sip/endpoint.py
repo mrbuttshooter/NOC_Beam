@@ -565,6 +565,7 @@ class SipEndpoint:
                 cfg_snapshot = (
                     f"idUri={getattr(ac_cfg, 'idUri', '?')} "
                     f"registrar={getattr(getattr(ac_cfg, 'regConfig', None), 'registrarUri', '?')} "
+                    f"proxy={list(getattr(getattr(ac_cfg, 'sipConfig', None), 'proxies', []))} "
                     f"transport={cfg.transport} port={cfg.port or 'default'}"
                 )
                 log.error(

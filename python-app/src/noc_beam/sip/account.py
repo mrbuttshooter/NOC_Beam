@@ -26,6 +26,16 @@ def _transport_id_for(transport: str, transports: dict[str, int]) -> int:
     return transports.get(key, -1)
 
 
+def _normalize_proxy_uri(proxy: str, scheme: str) -> str:
+    """Return a PJSIP route URI for the optional outbound proxy field."""
+    value = (proxy or "").strip()
+    if not value:
+        return ""
+    if value.lower().startswith(("sip:", "sips:")):
+        return value
+    return f"{scheme}:{value}"
+
+
 def _srtp_use(setting: str) -> int:
     # PJSUA_SRTP_DISABLED=0, OPTIONAL=1, MANDATORY=2
     return {"disabled": 0, "optional": 1, "mandatory": 2}.get(setting.lower(), 0)
@@ -195,8 +205,9 @@ if PJSUA2_AVAILABLE:
                     "skipping AuthCredInfo append", cfg.id,
                 )
 
-            if cfg.proxy:
-                ac.sipConfig.proxies.append(cfg.proxy)
+            proxy_uri = _normalize_proxy_uri(cfg.proxy, scheme)
+            if proxy_uri:
+                ac.sipConfig.proxies.append(proxy_uri)
 
             tid = _transport_id_for(cfg.transport, self._transports)
             if tid >= 0:
