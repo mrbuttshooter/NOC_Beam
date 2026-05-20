@@ -1203,7 +1203,50 @@ class PhoneShell(QMainWindow):
         except Exception:
             log.exception("Teles auth swap failed for supplier %s", self._active_supplier_id)
 
+    def _ensure_teles_supplier_identity(self, acc) -> bool:
+        """Materialise a Teles routing template before register/call.
+
+        A Teles account is configured in the dialog as a template such as
+        username=U, routing_format=U{id}, supplier=C080. If the account is
+        registered or dialled before the supplier combo emits its deferred
+        change signal, the wire sees From: sip:U@... and the carrier rejects
+        routing. This guard makes the current supplier explicit.
+        """
+        kind = (getattr(acc, "switch_type", "other") or "other").lower()
+        routing_fmt = getattr(acc, "routing_format", "") or ""
+        if kind != "teles" or "{id}" not in routing_fmt:
+            return False
+        supplier_id = str(getattr(self, "_active_supplier_id", "") or "")
+        if not supplier_id and self.supplier_combo.currentIndex() >= 0:
+            supplier_id = str(self.supplier_combo.currentData() or "")
+        if not supplier_id:
+            return False
+        try:
+            from noc_beam.config.suppliers import load_suppliers
+
+            suppliers = {s.id: s for s in load_suppliers()}
+            supplier = suppliers.get(supplier_id)
+            if supplier is None:
+                return False
+            new_uid = supplier.routed(routing_fmt)
+            if not new_uid:
+                return False
+            if acc.username == new_uid and acc.auth_user == new_uid:
+                return False
+            log.info(
+                "Teles supplier materialized before register/call: "
+                "supplier=%s username %r->%r auth_user %r->%r",
+                supplier_id, acc.username, new_uid, acc.auth_user, new_uid,
+            )
+            acc.username = new_uid
+            acc.auth_user = new_uid
+            return True
+        except Exception:
+            log.exception("Teles supplier materialization failed for %s", supplier_id)
+            return False
+
     def _add_account_to_endpoint(self, cfg):
+        self._ensure_teles_supplier_identity(cfg)
         try: SipEndpoint.instance().add_account(cfg)
         except Exception as e:
             log.exception("Failed to add account %s", cfg.id)
@@ -1807,6 +1850,20 @@ class PhoneShell(QMainWindow):
     def _on_call_requested(self, target):
         if not self._active_account_id:
             QMessageBox.information(self, "No account", "Add a SIP account first."); return
+        acc = self._selected_account()
+        if acc is not None and self._ensure_teles_supplier_identity(acc):
+            self._save_accounts_or_warn(self.accounts)
+            try:
+                SipEndpoint.instance().update_account(acc)
+            except Exception as exc:
+                log.exception("Failed to re-register materialized Teles account before call")
+                QMessageBox.warning(
+                    self,
+                    "Call failed",
+                    f"Could not apply the selected Teles supplier before calling:\n\n"
+                    f"{type(exc).__name__}: {exc}",
+                )
+                return
         target = self._rewrite_dial_target(target)
         # Verify the active account actually exists in the SIP endpoint.
         # The UI tracks _active_account_id from config; the endpoint's
