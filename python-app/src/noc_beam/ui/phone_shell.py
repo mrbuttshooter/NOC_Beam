@@ -964,29 +964,32 @@ class PhoneShell(QMainWindow):
         combo's own popup is dismissed -- this works reliably because
         we ditched QCompleter; the combo's popup obeys hidePopup().
         """
-        try:
-            text = self.supplier_combo.lineEdit().text().strip()
-        except Exception:
-            return
-        if not text:
-            return
-        text_lower = text.lower()
-        target_id = None
+        self._commit_supplier_text(focus_dial=True)
+
+    def _supplier_id_from_text(self, text: str) -> str:
+        text_lower = (text or "").strip().lower()
+        if not text_lower:
+            return ""
         code_text = text_lower[1:] if text_lower.startswith("c") else text_lower
-        # Exact display or supplier-id/code match first.
         for display, sid in self._all_suppliers:
             sid_lower = str(sid).lower()
             if display.lower() == text_lower or sid_lower == code_text:
-                target_id = sid
-                break
-        # Substring fallback (commit mid-autofill).
-        if target_id is None:
-            for display, sid in self._all_suppliers:
-                if text_lower in display.lower():
-                    target_id = sid
-                    break
-        if target_id is None:
-            return
+                return str(sid)
+        for display, sid in self._all_suppliers:
+            if text_lower in display.lower():
+                return str(sid)
+        return ""
+
+    def _commit_supplier_text(self, *, focus_dial: bool = False) -> bool:
+        try:
+            text = self.supplier_combo.lineEdit().text().strip()
+        except Exception:
+            return False
+        if not text:
+            return False
+        target_id = self._supplier_id_from_text(text)
+        if not target_id:
+            return False
         # Clear filter so findData sees every row, then commit.
         try:
             self._supplier_proxy.setFilterFixedString("")
@@ -995,17 +998,21 @@ class PhoneShell(QMainWindow):
         resolved_idx = self.supplier_combo.findData(target_id)
         if resolved_idx >= 0:
             self.supplier_combo.setCurrentIndex(resolved_idx)
+            self._active_supplier_id = str(target_id)
+            log.info("Active supplier committed from text -> id=%s", self._active_supplier_id)
         try:
             self.supplier_combo.hidePopup()
         except Exception:
             pass
-        try:
-            self.dial_input.setFocus(Qt.FocusReason.TabFocusReason)
-        except Exception:
-            pass
+        if focus_dial:
+            try:
+                self.dial_input.setFocus(Qt.FocusReason.TabFocusReason)
+            except Exception:
+                pass
         # Reset autofill state.
         self._supplier_last_fill = ""
         self._supplier_typed_len = 0
+        return resolved_idx >= 0
 
     def _on_supplier_text_edited(self, text: str) -> None:
         """Filter the supplier popup without rewriting what was typed."""
@@ -1039,21 +1046,16 @@ class PhoneShell(QMainWindow):
             finally:
                 le.blockSignals(False)
                 self.supplier_combo.blockSignals(False)
-            # Popup management:
-            # - Only call showPopup() if popup is NOT already visible
-            #   (prevents the hide+show flicker that was making the
-            #   cursor jump and rows appear auto-selected mid-typing).
-            # - When we DO open the popup, immediately take focus back
-            #   to the line edit -- Qt::Popup steals keyboard focus by
-            #   design, so without this the user's next keystroke goes
-            #   to the popup (navigating items) instead of the field.
+            # Do not auto-open the popup while typing. Qt's combo popup
+            # steals keyboard focus on Windows, so the next character can
+            # get consumed as popup navigation instead of text input. The
+            # filter is still applied; Enter or Call commits the typed
+            # supplier, and the user can open the dropdown manually.
             try:
-                view = self.supplier_combo.view()
                 rc = self._supplier_proxy.rowCount()
-                if rc > 0 and not view.isVisible():
-                    self.supplier_combo.showPopup()
+                if rc > 0:
                     le.setFocus(Qt.FocusReason.OtherFocusReason)
-                elif rc == 0 and view.isVisible():
+                if self.supplier_combo.view().isVisible():
                     self.supplier_combo.hidePopup()
             except Exception:
                 pass
@@ -1871,6 +1873,7 @@ class PhoneShell(QMainWindow):
         acc = self._selected_account()
         if acc is not None and (getattr(acc, "switch_type", "") or "").lower() in ("teles", "genband"):
             try:
+                self._commit_supplier_text()
                 self._refresh_supplier_picker()
             except Exception:
                 log.exception("Supplier picker refresh failed before call")
