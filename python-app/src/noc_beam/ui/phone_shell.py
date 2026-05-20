@@ -1773,8 +1773,46 @@ class PhoneShell(QMainWindow):
         if not self._active_account_id:
             QMessageBox.information(self, "No account", "Add a SIP account first."); return
         target = self._rewrite_dial_target(target)
+        # Verify the active account actually exists in the SIP endpoint.
+        # The UI tracks _active_account_id from config; the endpoint's
+        # _accounts dict is populated by _add_account_to_endpoint, which
+        # can fail (transport collision, registrar timeout during init,
+        # etc.) and leave the chip showing an account the endpoint has
+        # never heard of. Without this guard, make_call raises a cryptic
+        # "Unknown account <uuid>" and the user can't dial. Auto-recover
+        # by re-adding the account from its on-disk config; if that ALSO
+        # fails, surface a clear, actionable error instead of the UUID.
+        ep = SipEndpoint.instance()
+        if ep.get_account(self._active_account_id) is None:
+            cfg = next(
+                (a for a in self.accounts if a.id == self._active_account_id),
+                None,
+            )
+            if cfg is None:
+                QMessageBox.warning(
+                    self, "Call failed",
+                    "The selected account no longer exists. Pick another "
+                    "account from the chip in the top-right corner."
+                )
+                return
+            log.info(
+                "Active account %s (%s@%s) not in endpoint; re-adding before call",
+                cfg.id, cfg.username, cfg.domain,
+            )
+            try:
+                ep.add_account(cfg)
+            except Exception as exc:
+                log.exception("Re-add of active account failed before make_call")
+                QMessageBox.warning(
+                    self, "Call failed",
+                    f"Could not enable {cfg.username}@{cfg.domain} for this call:\n\n"
+                    f"{type(exc).__name__}: {exc}\n\n"
+                    "Try Settings → Account → Test Register, or check that "
+                    "the registrar is reachable and credentials are correct."
+                )
+                return
         try:
-            call = SipEndpoint.instance().make_call(self._active_account_id, target)
+            call = ep.make_call(self._active_account_id, target)
             cid = call.getInfo().id
             self.calls.register(CallRecord(
                 call_id=cid, account_id=self._active_account_id,
