@@ -1146,14 +1146,14 @@ class PhoneShell(QMainWindow):
             # string every time (e.g. routing_format="U" -> username="U",
             # clobbering "U080" the user typed). Operators who use one
             # supplier per account get burned by this.
-            if "{id}" not in routing_fmt:
+            if not self._teles_routing_format_needs_supplier(routing_fmt):
                 log.info(
                     "Supplier swap skipped: routing_format=%r has no {id} "
                     "placeholder, leaving username=%r untouched",
                     routing_fmt, acc.username,
                 )
                 return
-            new_uid = s.routed(routing_fmt)
+            new_uid = self._render_teles_supplier_uid(acc, s, routing_fmt)
             if not new_uid or (new_uid == acc.username and new_uid == acc.auth_user):
                 return
             # Guard: supplier swap calls update_account which does
@@ -1203,6 +1203,27 @@ class PhoneShell(QMainWindow):
         except Exception:
             log.exception("Teles auth swap failed for supplier %s", self._active_supplier_id)
 
+    @staticmethod
+    def _teles_routing_format_needs_supplier(routing_fmt: str) -> bool:
+        value = (routing_fmt or "").strip()
+        return (
+            "{id}" in value.lower()
+            or value in {"U", "N"}
+        )
+
+    @staticmethod
+    def _render_teles_supplier_uid(acc, supplier, routing_fmt: str) -> str:
+        fmt = (routing_fmt or "").strip()
+        sid = str(getattr(supplier, "id", "") or "")
+        if not sid:
+            return ""
+        if "{id}" in fmt.lower():
+            # Accept both U{id} and U{ID}; operators type both.
+            return fmt.replace("{id}", sid).replace("{ID}", sid)
+        if fmt in {"U", "N"}:
+            return f"{fmt}{sid}"
+        return supplier.routed(fmt)
+
     def _ensure_teles_supplier_identity(self, acc) -> bool:
         """Materialise a Teles routing template before register/call.
 
@@ -1214,7 +1235,7 @@ class PhoneShell(QMainWindow):
         """
         kind = (getattr(acc, "switch_type", "other") or "other").lower()
         routing_fmt = getattr(acc, "routing_format", "") or ""
-        if kind != "teles" or "{id}" not in routing_fmt:
+        if kind != "teles" or not self._teles_routing_format_needs_supplier(routing_fmt):
             return False
         supplier_id = str(getattr(self, "_active_supplier_id", "") or "")
         if not supplier_id and self.supplier_combo.currentIndex() >= 0:
@@ -1228,7 +1249,7 @@ class PhoneShell(QMainWindow):
             supplier = suppliers.get(supplier_id)
             if supplier is None:
                 return False
-            new_uid = supplier.routed(routing_fmt)
+            new_uid = self._render_teles_supplier_uid(acc, supplier, routing_fmt)
             if not new_uid:
                 return False
             if acc.username == new_uid and acc.auth_user == new_uid:
@@ -1244,6 +1265,17 @@ class PhoneShell(QMainWindow):
         except Exception:
             log.exception("Teles supplier materialization failed for %s", supplier_id)
             return False
+
+    def _teles_supplier_identity_ready(self, acc) -> bool:
+        kind = (getattr(acc, "switch_type", "other") or "other").lower()
+        routing_fmt = getattr(acc, "routing_format", "") or ""
+        if kind != "teles" or not self._teles_routing_format_needs_supplier(routing_fmt):
+            return True
+        user = (getattr(acc, "username", "") or "").strip()
+        auth_user = (getattr(acc, "auth_user", "") or "").strip()
+        if user in {"U", "N", ""} or auth_user in {"U", "N", ""}:
+            return False
+        return "{" not in user and "{" not in auth_user
 
     def _add_account_to_endpoint(self, cfg):
         self._ensure_teles_supplier_identity(cfg)
@@ -1864,6 +1896,15 @@ class PhoneShell(QMainWindow):
                     f"{type(exc).__name__}: {exc}",
                 )
                 return
+        if acc is not None and not self._teles_supplier_identity_ready(acc):
+            QMessageBox.warning(
+                self,
+                "Call failed",
+                "The selected Teles supplier has not been applied yet. "
+                "Pick supplier C080 in the supplier field, then try again. "
+                "The SIP user must be U080, not U.",
+            )
+            return
         target = self._rewrite_dial_target(target)
         # Verify the active account actually exists in the SIP endpoint.
         # The UI tracks _active_account_id from config; the endpoint's
