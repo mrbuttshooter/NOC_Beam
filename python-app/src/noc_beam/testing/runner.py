@@ -85,7 +85,7 @@ def _apply_routing_to_target(
         except Exception:
             pass
     dial_prefix = (getattr(account, "dial_prefix", "") or "").strip()
-    if dial_prefix:
+    if dial_prefix and not out.startswith(dial_prefix):
         out = f"{dial_prefix}{out}"
     return out
 
@@ -590,8 +590,7 @@ class TestRunner(QObject):
                 return account
         return None
 
-    @staticmethod
-    def _build_target_uri(target: str, account: AccountConfig) -> str:
+    def _build_target_uri(self, target: str, account: AccountConfig) -> str:
         if target.startswith(("sip:", "sips:", "tel:")):
             return target
         if "@" in target:

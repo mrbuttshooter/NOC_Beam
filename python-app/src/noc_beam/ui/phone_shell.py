@@ -1776,7 +1776,7 @@ class PhoneShell(QMainWindow):
             except Exception:
                 log.exception("Genband prefix application failed")
         dial_prefix = (getattr(acc, "dial_prefix", "") or "").strip()
-        if dial_prefix:
+        if dial_prefix and not out.startswith(dial_prefix):
             out = f"{dial_prefix}{out}"
         if out != target:
             log.info("Dial rewrite: %r -> %r (account=%s kind=%s)",

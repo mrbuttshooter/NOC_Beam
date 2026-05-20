@@ -77,6 +77,14 @@ def account(username: str = "1001", account_id: str = "acc-1") -> AccountConfig:
     )
 
 
+def test_routing_does_not_double_prepend_existing_dial_prefix() -> None:
+    acc = account()
+    acc.dial_prefix = "00"
+
+    assert runner_module._apply_routing_to_target("96171488860", acc) == "0096171488860"
+    assert runner_module._apply_routing_to_target("0096171488860", acc) == "0096171488860"
+
+
 def spec(
     *,
     callers: list[str] | None = None,

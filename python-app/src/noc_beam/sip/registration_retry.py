@@ -24,7 +24,10 @@ log = logging.getLogger(__name__)
 # 2xx (success) clears the schedule; anything else (within the retryable
 # set below) triggers backoff. Adjust this list rather than the logic.
 #
-# 401/403/407 are auth rejections — retrying just locks the account out.
+# 401/403/407 are auth rejections; retrying just locks the account out.
+# 405 means this trunk does not accept REGISTER at all (common for
+# IP-auth origination trunks); retrying only adds noise while INVITE
+# may still be allowed.
 # 423 ("Interval Too Brief") is NOT in this set: it means the registrar
 # wants a longer Expires (per its Min-Expires response header), and the
 # correct response is to re-REGISTER with that value. We don't have access
@@ -33,7 +36,7 @@ log = logging.getLogger(__name__)
 # retry-with-backoff path; PJSIP's own resolver may pick up the
 # Min-Expires on the retry, and at minimum we keep trying instead of
 # silently giving up.
-_NO_RETRY_CODES = {401, 403, 407}     # don't retry — credential issue
+_NO_RETRY_CODES = {401, 403, 405, 407}     # don't retry hard rejections
 _RETRY_INTERVALS_MS = [1000, 2000, 4000, 8000, 16000, 30000]
 
 
