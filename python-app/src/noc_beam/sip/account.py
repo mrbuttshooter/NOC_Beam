@@ -120,10 +120,31 @@ if PJSUA2_AVAILABLE:
             # is case-sensitive in older PJSIP -> 401 loop with correct
             # creds. Fall back to `*` only when the domain is blank.
             realm = (cfg.domain or "*").split(":", 1)[0].lower() or "*"
-            cred = pj.AuthCredInfo(
-                "digest", realm, cfg.auth_user or cfg.username, 0, cfg.password
-            )
-            ac.sipConfig.authCreds.append(cred)
+            # Only attach digest credentials when the operator provided a
+            # password. Wholesale carriers often use IP-based authentication
+            # (the carrier's edge whitelists the operator's source IP and
+            # accepts unauthenticated REGISTER + INVITE). Unconditionally
+            # creating an AuthCredInfo with empty password caused pjsua2
+            # Account.create() to reject the entire config silently --
+            # pjsua2.Error() with no message -- because AuthCredInfo is
+            # validated at construction or attach time.
+            #
+            # When password is empty:
+            #   * skip authCreds entirely; PJSIP won't offer a 401 response
+            #     to challenges (carrier shouldn't be sending them anyway)
+            #   * REGISTER still goes out (regConfig.registerOnAdd above);
+            #     the carrier either 200-OKs by IP or 401s and we surface
+            #     that to the user
+            if (cfg.password or "").strip():
+                cred = pj.AuthCredInfo(
+                    "digest", realm, cfg.auth_user or cfg.username, 0, cfg.password
+                )
+                ac.sipConfig.authCreds.append(cred)
+            else:
+                log.info(
+                    "Account %s has no password -- assuming IP-based auth, "
+                    "skipping AuthCredInfo append", cfg.id,
+                )
 
             if cfg.proxy:
                 ac.sipConfig.proxies.append(cfg.proxy)
