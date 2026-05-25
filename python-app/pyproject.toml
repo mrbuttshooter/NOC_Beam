@@ -38,6 +38,12 @@ NOC_Beam = "noc_beam.__main__:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# Ship the bundled default JSON catalogues inside any wheel/sdist.
+# PyInstaller picks these up separately via build/noc_beam.spec
+# (which globs *.json under src/noc_beam/data).
+"noc_beam.data" = ["*.json"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

@@ -1,0 +1,7002 @@
+[
+  {
+    "country": "Abkhazia",
+    "zone": "Abkhazia",
+    "numbers": []
+  },
+  {
+    "country": "Abkhazia",
+    "zone": "Abkhazia-Mobile (A-Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Abkhazia",
+    "zone": "Abkhazia-Mobile (Aquafon)",
+    "numbers": []
+  },
+  {
+    "country": "Afghanistan",
+    "zone": "Afghanistan",
+    "numbers": []
+  },
+  {
+    "country": "Afghanistan",
+    "zone": "Afghanistan-Mobile (AWCC)",
+    "numbers": []
+  },
+  {
+    "country": "Afghanistan",
+    "zone": "Afghanistan-Mobile (Etisalat)",
+    "numbers": []
+  },
+  {
+    "country": "Afghanistan",
+    "zone": "Afghanistan-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Afghanistan",
+    "zone": "Afghanistan-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Afghanistan",
+    "zone": "Afghanistan-Mobile (Roshan)",
+    "numbers": []
+  },
+  {
+    "country": "Afghanistan",
+    "zone": "Afghanistan-Mobile (Salaam)",
+    "numbers": []
+  },
+  {
+    "country": "Afghanistan",
+    "zone": "Afghanistan-Mobile (Wasel)",
+    "numbers": []
+  },
+  {
+    "country": "Alaska",
+    "zone": "Alaska",
+    "numbers": []
+  },
+  {
+    "country": "Albania",
+    "zone": "Albania",
+    "numbers": []
+  },
+  {
+    "country": "Albania",
+    "zone": "Albania-Mobile (AMC)",
+    "numbers": []
+  },
+  {
+    "country": "Albania",
+    "zone": "Albania-Mobile (Eagle)",
+    "numbers": []
+  },
+  {
+    "country": "Albania",
+    "zone": "Albania-Mobile (Plus)",
+    "numbers": []
+  },
+  {
+    "country": "Albania",
+    "zone": "Albania-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Albania",
+    "zone": "Albania-Premium Services",
+    "numbers": []
+  },
+  {
+    "country": "Albania",
+    "zone": "Albania-Tirana",
+    "numbers": []
+  },
+  {
+    "country": "Algeria",
+    "zone": "Algeria",
+    "numbers": []
+  },
+  {
+    "country": "Algeria",
+    "zone": "Algeria-Algiers",
+    "numbers": []
+  },
+  {
+    "country": "Algeria",
+    "zone": "Algeria-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Algeria",
+    "zone": "Algeria-Mobile (Orascom)",
+    "numbers": []
+  },
+  {
+    "country": "Algeria",
+    "zone": "Algeria-Mobile (Wataniya)",
+    "numbers": []
+  },
+  {
+    "country": "Andorra",
+    "zone": "Andorra",
+    "numbers": []
+  },
+  {
+    "country": "Andorra",
+    "zone": "Andorra-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Angola",
+    "zone": "Angola",
+    "numbers": []
+  },
+  {
+    "country": "Angola",
+    "zone": "Angola - Mobile (Africell)",
+    "numbers": []
+  },
+  {
+    "country": "Angola",
+    "zone": "Angola - Mobile (Movicel)",
+    "numbers": []
+  },
+  {
+    "country": "Angola",
+    "zone": "Angola-Mobile (Unitel)",
+    "numbers": []
+  },
+  {
+    "country": "Anguilla",
+    "zone": "Anguilla",
+    "numbers": []
+  },
+  {
+    "country": "Anguilla PRS",
+    "zone": "Anguilla PRS",
+    "numbers": []
+  },
+  {
+    "country": "Anguilla",
+    "zone": "Anguilla-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Anguilla",
+    "zone": "Anguilla-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Antarctic",
+    "zone": "Antarctic",
+    "numbers": []
+  },
+  {
+    "country": "Antarctic Global Networks",
+    "zone": "Antarctic Global Networks",
+    "numbers": []
+  },
+  {
+    "country": "Antigua & Barbuda",
+    "zone": "Antigua & Barbuda",
+    "numbers": []
+  },
+  {
+    "country": "Antigua & Barbuda",
+    "zone": "Antigua & Barbuda-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Argentia",
+    "zone": "Argentia-Rosario",
+    "numbers": []
+  },
+  {
+    "country": "Argentina",
+    "zone": "Argentina",
+    "numbers": []
+  },
+  {
+    "country": "Argentina",
+    "zone": "Argentina-Buenos Aires",
+    "numbers": []
+  },
+  {
+    "country": "Argentina",
+    "zone": "Argentina-Cordoba",
+    "numbers": []
+  },
+  {
+    "country": "Argentina",
+    "zone": "Argentina-La Plata",
+    "numbers": []
+  },
+  {
+    "country": "Argentina",
+    "zone": "Argentina-Mar del Plata",
+    "numbers": []
+  },
+  {
+    "country": "Argentina",
+    "zone": "Argentina-Mendoza",
+    "numbers": []
+  },
+  {
+    "country": "Argentina",
+    "zone": "Argentina-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Argentina",
+    "zone": "Argentina-Mobile (Claro)",
+    "numbers": []
+  },
+  {
+    "country": "Argentina",
+    "zone": "Argentina-Mobility Services",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia-Echmiadzin",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia-Gyumri",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia-Mobile (Armentel)",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia-Mobile (Nagorni Karabakh)",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia-Mobile K-Telecom (Vivacell)",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia-Nagorni Karabakh",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia-Non Geographical",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia-Vanadzor",
+    "numbers": []
+  },
+  {
+    "country": "Armenia",
+    "zone": "Armenia-Yerevan",
+    "numbers": []
+  },
+  {
+    "country": "Aruba",
+    "zone": "Aruba",
+    "numbers": []
+  },
+  {
+    "country": "Aruba",
+    "zone": "Aruba-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Aruba",
+    "zone": "Aruba-Mobile (Setar)",
+    "numbers": []
+  },
+  {
+    "country": "Ascension",
+    "zone": "Ascension",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Adelaide",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Brisbane",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Canberra",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Melbourne",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Mobile (Hutchinson)",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Mobile (Optus)",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Mobile (Telstra)",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Perth",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Satellite (Optus)",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Australia",
+    "zone": "Australia-Sydney",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria-Mobile (Connect)",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria-Mobile (Hutchinson 3G)",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria-Mobile (Mobilcom)",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria-Mobile (Msatertalk)",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria-Mobile (T-Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria-Mobile (Tele 2)",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria-Mobile (Telekom)",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria-Mobile (Telering)",
+    "numbers": []
+  },
+  {
+    "country": "Austria",
+    "zone": "Austria-Vienna",
+    "numbers": []
+  },
+  {
+    "country": "Azerbaijan",
+    "zone": "Azerbaijan",
+    "numbers": []
+  },
+  {
+    "country": "Azerbaijan",
+    "zone": "Azerbaijan-Mobile (AzerCell)",
+    "numbers": []
+  },
+  {
+    "country": "Azerbaijan",
+    "zone": "Azerbaijan-Mobile (AzerFone)",
+    "numbers": []
+  },
+  {
+    "country": "Azerbaijan",
+    "zone": "Azerbaijan-Mobile (BakCell)",
+    "numbers": []
+  },
+  {
+    "country": "Azerbaijan",
+    "zone": "Azerbaijan-Mobile (CDMA)",
+    "numbers": []
+  },
+  {
+    "country": "Azerbaijan",
+    "zone": "Azerbaijan-Mobile (Catel)",
+    "numbers": []
+  },
+  {
+    "country": "Azerbaijan",
+    "zone": "Azerbaijan-Mobile (Nakchivan)",
+    "numbers": []
+  },
+  {
+    "country": "Bahamas",
+    "zone": "Bahamas",
+    "numbers": []
+  },
+  {
+    "country": "Bahamas",
+    "zone": "Bahamas-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain",
+    "zone": "Bahrain",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (2Connect Fixed)",
+    "zone": "Bahrain (2Connect Fixed)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (Batelco Fixed)",
+    "zone": "Bahrain (Batelco Fixed)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (Elephant Talk)",
+    "zone": "Bahrain (Elephant Talk)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (EtisalCom)",
+    "zone": "Bahrain (EtisalCom)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (Kalaam Telecom Fixed)",
+    "zone": "Bahrain (Kalaam Telecom Fixed)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (Light Speed Fixed)",
+    "zone": "Bahrain (Light Speed Fixed)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (Mena Telecom Fixed)",
+    "zone": "Bahrain (Mena Telecom Fixed)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (Nuetel)",
+    "zone": "Bahrain (Nuetel)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (Rapid Telecom Fixed)",
+    "zone": "Bahrain (Rapid Telecom Fixed)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (Rawabi Fixed)",
+    "zone": "Bahrain (Rawabi Fixed)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain (VIVA BH Fixed)",
+    "zone": "Bahrain (VIVA BH Fixed)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain Toll Free Number",
+    "zone": "Bahrain Toll Free Number",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain",
+    "zone": "Bahrain-Mobile (Batelco)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain",
+    "zone": "Bahrain-Mobile (Viva)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain",
+    "zone": "Bahrain-Mobile (Zain Fixed Wireless)",
+    "numbers": []
+  },
+  {
+    "country": "Bahrain",
+    "zone": "Bahrain-Mobile (Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Bangladesh",
+    "zone": "Bangladesh",
+    "numbers": []
+  },
+  {
+    "country": "Bangladesh",
+    "zone": "Bangladesh-Chittagong",
+    "numbers": []
+  },
+  {
+    "country": "Bangladesh",
+    "zone": "Bangladesh-Dhaka",
+    "numbers": []
+  },
+  {
+    "country": "Bangladesh",
+    "zone": "Bangladesh-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Bangladesh",
+    "zone": "Bangladesh-Sylhet",
+    "numbers": []
+  },
+  {
+    "country": "Barbados",
+    "zone": "Barbados",
+    "numbers": []
+  },
+  {
+    "country": "Barbados",
+    "zone": "Barbados-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Barbados",
+    "zone": "Barbados-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Belarus",
+    "zone": "Belarus",
+    "numbers": []
+  },
+  {
+    "country": "Belarus",
+    "zone": "Belarus-Mobile (Belcel)",
+    "numbers": []
+  },
+  {
+    "country": "Belarus",
+    "zone": "Belarus-Mobile (Best)",
+    "numbers": []
+  },
+  {
+    "country": "Belarus",
+    "zone": "Belarus-Mobile (MTS)",
+    "numbers": []
+  },
+  {
+    "country": "Belarus",
+    "zone": "Belarus-Mobile (Other)",
+    "numbers": []
+  },
+  {
+    "country": "Belarus",
+    "zone": "Belarus-Mobile (Velcom)",
+    "numbers": []
+  },
+  {
+    "country": "Belarus",
+    "zone": "Belarus-Premium Services",
+    "numbers": []
+  },
+  {
+    "country": "Belgium",
+    "zone": "Belgium",
+    "numbers": []
+  },
+  {
+    "country": "Belgium",
+    "zone": "Belgium-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Belgium",
+    "zone": "Belgium-Mobile (Base)",
+    "numbers": []
+  },
+  {
+    "country": "Belgium",
+    "zone": "Belgium-Mobile (Mobistar)",
+    "numbers": []
+  },
+  {
+    "country": "Belgium",
+    "zone": "Belgium-Mobile (Proximus)",
+    "numbers": []
+  },
+  {
+    "country": "Belgium",
+    "zone": "Belgium-Mobile (Telenet)",
+    "numbers": []
+  },
+  {
+    "country": "Belgium",
+    "zone": "Belgium-Universal Access Number",
+    "numbers": []
+  },
+  {
+    "country": "Belize",
+    "zone": "Belize",
+    "numbers": []
+  },
+  {
+    "country": "Belize",
+    "zone": "Belize-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Benin",
+    "zone": "Benin",
+    "numbers": []
+  },
+  {
+    "country": "Benin",
+    "zone": "Benin-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Benin",
+    "zone": "Benin-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Benin",
+    "zone": "Benin-Mobile (Moov)",
+    "numbers": []
+  },
+  {
+    "country": "Benin",
+    "zone": "Benin-PRS",
+    "numbers": []
+  },
+  {
+    "country": "Bermudas",
+    "zone": "Bermudas",
+    "numbers": []
+  },
+  {
+    "country": "Bermudas",
+    "zone": "Bermudas-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Bhutan",
+    "zone": "Bhutan",
+    "numbers": []
+  },
+  {
+    "country": "Bolivia",
+    "zone": "Bolivia",
+    "numbers": []
+  },
+  {
+    "country": "Bolivia",
+    "zone": "Bolivia-Cochabamba",
+    "numbers": []
+  },
+  {
+    "country": "Bolivia",
+    "zone": "Bolivia-Equal Access",
+    "numbers": []
+  },
+  {
+    "country": "Bolivia",
+    "zone": "Bolivia-La Paz",
+    "numbers": []
+  },
+  {
+    "country": "Bolivia",
+    "zone": "Bolivia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Bolivia",
+    "zone": "Bolivia-Mobile (Entel)",
+    "numbers": []
+  },
+  {
+    "country": "Bolivia",
+    "zone": "Bolivia-Mobile (Nuevatel)",
+    "numbers": []
+  },
+  {
+    "country": "Bolivia",
+    "zone": "Bolivia-Rural",
+    "numbers": []
+  },
+  {
+    "country": "Bolivia",
+    "zone": "Bolivia-Santa cruz",
+    "numbers": []
+  },
+  {
+    "country": "Bosnia & Herzegovina",
+    "zone": "Bosnia & Herzegovina",
+    "numbers": []
+  },
+  {
+    "country": "Bosnia & Herzegovina (BH Telecom)",
+    "zone": "Bosnia & Herzegovina (BH Telecom)",
+    "numbers": []
+  },
+  {
+    "country": "Bosnia & Herzegovina (HT Mostar)",
+    "zone": "Bosnia & Herzegovina (HT Mostar)",
+    "numbers": []
+  },
+  {
+    "country": "Bosnia & Herzegovina (Mostar)",
+    "zone": "Bosnia & Herzegovina (Mostar)",
+    "numbers": []
+  },
+  {
+    "country": "Bosnia & Herzegovina (Telekom Srpske)",
+    "zone": "Bosnia & Herzegovina (Telekom Srpske)",
+    "numbers": []
+  },
+  {
+    "country": "Bosnia & Herzegovina",
+    "zone": "Bosnia & Herzegovina-Mobile (BH Telecom)",
+    "numbers": []
+  },
+  {
+    "country": "Bosnia & Herzegovina",
+    "zone": "Bosnia & Herzegovina-Mobile (HT Mostar)",
+    "numbers": []
+  },
+  {
+    "country": "Bosnia & Herzegovina",
+    "zone": "Bosnia & Herzegovina-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Bosnia & Herzegovina",
+    "zone": "Bosnia & Herzegovina-Mobile (Telekom Srpske)",
+    "numbers": []
+  },
+  {
+    "country": "Botswana",
+    "zone": "Botswana",
+    "numbers": []
+  },
+  {
+    "country": "Botswana",
+    "zone": "Botswana-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Botswana",
+    "zone": "Botswana-Mobile (Mascom)",
+    "numbers": []
+  },
+  {
+    "country": "Botswana",
+    "zone": "Botswana-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Brazil",
+    "zone": "Brazil",
+    "numbers": []
+  },
+  {
+    "country": "Brazil",
+    "zone": "Brazil-Belo Horizonte",
+    "numbers": []
+  },
+  {
+    "country": "Brazil",
+    "zone": "Brazil-Cities",
+    "numbers": []
+  },
+  {
+    "country": "Brazil",
+    "zone": "Brazil-Governador Valadares",
+    "numbers": []
+  },
+  {
+    "country": "Brazil",
+    "zone": "Brazil-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Brazil",
+    "zone": "Brazil-Mobile (Claro)",
+    "numbers": []
+  },
+  {
+    "country": "Brazil",
+    "zone": "Brazil-Rio De Janeiro",
+    "numbers": []
+  },
+  {
+    "country": "Brazil",
+    "zone": "Brazil-Sao Paulo",
+    "numbers": []
+  },
+  {
+    "country": "British Virgin Islands",
+    "zone": "British Virgin Islands",
+    "numbers": []
+  },
+  {
+    "country": "British Virgin Islands",
+    "zone": "British Virgin Islands-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Brunei",
+    "zone": "Brunei",
+    "numbers": []
+  },
+  {
+    "country": "Brunei",
+    "zone": "Brunei-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Bulgaria",
+    "zone": "Bulgaria",
+    "numbers": []
+  },
+  {
+    "country": "Bulgaria",
+    "zone": "Bulgaria-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Bulgaria",
+    "zone": "Bulgaria-Mobile (Globul)",
+    "numbers": []
+  },
+  {
+    "country": "Bulgaria",
+    "zone": "Bulgaria-Mobile (Mobicom)",
+    "numbers": []
+  },
+  {
+    "country": "Bulgaria",
+    "zone": "Bulgaria-Mobile (Mobitel)",
+    "numbers": []
+  },
+  {
+    "country": "Bulgaria",
+    "zone": "Bulgaria-Sofia",
+    "numbers": []
+  },
+  {
+    "country": "Bulgaria",
+    "zone": "Bulgaria-Sofia Network",
+    "numbers": []
+  },
+  {
+    "country": "Burkina Faso",
+    "zone": "Burkina Faso",
+    "numbers": []
+  },
+  {
+    "country": "Burkina Faso",
+    "zone": "Burkina Faso-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Burkina Faso",
+    "zone": "Burkina Faso-Mobile (Other)",
+    "numbers": []
+  },
+  {
+    "country": "Burkina Faso",
+    "zone": "Burkina Faso-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Burkina Faso",
+    "zone": "Burkina Faso-Mobile (Telecel)",
+    "numbers": []
+  },
+  {
+    "country": "Burkina Faso",
+    "zone": "Burkina Faso-Mobile (Telmob)",
+    "numbers": []
+  },
+  {
+    "country": "Burundi",
+    "zone": "Burundi",
+    "numbers": []
+  },
+  {
+    "country": "Burundi",
+    "zone": "Burundi-Mobile (OFFICIAL RESSOURCES)",
+    "numbers": []
+  },
+  {
+    "country": "Burundi",
+    "zone": "Burundi-Mobile (ONKODTELECOM)",
+    "numbers": []
+  },
+  {
+    "country": "Burundi",
+    "zone": "Burundi-Mobile (Regie Nationale des Postes)",
+    "numbers": []
+  },
+  {
+    "country": "Burundi",
+    "zone": "Burundi-Mobile (SMS media)",
+    "numbers": []
+  },
+  {
+    "country": "Burundi",
+    "zone": "Burundi-Mobile (Select Infos)",
+    "numbers": []
+  },
+  {
+    "country": "Burundi",
+    "zone": "Burundi-Mobile (UNICEF)",
+    "numbers": []
+  },
+  {
+    "country": "Burundi",
+    "zone": "Burundi-Privacell",
+    "numbers": []
+  },
+  {
+    "country": "Cambodia",
+    "zone": "Cambodia",
+    "numbers": []
+  },
+  {
+    "country": "Cambodia",
+    "zone": "Cambodia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Cambodia",
+    "zone": "Cambodia-Mobile (Cellcard)",
+    "numbers": []
+  },
+  {
+    "country": "Cameroon",
+    "zone": "Cameroon",
+    "numbers": []
+  },
+  {
+    "country": "Cameroon",
+    "zone": "Cameroon-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Cameroon",
+    "zone": "Cameroon-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Cameroon",
+    "zone": "Cameroon-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Cameroon",
+    "zone": "Cameroon-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Canada",
+    "zone": "Canada",
+    "numbers": []
+  },
+  {
+    "country": "Canada (Npa",
+    "zone": "Canada (Npa-1)",
+    "numbers": []
+  },
+  {
+    "country": "Canada (Npa",
+    "zone": "Canada (Npa-2)",
+    "numbers": []
+  },
+  {
+    "country": "Canada (Npa",
+    "zone": "Canada (Npa-3)",
+    "numbers": []
+  },
+  {
+    "country": "Canada (Npa",
+    "zone": "Canada (Npa-4)",
+    "numbers": []
+  },
+  {
+    "country": "Canada (Npa",
+    "zone": "Canada (Npa-5)",
+    "numbers": []
+  },
+  {
+    "country": "Canada (Npa",
+    "zone": "Canada (Npa-6)",
+    "numbers": []
+  },
+  {
+    "country": "Cape Verde",
+    "zone": "Cape Verde",
+    "numbers": []
+  },
+  {
+    "country": "Cape Verde",
+    "zone": "Cape Verde-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Cape Verde",
+    "zone": "Cape Verde-Mobile (CVT)",
+    "numbers": []
+  },
+  {
+    "country": "Cayman Islands",
+    "zone": "Cayman Islands",
+    "numbers": []
+  },
+  {
+    "country": "Cayman Islands",
+    "zone": "Cayman Islands-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Cayman Islands",
+    "zone": "Cayman Islands-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Central African Republic",
+    "zone": "Central African Republic",
+    "numbers": []
+  },
+  {
+    "country": "Central African Republic (Special Services)",
+    "zone": "Central African Republic (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Central African Republic",
+    "zone": "Central African Republic-Invivent",
+    "numbers": []
+  },
+  {
+    "country": "Central African Republic",
+    "zone": "Central African Republic-Mobile (Moov)",
+    "numbers": []
+  },
+  {
+    "country": "Central African Republic",
+    "zone": "Central African Republic-Mobile (Nationlink)",
+    "numbers": []
+  },
+  {
+    "country": "Central African Republic",
+    "zone": "Central African Republic-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Central African Republic",
+    "zone": "Central African Republic-Mobile (Telecel)",
+    "numbers": []
+  },
+  {
+    "country": "Chad",
+    "zone": "Chad",
+    "numbers": []
+  },
+  {
+    "country": "Chad",
+    "zone": "Chad-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Chad",
+    "zone": "Chad-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Chad",
+    "zone": "Chad-Mobile (Sotel)",
+    "numbers": []
+  },
+  {
+    "country": "Chad",
+    "zone": "Chad-Mobile (Tigo)",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile-Easter Island",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile-Mobile (Claro)",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile-Mobile(Movistar)",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile-Mobilink (Interexport)",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile-Rural",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile-Rural PRS",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile-Santiago",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile-VAS1",
+    "numbers": []
+  },
+  {
+    "country": "Chile",
+    "zone": "Chile-VAS2",
+    "numbers": []
+  },
+  {
+    "country": "China",
+    "zone": "China",
+    "numbers": []
+  },
+  {
+    "country": "China",
+    "zone": "China-Beijing",
+    "numbers": []
+  },
+  {
+    "country": "China",
+    "zone": "China-Fuzhou",
+    "numbers": []
+  },
+  {
+    "country": "China",
+    "zone": "China-Guangzhou",
+    "numbers": []
+  },
+  {
+    "country": "China",
+    "zone": "China-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "China",
+    "zone": "China-Mobile (China Telecom)",
+    "numbers": []
+  },
+  {
+    "country": "China",
+    "zone": "China-Mobile (Unicom)",
+    "numbers": []
+  },
+  {
+    "country": "China",
+    "zone": "China-Shanghai",
+    "numbers": []
+  },
+  {
+    "country": "China",
+    "zone": "China-Shenzhen",
+    "numbers": []
+  },
+  {
+    "country": "China",
+    "zone": "China-Wenzhou",
+    "numbers": []
+  },
+  {
+    "country": "Christmas Islands",
+    "zone": "Christmas Islands",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Armenia",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Barranquilla",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Bogota",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Bucaramanga",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Cali",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Lex",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Manizales",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Medellin",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Mobile (Claro)",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Mobile (Movistar)",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Mobile (Tigo)",
+    "numbers": []
+  },
+  {
+    "country": "Colombia",
+    "zone": "Colombia-Pereira",
+    "numbers": []
+  },
+  {
+    "country": "Comoros",
+    "zone": "Comoros",
+    "numbers": []
+  },
+  {
+    "country": "Comoros VAS1",
+    "zone": "Comoros VAS1",
+    "numbers": []
+  },
+  {
+    "country": "Comoros VAS2",
+    "zone": "Comoros VAS2",
+    "numbers": []
+  },
+  {
+    "country": "Comoros",
+    "zone": "Comoros-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Congo",
+    "zone": "Congo",
+    "numbers": []
+  },
+  {
+    "country": "Congo (Special Services)",
+    "zone": "Congo (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Congo",
+    "zone": "Congo-Equateur Telecom",
+    "numbers": []
+  },
+  {
+    "country": "Congo",
+    "zone": "Congo-Hightech Pro",
+    "numbers": []
+  },
+  {
+    "country": "Congo",
+    "zone": "Congo-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Congo",
+    "zone": "Congo-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Congo",
+    "zone": "Congo-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Cook Islands",
+    "zone": "Cook Islands",
+    "numbers": []
+  },
+  {
+    "country": "Costa Rica",
+    "zone": "Costa Rica",
+    "numbers": []
+  },
+  {
+    "country": "Costa Rica",
+    "zone": "Costa Rica-Fixed (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Costa Rica",
+    "zone": "Costa Rica-Fixed (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Costa Rica",
+    "zone": "Costa Rica-Ice",
+    "numbers": []
+  },
+  {
+    "country": "Costa Rica",
+    "zone": "Costa Rica-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Costa Rica",
+    "zone": "Costa Rica-Mobile (Claro)",
+    "numbers": []
+  },
+  {
+    "country": "Costa Rica",
+    "zone": "Costa Rica-Mobile (Ice)",
+    "numbers": []
+  },
+  {
+    "country": "Costa Rica",
+    "zone": "Costa Rica-Mobile (Movistar)",
+    "numbers": []
+  },
+  {
+    "country": "Croatia",
+    "zone": "Croatia",
+    "numbers": []
+  },
+  {
+    "country": "Croatia",
+    "zone": "Croatia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Croatia",
+    "zone": "Croatia-Mobile (Vipnet)",
+    "numbers": []
+  },
+  {
+    "country": "Croatia",
+    "zone": "Croatia-Premium Services",
+    "numbers": []
+  },
+  {
+    "country": "Croatia",
+    "zone": "Croatia-Zagreb",
+    "numbers": []
+  },
+  {
+    "country": "Cuba",
+    "zone": "Cuba",
+    "numbers": []
+  },
+  {
+    "country": "Cuba",
+    "zone": "Cuba-Guantanamo Bay",
+    "numbers": []
+  },
+  {
+    "country": "Cuba",
+    "zone": "Cuba-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Cyprus",
+    "zone": "Cyprus",
+    "numbers": []
+  },
+  {
+    "country": "Cyprus",
+    "zone": "Cyprus-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Cyprus",
+    "zone": "Cyprus-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Czech Republic",
+    "zone": "Czech Republic",
+    "numbers": []
+  },
+  {
+    "country": "Czech Republic (Premium Services)",
+    "zone": "Czech Republic (Premium Services)",
+    "numbers": []
+  },
+  {
+    "country": "Czech Republic (Special Services)",
+    "zone": "Czech Republic (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Czech Republic",
+    "zone": "Czech Republic-Mobile (T-Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Czech Republic",
+    "zone": "Czech Republic-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Czech Republic",
+    "zone": "Czech Republic-Mobile O2",
+    "numbers": []
+  },
+  {
+    "country": "Czech Republic",
+    "zone": "Czech Republic-mobile (Mobilkom)",
+    "numbers": []
+  },
+  {
+    "country": "D.R.C",
+    "zone": "D.R.C",
+    "numbers": []
+  },
+  {
+    "country": "D.R.C",
+    "zone": "D.R.C-Mobile (Africell)",
+    "numbers": []
+  },
+  {
+    "country": "D.R.C",
+    "zone": "D.R.C-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "D.R.C",
+    "zone": "D.R.C-Mobile (CCT)",
+    "numbers": []
+  },
+  {
+    "country": "D.R.C",
+    "zone": "D.R.C-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "D.R.C",
+    "zone": "D.R.C-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "D.R.C",
+    "zone": "D.R.C-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "D.R.C",
+    "zone": "D.R.C-Mobile (Tatem)",
+    "numbers": []
+  },
+  {
+    "country": "D.R.C",
+    "zone": "D.R.C-Mobile (Tigo)",
+    "numbers": []
+  },
+  {
+    "country": "D.R.C",
+    "zone": "D.R.C-Mobile (Vodacom)",
+    "numbers": []
+  },
+  {
+    "country": "Denmark",
+    "zone": "Denmark",
+    "numbers": []
+  },
+  {
+    "country": "Denmark",
+    "zone": "Denmark-Mobile (HI3G)",
+    "numbers": []
+  },
+  {
+    "country": "Denmark",
+    "zone": "Denmark-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Denmark",
+    "zone": "Denmark-Mobile (Sonofon)",
+    "numbers": []
+  },
+  {
+    "country": "Denmark",
+    "zone": "Denmark-Mobile (TDC)",
+    "numbers": []
+  },
+  {
+    "country": "Denmark",
+    "zone": "Denmark-Mobile (Telia)",
+    "numbers": []
+  },
+  {
+    "country": "Diego Garcia",
+    "zone": "Diego Garcia",
+    "numbers": []
+  },
+  {
+    "country": "Djibouti",
+    "zone": "Djibouti",
+    "numbers": []
+  },
+  {
+    "country": "Djibouti",
+    "zone": "Djibouti-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Dominica",
+    "zone": "Dominica",
+    "numbers": []
+  },
+  {
+    "country": "Dominica",
+    "zone": "Dominica-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Dominica",
+    "zone": "Dominica-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Dominican Republic",
+    "zone": "Dominican Republic",
+    "numbers": []
+  },
+  {
+    "country": "Dominican Republic (Santo Domingo)",
+    "zone": "Dominican Republic (Santo Domingo)",
+    "numbers": []
+  },
+  {
+    "country": "Dominican Republic (Trilogy)",
+    "zone": "Dominican Republic (Trilogy)",
+    "numbers": []
+  },
+  {
+    "country": "Dominican Republic",
+    "zone": "Dominican Republic-Fix",
+    "numbers": []
+  },
+  {
+    "country": "Dominican Republic",
+    "zone": "Dominican Republic-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Dominican Republic",
+    "zone": "Dominican Republic-Mobile (Claro)",
+    "numbers": []
+  },
+  {
+    "country": "Dominican Republic",
+    "zone": "Dominican Republic-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Dominican Republic",
+    "zone": "Dominican Republic-Mobile (Tricom)",
+    "numbers": []
+  },
+  {
+    "country": "Dominican Republic",
+    "zone": "Dominican Republic-Mobile (Viva)",
+    "numbers": []
+  },
+  {
+    "country": "EMSAT",
+    "zone": "EMSAT",
+    "numbers": []
+  },
+  {
+    "country": "East Timor",
+    "zone": "East Timor",
+    "numbers": []
+  },
+  {
+    "country": "East Timor",
+    "zone": "East Timor-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Ecuador",
+    "zone": "Ecuador",
+    "numbers": []
+  },
+  {
+    "country": "Ecuador (Cuenca)",
+    "zone": "Ecuador (Cuenca)",
+    "numbers": []
+  },
+  {
+    "country": "Ecuador (Guayaquil)",
+    "zone": "Ecuador (Guayaquil)",
+    "numbers": []
+  },
+  {
+    "country": "Ecuador (Portoviejo)",
+    "zone": "Ecuador (Portoviejo)",
+    "numbers": []
+  },
+  {
+    "country": "Ecuador (Quito)",
+    "zone": "Ecuador (Quito)",
+    "numbers": []
+  },
+  {
+    "country": "Ecuador Etapa",
+    "zone": "Ecuador Etapa",
+    "numbers": []
+  },
+  {
+    "country": "Ecuador",
+    "zone": "Ecuador-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Ecuador",
+    "zone": "Ecuador-Mobile (Claro)",
+    "numbers": []
+  },
+  {
+    "country": "Ecuador",
+    "zone": "Ecuador-Mobile (Movistar)",
+    "numbers": []
+  },
+  {
+    "country": "Egypt",
+    "zone": "Egypt",
+    "numbers": []
+  },
+  {
+    "country": "Egypt",
+    "zone": "Egypt-Mobile (Etisalat)",
+    "numbers": []
+  },
+  {
+    "country": "Egypt",
+    "zone": "Egypt-Mobile (Mobinil)",
+    "numbers": []
+  },
+  {
+    "country": "Egypt",
+    "zone": "Egypt-Mobile (Telecom Egypt)",
+    "numbers": []
+  },
+  {
+    "country": "Egypt",
+    "zone": "Egypt-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "El Salvador",
+    "zone": "El Salvador",
+    "numbers": []
+  },
+  {
+    "country": "El Salvador",
+    "zone": "El Salvador-CTE",
+    "numbers": []
+  },
+  {
+    "country": "El Salvador",
+    "zone": "El Salvador-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "El Salvador",
+    "zone": "El Salvador-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "El Salvador",
+    "zone": "El Salvador-Mobile (Personal)",
+    "numbers": []
+  },
+  {
+    "country": "El Salvador",
+    "zone": "El Salvador-Mobile (Telefonica)",
+    "numbers": []
+  },
+  {
+    "country": "El Salvador",
+    "zone": "El Salvador-Mobile (Telemovil)",
+    "numbers": []
+  },
+  {
+    "country": "Equatorial Guinea",
+    "zone": "Equatorial Guinea",
+    "numbers": []
+  },
+  {
+    "country": "Equatorial Guinea",
+    "zone": "Equatorial Guinea-Mobile (Gecomsa)",
+    "numbers": []
+  },
+  {
+    "country": "Equatorial Guinea",
+    "zone": "Equatorial Guinea-Mobile (Greencom)",
+    "numbers": []
+  },
+  {
+    "country": "Equatorial Guinea",
+    "zone": "Equatorial Guinea-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Eritrea",
+    "zone": "Eritrea",
+    "numbers": []
+  },
+  {
+    "country": "Eritrea",
+    "zone": "Eritrea-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Estonia",
+    "zone": "Estonia",
+    "numbers": []
+  },
+  {
+    "country": "Estonia Tallinn",
+    "zone": "Estonia Tallinn",
+    "numbers": []
+  },
+  {
+    "country": "Estonia",
+    "zone": "Estonia-Mobile (Emt)",
+    "numbers": []
+  },
+  {
+    "country": "Estonia",
+    "zone": "Estonia-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Estonia",
+    "zone": "Estonia-Mobile (Personal Nr)",
+    "numbers": []
+  },
+  {
+    "country": "Estonia",
+    "zone": "Estonia-Mobile (Rle)",
+    "numbers": []
+  },
+  {
+    "country": "Estonia",
+    "zone": "Estonia-Mobile (Tele 2)",
+    "numbers": []
+  },
+  {
+    "country": "Estonia",
+    "zone": "Estonia-Mobile (Top Connect)",
+    "numbers": []
+  },
+  {
+    "country": "Estonia",
+    "zone": "Estonia-Mobile (Vertelson)",
+    "numbers": []
+  },
+  {
+    "country": "Ethiopia",
+    "zone": "Ethiopia",
+    "numbers": []
+  },
+  {
+    "country": "Ethiopia",
+    "zone": "Ethiopia-Mobile (Addis Ababa)",
+    "numbers": []
+  },
+  {
+    "country": "Ethiopia",
+    "zone": "Ethiopia-Mobile (Safaricom)",
+    "numbers": []
+  },
+  {
+    "country": "Falkland Islands",
+    "zone": "Falkland Islands",
+    "numbers": []
+  },
+  {
+    "country": "Faroe Islands",
+    "zone": "Faroe Islands",
+    "numbers": []
+  },
+  {
+    "country": "Faroe Islands",
+    "zone": "Faroe Islands-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Fiji",
+    "zone": "Fiji",
+    "numbers": []
+  },
+  {
+    "country": "Fiji Islands",
+    "zone": "Fiji Islands-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland",
+    "numbers": []
+  },
+  {
+    "country": "Finland (Portable Number)",
+    "zone": "Finland (Portable Number)",
+    "numbers": []
+  },
+  {
+    "country": "Finland (Premium)",
+    "zone": "Finland (Premium)",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland-Helsinki",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland-Mobile (Amt)",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland-Mobile (Elisa)",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland-Mobile (Finnet)",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland-Mobile (GeneralL)",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland-Mobile (Saunalahti)",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland-Mobile (Sonera)",
+    "numbers": []
+  },
+  {
+    "country": "Finland",
+    "zone": "Finland-Mobile (Teliasonera)",
+    "numbers": []
+  },
+  {
+    "country": "France",
+    "zone": "France",
+    "numbers": []
+  },
+  {
+    "country": "France",
+    "zone": "France -VAS",
+    "numbers": []
+  },
+  {
+    "country": "France",
+    "zone": "France-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "France",
+    "zone": "France-Mobile (Bouygues)",
+    "numbers": []
+  },
+  {
+    "country": "France",
+    "zone": "France-Mobile (Free)",
+    "numbers": []
+  },
+  {
+    "country": "France",
+    "zone": "France-Mobile (Globalstar)",
+    "numbers": []
+  },
+  {
+    "country": "France",
+    "zone": "France-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "France",
+    "zone": "France-Mobile (SFR)",
+    "numbers": []
+  },
+  {
+    "country": "French Guiana",
+    "zone": "French Guiana",
+    "numbers": []
+  },
+  {
+    "country": "French Guiana",
+    "zone": "French Guiana-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "French Guiana",
+    "zone": "French Guiana-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "French Polynesia",
+    "zone": "French Polynesia",
+    "numbers": []
+  },
+  {
+    "country": "French Polynesia",
+    "zone": "French Polynesia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Gabon",
+    "zone": "Gabon",
+    "numbers": []
+  },
+  {
+    "country": "Gabon",
+    "zone": "Gabon-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Gabon",
+    "zone": "Gabon-Mobile (Azur)",
+    "numbers": []
+  },
+  {
+    "country": "Gabon",
+    "zone": "Gabon-Mobile (Libertis)",
+    "numbers": []
+  },
+  {
+    "country": "Gabon",
+    "zone": "Gabon-Mobile (Telcel)",
+    "numbers": []
+  },
+  {
+    "country": "Gabon",
+    "zone": "Gabon-Mobile (Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Gambia",
+    "zone": "Gambia",
+    "numbers": []
+  },
+  {
+    "country": "Gambia",
+    "zone": "Gambia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Georgia",
+    "zone": "Georgia",
+    "numbers": []
+  },
+  {
+    "country": "Georgia",
+    "zone": "Georgia-Mobile (Beeline)",
+    "numbers": []
+  },
+  {
+    "country": "Georgia",
+    "zone": "Georgia-Mobile (Geocell)",
+    "numbers": []
+  },
+  {
+    "country": "Georgia",
+    "zone": "Georgia-Mobile (MagtiCom)",
+    "numbers": []
+  },
+  {
+    "country": "Georgia",
+    "zone": "Georgia-Mobile (Silknet)",
+    "numbers": []
+  },
+  {
+    "country": "Georgia",
+    "zone": "Georgia-Premium Services",
+    "numbers": []
+  },
+  {
+    "country": "Germany",
+    "zone": "Germany",
+    "numbers": []
+  },
+  {
+    "country": "Germany (Civil Services)",
+    "zone": "Germany (Civil Services)",
+    "numbers": []
+  },
+  {
+    "country": "Germany (DTAG Non",
+    "zone": "Germany (DTAG Non-Geographical CC)",
+    "numbers": []
+  },
+  {
+    "country": "Germany (Harmonized Serv)",
+    "zone": "Germany (Harmonized Serv)",
+    "numbers": []
+  },
+  {
+    "country": "Germany",
+    "zone": "Germany-Mobile (E Plus)",
+    "numbers": []
+  },
+  {
+    "country": "Germany",
+    "zone": "Germany-Mobile (O2)",
+    "numbers": []
+  },
+  {
+    "country": "Germany",
+    "zone": "Germany-Mobile (Personal)",
+    "numbers": []
+  },
+  {
+    "country": "Germany",
+    "zone": "Germany-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Germany",
+    "zone": "Germany-Mobile (T-Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Germany",
+    "zone": "Germany-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Ghana",
+    "zone": "Ghana",
+    "numbers": []
+  },
+  {
+    "country": "Ghana",
+    "zone": "Ghana-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Ghana",
+    "zone": "Ghana-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Ghana",
+    "zone": "Ghana-Mobile (Glo)",
+    "numbers": []
+  },
+  {
+    "country": "Ghana",
+    "zone": "Ghana-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Ghana",
+    "zone": "Ghana-Mobile (Tigo)",
+    "numbers": []
+  },
+  {
+    "country": "Ghana",
+    "zone": "Ghana-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Gibraltar",
+    "zone": "Gibraltar",
+    "numbers": []
+  },
+  {
+    "country": "Gibraltar",
+    "zone": "Gibraltar-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Global Star",
+    "zone": "Global Star",
+    "numbers": []
+  },
+  {
+    "country": "Greece",
+    "zone": "Greece",
+    "numbers": []
+  },
+  {
+    "country": "Greece",
+    "zone": "Greece-Athens",
+    "numbers": []
+  },
+  {
+    "country": "Greece",
+    "zone": "Greece-Mobile (Cosmote)",
+    "numbers": []
+  },
+  {
+    "country": "Greece",
+    "zone": "Greece-Mobile (Infoquest)",
+    "numbers": []
+  },
+  {
+    "country": "Greece",
+    "zone": "Greece-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Greece",
+    "zone": "Greece-Mobile (Telestet)",
+    "numbers": []
+  },
+  {
+    "country": "Greece",
+    "zone": "Greece-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Greece",
+    "zone": "Greece-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Greenland",
+    "zone": "Greenland",
+    "numbers": []
+  },
+  {
+    "country": "Greenland",
+    "zone": "Greenland-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Grenada",
+    "zone": "Grenada",
+    "numbers": []
+  },
+  {
+    "country": "Grenada",
+    "zone": "Grenada-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Grenada",
+    "zone": "Grenada-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Guadeloupe",
+    "zone": "Guadeloupe",
+    "numbers": []
+  },
+  {
+    "country": "Guadeloupe",
+    "zone": "Guadeloupe-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Guadeloupe",
+    "zone": "Guadeloupe-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Guam",
+    "zone": "Guam",
+    "numbers": []
+  },
+  {
+    "country": "Guatemala",
+    "zone": "Guatemala",
+    "numbers": []
+  },
+  {
+    "country": "Guatemala Telgua",
+    "zone": "Guatemala Telgua",
+    "numbers": []
+  },
+  {
+    "country": "Guatemala",
+    "zone": "Guatemala-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Guatemala",
+    "zone": "Guatemala-Mobile (Comcel)",
+    "numbers": []
+  },
+  {
+    "country": "Guatemala",
+    "zone": "Guatemala-Mobile (PCS)",
+    "numbers": []
+  },
+  {
+    "country": "Guatemala",
+    "zone": "Guatemala-Mobile (Telefonica)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea",
+    "numbers": []
+  },
+  {
+    "country": "Guinea Bissau",
+    "zone": "Guinea Bissau",
+    "numbers": []
+  },
+  {
+    "country": "Guinea Bissau",
+    "zone": "Guinea Bissau- (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea Bissau",
+    "zone": "Guinea Bissau-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea Bissau",
+    "zone": "Guinea Bissau-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Bissau-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Bissau-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Mobile (Cellcom)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Mobile (Gamma)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Mobile (INTCell)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Mobile (MAI)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Mobile (VDC)",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Mobility services",
+    "numbers": []
+  },
+  {
+    "country": "Guinea",
+    "zone": "Guinea-Special services",
+    "numbers": []
+  },
+  {
+    "country": "Guyana",
+    "zone": "Guyana",
+    "numbers": []
+  },
+  {
+    "country": "Guyana",
+    "zone": "Guyana-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Guyana",
+    "zone": "Guyana-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Haiti",
+    "zone": "Haiti",
+    "numbers": []
+  },
+  {
+    "country": "Haiti",
+    "zone": "Haiti-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Haiti",
+    "zone": "Haiti-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Haiti",
+    "zone": "Haiti-Mobile (Natcom)",
+    "numbers": []
+  },
+  {
+    "country": "Haiti",
+    "zone": "Haiti-VAS1",
+    "numbers": []
+  },
+  {
+    "country": "Haiti",
+    "zone": "Haiti-VAS2",
+    "numbers": []
+  },
+  {
+    "country": "Hawaii",
+    "zone": "Hawaii",
+    "numbers": []
+  },
+  {
+    "country": "Honduras",
+    "zone": "Honduras",
+    "numbers": []
+  },
+  {
+    "country": "Honduras",
+    "zone": "Honduras-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Honduras",
+    "zone": "Honduras-Mobile (Celtel)",
+    "numbers": []
+  },
+  {
+    "country": "Honduras",
+    "zone": "Honduras-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Honduras",
+    "zone": "Honduras-Mobile (Megatel)",
+    "numbers": []
+  },
+  {
+    "country": "Hongkong",
+    "zone": "Hongkong",
+    "numbers": []
+  },
+  {
+    "country": "Hongkong",
+    "zone": "Hongkong-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Hungary",
+    "zone": "Hungary",
+    "numbers": []
+  },
+  {
+    "country": "Hungary",
+    "zone": "Hungary-Budapest",
+    "numbers": []
+  },
+  {
+    "country": "Hungary",
+    "zone": "Hungary-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Hungary",
+    "zone": "Hungary-Mobile (Pannon)",
+    "numbers": []
+  },
+  {
+    "country": "Hungary",
+    "zone": "Hungary-Mobile (T-Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Hungary",
+    "zone": "Hungary-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Hungary",
+    "zone": "Hungary-Mobile (Westel 900-Peak)",
+    "numbers": []
+  },
+  {
+    "country": "Hungary",
+    "zone": "Hungary-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Iceland",
+    "zone": "Iceland",
+    "numbers": []
+  },
+  {
+    "country": "Iceland",
+    "zone": "Iceland-Mobile (Iceland Telecom)",
+    "numbers": []
+  },
+  {
+    "country": "Iceland",
+    "zone": "Iceland-Mobile (Imc)",
+    "numbers": []
+  },
+  {
+    "country": "Iceland",
+    "zone": "Iceland-Mobile (OG Fjarskipti)",
+    "numbers": []
+  },
+  {
+    "country": "Iceland",
+    "zone": "Iceland-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Iceland",
+    "zone": "Iceland-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Ahmedabad",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Andhra Pradesh",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Assam",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Bangalore",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Bihar",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Calcutta",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Delhi",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Ernakulum",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Gujarat",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Haryana",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Himachal Pradesh",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Hyderabad",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Jallandhar",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Jammu & Kashmir",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Karnataka",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Kerala",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Madhya Pradesh",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Maharashtra",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Mobile (Aircel)",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Mobile (BSNL)",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Mobile (Bharti)",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Mobile (Other)",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Mobile (Reliance)",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Mobile (TATA)",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Mumbai",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-North East",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Orissa",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Pune",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Punjab",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Rajasthan",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Tamilnadu",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Uttar Pradesh",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-Uttarakhand",
+    "numbers": []
+  },
+  {
+    "country": "India",
+    "zone": "India-West Bengal",
+    "numbers": []
+  },
+  {
+    "country": "Indonesia",
+    "zone": "Indonesia",
+    "numbers": []
+  },
+  {
+    "country": "Indonesia",
+    "zone": "Indonesia-Jakarta",
+    "numbers": []
+  },
+  {
+    "country": "Indonesia",
+    "zone": "Indonesia-Major Cities",
+    "numbers": []
+  },
+  {
+    "country": "Indonesia",
+    "zone": "Indonesia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Indonesia",
+    "zone": "Indonesia-Mobile (Indosat)",
+    "numbers": []
+  },
+  {
+    "country": "Indonesia",
+    "zone": "Indonesia-Mobile (Telkomsel)",
+    "numbers": []
+  },
+  {
+    "country": "Indonesia",
+    "zone": "Indonesia-Mobile (XL)",
+    "numbers": []
+  },
+  {
+    "country": "Indonesia",
+    "zone": "Indonesia-Surabaya",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat A Atlantic Ocean East",
+    "zone": "Inmarsat A Atlantic Ocean East",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat A Atlantic Ocean West",
+    "zone": "Inmarsat A Atlantic Ocean West",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat A Indian Ocean",
+    "zone": "Inmarsat A Indian Ocean",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat A Pacific Ocean",
+    "zone": "Inmarsat A Pacific Ocean",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Atlantic East A",
+    "zone": "Inmarsat Atlantic East A",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Atlantic East B",
+    "zone": "Inmarsat Atlantic East B",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Atlantic East M4",
+    "zone": "Inmarsat Atlantic East M4",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Atlantic East Mini",
+    "zone": "Inmarsat Atlantic East Mini-M",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Atlantic West A",
+    "zone": "Inmarsat Atlantic West A",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Atlantic West B",
+    "zone": "Inmarsat Atlantic West B",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Atlantic West M",
+    "zone": "Inmarsat Atlantic West M",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Atlantic West M4",
+    "zone": "Inmarsat Atlantic West M4",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Atlantic West Mini",
+    "zone": "Inmarsat Atlantic West Mini-M",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat B",
+    "zone": "Inmarsat B",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Bgan",
+    "zone": "Inmarsat Bgan",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Bgan HSD",
+    "zone": "Inmarsat Bgan HSD",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Indian Ocean A",
+    "zone": "Inmarsat Indian Ocean A",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Indian Ocean B",
+    "zone": "Inmarsat Indian Ocean B",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Indian Ocean M",
+    "zone": "Inmarsat Indian Ocean M",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Indian Ocean M4",
+    "zone": "Inmarsat Indian Ocean M4",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Indian Ocean Mini",
+    "zone": "Inmarsat Indian Ocean Mini-M",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat M4",
+    "zone": "Inmarsat M4",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Mini",
+    "zone": "Inmarsat Mini-M",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Pacific Ocean A",
+    "zone": "Inmarsat Pacific Ocean A",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Pacific Ocean B",
+    "zone": "Inmarsat Pacific Ocean B",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Pacific Ocean M",
+    "zone": "Inmarsat Pacific Ocean M",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Pacific Ocean M4",
+    "zone": "Inmarsat Pacific Ocean M4",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Pacific Ocean Mini",
+    "zone": "Inmarsat Pacific Ocean Mini-M",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat Unified M (Snac)",
+    "zone": "Inmarsat Unified M (Snac)",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat",
+    "zone": "Inmarsat-870",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat",
+    "zone": "Inmarsat-871",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat",
+    "zone": "Inmarsat-872",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat",
+    "zone": "Inmarsat-873",
+    "numbers": []
+  },
+  {
+    "country": "Inmarsat",
+    "zone": "Inmarsat-874",
+    "numbers": []
+  },
+  {
+    "country": "Int. Networks",
+    "zone": "Int. Networks",
+    "numbers": []
+  },
+  {
+    "country": "Int. Networks (On Air)",
+    "zone": "Int. Networks (On Air)",
+    "numbers": []
+  },
+  {
+    "country": "International Network",
+    "zone": "International Network-Seanet",
+    "numbers": []
+  },
+  {
+    "country": "Iran",
+    "zone": "Iran",
+    "numbers": []
+  },
+  {
+    "country": "Iran",
+    "zone": "Iran-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Iran",
+    "zone": "Iran-Mobile (MCI)",
+    "numbers": []
+  },
+  {
+    "country": "Iran",
+    "zone": "Iran-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Iran",
+    "zone": "Iran-Mobile (RighTel)",
+    "numbers": []
+  },
+  {
+    "country": "Iran",
+    "zone": "Iran-Mobile (TKC)",
+    "numbers": []
+  },
+  {
+    "country": "Iran",
+    "zone": "Iran-Tehran",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Babil CDMA",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Baghdad CDMA",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Diyala CDMA",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Iraqcell CDMA",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Mobile (Asiacell)",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Mobile (Korek)",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Mobile (Omnnea)",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Mobile (Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Najaf CDMA",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Salaheldine CDMA",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-Tallafar Naynawa CDMA",
+    "numbers": []
+  },
+  {
+    "country": "Iraq",
+    "zone": "Iraq-khales Diyala CDMA",
+    "numbers": []
+  },
+  {
+    "country": "Ireland",
+    "zone": "Ireland",
+    "numbers": []
+  },
+  {
+    "country": "Ireland (National Access Voip)",
+    "zone": "Ireland (National Access Voip)",
+    "numbers": []
+  },
+  {
+    "country": "Ireland (Universal Access)",
+    "zone": "Ireland (Universal Access)",
+    "numbers": []
+  },
+  {
+    "country": "Ireland",
+    "zone": "Ireland-Dublin",
+    "numbers": []
+  },
+  {
+    "country": "Ireland",
+    "zone": "Ireland-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Ireland",
+    "zone": "Ireland-Mobile (3G)",
+    "numbers": []
+  },
+  {
+    "country": "Ireland",
+    "zone": "Ireland-Mobile (Meteor)",
+    "numbers": []
+  },
+  {
+    "country": "Ireland",
+    "zone": "Ireland-Mobile (O2)",
+    "numbers": []
+  },
+  {
+    "country": "Ireland",
+    "zone": "Ireland-Mobile (Vodafone O2)",
+    "numbers": []
+  },
+  {
+    "country": "Ireland",
+    "zone": "Ireland-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Iridium",
+    "zone": "Iridium",
+    "numbers": []
+  },
+  {
+    "country": "Iridium 16",
+    "zone": "Iridium 16",
+    "numbers": []
+  },
+  {
+    "country": "Iridium 17",
+    "zone": "Iridium 17",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (BT)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (DIGI)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (FastWeb)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (H3G)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (ILIAD)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (Kena)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (Lycamobile)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (Poste)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (RFI)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (Tim)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (Welcome)",
+    "numbers": []
+  },
+  {
+    "country": "Italy",
+    "zone": "Italy-Mobile (Wind)",
+    "numbers": []
+  },
+  {
+    "country": "Ivory Coast",
+    "zone": "Ivory Coast",
+    "numbers": []
+  },
+  {
+    "country": "Ivory Coast",
+    "zone": "Ivory Coast-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Ivory Coast",
+    "zone": "Ivory Coast-Mobile (Comium)",
+    "numbers": []
+  },
+  {
+    "country": "Ivory Coast",
+    "zone": "Ivory Coast-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Ivory Coast",
+    "zone": "Ivory Coast-Mobile (Moov)",
+    "numbers": []
+  },
+  {
+    "country": "Ivory Coast",
+    "zone": "Ivory Coast-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Ivory Coast",
+    "zone": "Ivory Coast-Mobile (Oricel)",
+    "numbers": []
+  },
+  {
+    "country": "Ivory Coast",
+    "zone": "Ivory Coast-Mobility Services",
+    "numbers": []
+  },
+  {
+    "country": "Ivory Coast",
+    "zone": "Ivory Coast-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Jamaica",
+    "zone": "Jamaica",
+    "numbers": []
+  },
+  {
+    "country": "Jamaica",
+    "zone": "Jamaica-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Jamaica",
+    "zone": "Jamaica-Mobile (Digicell)",
+    "numbers": []
+  },
+  {
+    "country": "Japan",
+    "zone": "Japan",
+    "numbers": []
+  },
+  {
+    "country": "Japan (Ip Phone)",
+    "zone": "Japan (Ip Phone)",
+    "numbers": []
+  },
+  {
+    "country": "Japan",
+    "zone": "Japan-Military",
+    "numbers": []
+  },
+  {
+    "country": "Japan",
+    "zone": "Japan-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Jersey PG",
+    "zone": "Jersey PG",
+    "numbers": []
+  },
+  {
+    "country": "Jordan",
+    "zone": "Jordan",
+    "numbers": []
+  },
+  {
+    "country": "Jordan",
+    "zone": "Jordan-Mobile (Friendi)",
+    "numbers": []
+  },
+  {
+    "country": "Jordan",
+    "zone": "Jordan-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Jordan",
+    "zone": "Jordan-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Jordan",
+    "zone": "Jordan-Mobile (Umniah)",
+    "numbers": []
+  },
+  {
+    "country": "Jordan",
+    "zone": "Jordan-Mobile (Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan (Ust",
+    "zone": "Kazakhstan (Ust-Kamenogorsk)",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Aktau",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Aktobe",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Almaty",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Astana",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Atyrau",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Dhezkazgan",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Karaganda",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Kokshetau",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Kostanay",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Kyzylorda",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Mobile (Altel CDMA Dalacom)",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Mobile (Beeline Kartel)",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Mobile (Kcell)",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Mobile (Tele2)",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-PRS",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Pavlodar",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Petropavlovsk",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Semipalatinsk",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Shakhtinsk",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Taldykorgan",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Taraz",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Temirtau (Other)",
+    "numbers": []
+  },
+  {
+    "country": "Kazakhstan",
+    "zone": "Kazakhstan-Uralsk",
+    "numbers": []
+  },
+  {
+    "country": "Kenya",
+    "zone": "Kenya",
+    "numbers": []
+  },
+  {
+    "country": "Kenya",
+    "zone": "Kenya-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Kenya",
+    "zone": "Kenya-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Kenya",
+    "zone": "Kenya-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Kenya",
+    "zone": "Kenya-Mobile (Safaricom)",
+    "numbers": []
+  },
+  {
+    "country": "Kenya",
+    "zone": "Kenya-Nairobi",
+    "numbers": []
+  },
+  {
+    "country": "Kirgyzstan",
+    "zone": "Kirgyzstan",
+    "numbers": []
+  },
+  {
+    "country": "Kirgyzstan",
+    "zone": "Kirgyzstan-BISHKEK",
+    "numbers": []
+  },
+  {
+    "country": "Kirgyzstan",
+    "zone": "Kirgyzstan-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Kiribati",
+    "zone": "Kiribati",
+    "numbers": []
+  },
+  {
+    "country": "Kiribati",
+    "zone": "Kiribati-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Kiribati",
+    "zone": "Kiribati-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Kosovo",
+    "zone": "Kosovo",
+    "numbers": []
+  },
+  {
+    "country": "Kosovo",
+    "zone": "Kosovo-IPKO",
+    "numbers": []
+  },
+  {
+    "country": "Kosovo",
+    "zone": "Kosovo-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Kosovo",
+    "zone": "Kosovo-Mobile (IPKO)",
+    "numbers": []
+  },
+  {
+    "country": "Kuwait",
+    "zone": "Kuwait",
+    "numbers": []
+  },
+  {
+    "country": "Kuwait",
+    "zone": "Kuwait-Mobile (Ooredoo)",
+    "numbers": []
+  },
+  {
+    "country": "Kuwait",
+    "zone": "Kuwait-Mobile (Viva)",
+    "numbers": []
+  },
+  {
+    "country": "Kuwait",
+    "zone": "Kuwait-Mobile (Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Kyrgyzstan",
+    "zone": "Kyrgyzstan-Mobile (Bimokom-Megacom)",
+    "numbers": []
+  },
+  {
+    "country": "Kyrgyzstan",
+    "zone": "Kyrgyzstan-Mobile (Bitel-Sky)",
+    "numbers": []
+  },
+  {
+    "country": "Kyrgyzstan",
+    "zone": "Kyrgyzstan-Mobile (Nur Telecom)",
+    "numbers": []
+  },
+  {
+    "country": "Kyrgyzstan",
+    "zone": "Kyrgyzstan-Mobile (Sotel)",
+    "numbers": []
+  },
+  {
+    "country": "Kyrgyzstan",
+    "zone": "Kyrgyzstan-Mobile (Winline)",
+    "numbers": []
+  },
+  {
+    "country": "Kyrgyzstan",
+    "zone": "Kyrgyzstan-SAT",
+    "numbers": []
+  },
+  {
+    "country": "Laos",
+    "zone": "Laos",
+    "numbers": []
+  },
+  {
+    "country": "Laos",
+    "zone": "Laos-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Latvia",
+    "zone": "Latvia",
+    "numbers": []
+  },
+  {
+    "country": "Latvia",
+    "zone": "Latvia-Mobile (Bite Latvia)",
+    "numbers": []
+  },
+  {
+    "country": "Latvia",
+    "zone": "Latvia-Mobile (Csc Telecom)",
+    "numbers": []
+  },
+  {
+    "country": "Latvia",
+    "zone": "Latvia-Mobile (Lmt)",
+    "numbers": []
+  },
+  {
+    "country": "Latvia",
+    "zone": "Latvia-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Latvia",
+    "zone": "Latvia-Mobile (Radiokoms)",
+    "numbers": []
+  },
+  {
+    "country": "Latvia",
+    "zone": "Latvia-Mobile (Tele 2)",
+    "numbers": []
+  },
+  {
+    "country": "Latvia",
+    "zone": "Latvia-Mobile (Telekom Baltijia)",
+    "numbers": []
+  },
+  {
+    "country": "Latvia",
+    "zone": "Latvia-PRS",
+    "numbers": []
+  },
+  {
+    "country": "Latvia",
+    "zone": "Latvia-Riga",
+    "numbers": []
+  },
+  {
+    "country": "Lebanon",
+    "zone": "Lebanon",
+    "numbers": []
+  },
+  {
+    "country": "Lebanon",
+    "zone": "Lebanon-Mobile (Alfa)",
+    "numbers": []
+  },
+  {
+    "country": "Lebanon",
+    "zone": "Lebanon-Mobile (MTC)",
+    "numbers": []
+  },
+  {
+    "country": "Lesotho",
+    "zone": "Lesotho",
+    "numbers": []
+  },
+  {
+    "country": "Lesotho",
+    "zone": "Lesotho-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Liberia",
+    "zone": "Liberia",
+    "numbers": []
+  },
+  {
+    "country": "Liberia",
+    "zone": "Liberia-Mobile (Celcom)",
+    "numbers": []
+  },
+  {
+    "country": "Liberia",
+    "zone": "Liberia-Mobile (Comium)",
+    "numbers": []
+  },
+  {
+    "country": "Liberia",
+    "zone": "Liberia-Mobile (Connect)",
+    "numbers": []
+  },
+  {
+    "country": "Liberia",
+    "zone": "Liberia-Mobile (Libercell)",
+    "numbers": []
+  },
+  {
+    "country": "Liberia",
+    "zone": "Liberia-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Liberia",
+    "zone": "Liberia-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Liberia",
+    "zone": "Liberia-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Liberia",
+    "zone": "Liberia-Wascom",
+    "numbers": []
+  },
+  {
+    "country": "Libya",
+    "zone": "Libya",
+    "numbers": []
+  },
+  {
+    "country": "Libya",
+    "zone": "Libya-Mobile (Aljeel)",
+    "numbers": []
+  },
+  {
+    "country": "Libya",
+    "zone": "Libya-Mobile (Almadar)",
+    "numbers": []
+  },
+  {
+    "country": "Libya",
+    "zone": "Libya-Mobile (LTT)",
+    "numbers": []
+  },
+  {
+    "country": "Libya",
+    "zone": "Libya-Mobile (Libyana)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein (Value Added Svc)",
+    "zone": "Liechtenstein (Value Added Svc)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein (Voice",
+    "zone": "Liechtenstein (Voice-Mail Access)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Coast Media)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (First Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Ims Mobilkom)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Ims Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Int Mobility Svc)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Mobile Services)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Mobilkom)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Montan Telecom)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Swisscom)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Mobile (Tele 2)",
+    "numbers": []
+  },
+  {
+    "country": "Liechtenstein",
+    "zone": "Liechtenstein-Vaduz",
+    "numbers": []
+  },
+  {
+    "country": "Lithuania",
+    "zone": "Lithuania",
+    "numbers": []
+  },
+  {
+    "country": "Lithuania",
+    "zone": "Lithuania-Mobile (Bite)",
+    "numbers": []
+  },
+  {
+    "country": "Lithuania",
+    "zone": "Lithuania-Mobile (Omnitel)",
+    "numbers": []
+  },
+  {
+    "country": "Lithuania",
+    "zone": "Lithuania-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Lithuania",
+    "zone": "Lithuania-Mobile (Tele 2)",
+    "numbers": []
+  },
+  {
+    "country": "Lithuania",
+    "zone": "Lithuania-Mobile (Vortumo)",
+    "numbers": []
+  },
+  {
+    "country": "Lithuania",
+    "zone": "Lithuania-Personal Numbers",
+    "numbers": []
+  },
+  {
+    "country": "Lithuania",
+    "zone": "Lithuania-Premium Numbers",
+    "numbers": []
+  },
+  {
+    "country": "Lithuania",
+    "zone": "Lithuania-Services ECO",
+    "numbers": []
+  },
+  {
+    "country": "Lithuania",
+    "zone": "Lithuania-Services FEBO",
+    "numbers": []
+  },
+  {
+    "country": "Luxemburg",
+    "zone": "Luxemburg",
+    "numbers": []
+  },
+  {
+    "country": "Luxemburg",
+    "zone": "Luxemburg-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Luxemburg",
+    "zone": "Luxemburg-Mobile (Tango)",
+    "numbers": []
+  },
+  {
+    "country": "Luxemburg",
+    "zone": "Luxemburg-Mobile (Voxmobile)",
+    "numbers": []
+  },
+  {
+    "country": "MCP Satellite System",
+    "zone": "MCP Satellite System",
+    "numbers": []
+  },
+  {
+    "country": "Macau",
+    "zone": "Macau",
+    "numbers": []
+  },
+  {
+    "country": "Macedonia",
+    "zone": "Macedonia",
+    "numbers": []
+  },
+  {
+    "country": "Macedonia",
+    "zone": "Macedonia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Macedonia",
+    "zone": "Macedonia-Skopje",
+    "numbers": []
+  },
+  {
+    "country": "Madagascar",
+    "zone": "Madagascar",
+    "numbers": []
+  },
+  {
+    "country": "Madagascar",
+    "zone": "Madagascar-Gulfsat",
+    "numbers": []
+  },
+  {
+    "country": "Madagascar",
+    "zone": "Madagascar-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Madagascar",
+    "zone": "Madagascar-Mobile (Blueline)",
+    "numbers": []
+  },
+  {
+    "country": "Madagascar",
+    "zone": "Madagascar-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Madagascar",
+    "zone": "Madagascar-Mobile (Telma)",
+    "numbers": []
+  },
+  {
+    "country": "Madagascar",
+    "zone": "Madagascar-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Malawi",
+    "zone": "Malawi",
+    "numbers": []
+  },
+  {
+    "country": "Malawi",
+    "zone": "Malawi-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Malawi",
+    "zone": "Malawi-Mobile (TNM)",
+    "numbers": []
+  },
+  {
+    "country": "Malaysia",
+    "zone": "Malaysia",
+    "numbers": []
+  },
+  {
+    "country": "Malaysia Mobile (Special Services)",
+    "zone": "Malaysia Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Malaysia",
+    "zone": "Malaysia-Mobile (Celcom)",
+    "numbers": []
+  },
+  {
+    "country": "Malaysia",
+    "zone": "Malaysia-Mobile (Digi)",
+    "numbers": []
+  },
+  {
+    "country": "Malaysia",
+    "zone": "Malaysia-Mobile (Maxis)",
+    "numbers": []
+  },
+  {
+    "country": "Malaysia",
+    "zone": "Malaysia-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Malaysia",
+    "zone": "Malaysia-Mobile (U Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Maldives",
+    "zone": "Maldives",
+    "numbers": []
+  },
+  {
+    "country": "Maldives",
+    "zone": "Maldives-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Maldives",
+    "zone": "Maldives-Mobile (Wataniya)",
+    "numbers": []
+  },
+  {
+    "country": "Mali",
+    "zone": "Mali",
+    "numbers": []
+  },
+  {
+    "country": "Mali",
+    "zone": "Mali-Fixed (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Mali",
+    "zone": "Mali-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Mali",
+    "zone": "Mali-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Malta",
+    "zone": "Malta",
+    "numbers": []
+  },
+  {
+    "country": "Malta",
+    "zone": "Malta-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Malta",
+    "zone": "Malta-Mobile (Go Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Malta",
+    "zone": "Malta-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Malta",
+    "zone": "Malta-Republic-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Marshall Island",
+    "zone": "Marshall Island",
+    "numbers": []
+  },
+  {
+    "country": "Martinique",
+    "zone": "Martinique",
+    "numbers": []
+  },
+  {
+    "country": "Martinique",
+    "zone": "Martinique-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Martinique",
+    "zone": "Martinique-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Mauritania",
+    "zone": "Mauritania",
+    "numbers": []
+  },
+  {
+    "country": "Mauritania",
+    "zone": "Mauritania-Chinguitel",
+    "numbers": []
+  },
+  {
+    "country": "Mauritania",
+    "zone": "Mauritania-Mobile (Chinguitel)",
+    "numbers": []
+  },
+  {
+    "country": "Mauritania",
+    "zone": "Mauritania-Mobile (Mattel)",
+    "numbers": []
+  },
+  {
+    "country": "Mauritania",
+    "zone": "Mauritania-Mobile (Mauritel)",
+    "numbers": []
+  },
+  {
+    "country": "Mauritius",
+    "zone": "Mauritius",
+    "numbers": []
+  },
+  {
+    "country": "Mauritius",
+    "zone": "Mauritius-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Mexico",
+    "zone": "Mexico",
+    "numbers": []
+  },
+  {
+    "country": "Mexico",
+    "zone": "Mexico-Fixed (Telmex)",
+    "numbers": []
+  },
+  {
+    "country": "Mexico",
+    "zone": "Mexico-Mobile (Off Net)",
+    "numbers": []
+  },
+  {
+    "country": "Mexico",
+    "zone": "Mexico-Mobile (Telcel)",
+    "numbers": []
+  },
+  {
+    "country": "Micronesia",
+    "zone": "Micronesia",
+    "numbers": []
+  },
+  {
+    "country": "Micronesia",
+    "zone": "Micronesia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Moldova",
+    "zone": "Moldova",
+    "numbers": []
+  },
+  {
+    "country": "Moldova Pridnestrovie (Transnistria)",
+    "zone": "Moldova Pridnestrovie (Transnistria)",
+    "numbers": []
+  },
+  {
+    "country": "Moldova",
+    "zone": "Moldova-Chisinau",
+    "numbers": []
+  },
+  {
+    "country": "Moldova",
+    "zone": "Moldova-Mobile (Mold Cell)",
+    "numbers": []
+  },
+  {
+    "country": "Moldova",
+    "zone": "Moldova-Mobile (Mold Telecom CDMA)",
+    "numbers": []
+  },
+  {
+    "country": "Moldova",
+    "zone": "Moldova-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Moldova",
+    "zone": "Moldova-Mobile (Pridnestrovie-Transnistria)",
+    "numbers": []
+  },
+  {
+    "country": "Moldova",
+    "zone": "Moldova-Non Geographical",
+    "numbers": []
+  },
+  {
+    "country": "Moldova",
+    "zone": "Moldova-Premium Services",
+    "numbers": []
+  },
+  {
+    "country": "Monaco",
+    "zone": "Monaco",
+    "numbers": []
+  },
+  {
+    "country": "Monaco",
+    "zone": "Monaco-Mobile (Africa)",
+    "numbers": []
+  },
+  {
+    "country": "Monaco",
+    "zone": "Monaco-Mobile (Kfor-Kosovo)",
+    "numbers": []
+  },
+  {
+    "country": "Monaco",
+    "zone": "Monaco-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Monaco",
+    "zone": "Monaco-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Mongolia",
+    "zone": "Mongolia",
+    "numbers": []
+  },
+  {
+    "country": "Mongolia",
+    "zone": "Mongolia-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Montenegro",
+    "zone": "Montenegro",
+    "numbers": []
+  },
+  {
+    "country": "Montenegro",
+    "zone": "Montenegro-Mobile (Mtel)",
+    "numbers": []
+  },
+  {
+    "country": "Montenegro",
+    "zone": "Montenegro-Mobile (Promonte)",
+    "numbers": []
+  },
+  {
+    "country": "Montenegro",
+    "zone": "Montenegro-Mobile (T-Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Montenegro",
+    "zone": "Montenegro-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Montenegro",
+    "zone": "Montenegro-VoIP",
+    "numbers": []
+  },
+  {
+    "country": "Montserrat",
+    "zone": "Montserrat",
+    "numbers": []
+  },
+  {
+    "country": "Montserrat",
+    "zone": "Montserrat-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Morocco",
+    "zone": "Morocco",
+    "numbers": []
+  },
+  {
+    "country": "Morocco",
+    "zone": "Morocco-Fixed (Wana Rest)",
+    "numbers": []
+  },
+  {
+    "country": "Morocco",
+    "zone": "Morocco-Mobile (Globalstar)",
+    "numbers": []
+  },
+  {
+    "country": "Morocco",
+    "zone": "Morocco-Mobile (Maroc Telecom/IAM)",
+    "numbers": []
+  },
+  {
+    "country": "Morocco",
+    "zone": "Morocco-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Morocco",
+    "zone": "Morocco-Mobile (Other)",
+    "numbers": []
+  },
+  {
+    "country": "Morocco",
+    "zone": "Morocco-Mobile (Wana Restricted)",
+    "numbers": []
+  },
+  {
+    "country": "Morocco",
+    "zone": "Morocco-Mobile (Wana)",
+    "numbers": []
+  },
+  {
+    "country": "Mozambique",
+    "zone": "Mozambique",
+    "numbers": []
+  },
+  {
+    "country": "Mozambique",
+    "zone": "Mozambique-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Mozambique",
+    "zone": "Mozambique-Mobile (Movitel)",
+    "numbers": []
+  },
+  {
+    "country": "Mozambique",
+    "zone": "Mozambique-Mobile (Vodacom)",
+    "numbers": []
+  },
+  {
+    "country": "Myanmar",
+    "zone": "Myanmar",
+    "numbers": []
+  },
+  {
+    "country": "Myanmar",
+    "zone": "Myanmar-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Myanmar",
+    "zone": "Myanmar-Mobile (Ooredoo)",
+    "numbers": []
+  },
+  {
+    "country": "Myanmar",
+    "zone": "Myanmar-Mobile (Telenor)",
+    "numbers": []
+  },
+  {
+    "country": "Namibia",
+    "zone": "Namibia",
+    "numbers": []
+  },
+  {
+    "country": "Namibia",
+    "zone": "Namibia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Nauru",
+    "zone": "Nauru",
+    "numbers": []
+  },
+  {
+    "country": "Nauru",
+    "zone": "Nauru-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Nepal",
+    "zone": "Nepal",
+    "numbers": []
+  },
+  {
+    "country": "Nepal",
+    "zone": "Nepal-Katmandu",
+    "numbers": []
+  },
+  {
+    "country": "Nepal",
+    "zone": "Nepal-Mobile (NTC)",
+    "numbers": []
+  },
+  {
+    "country": "Nepal",
+    "zone": "Nepal-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Nepal",
+    "zone": "Nepal-Mobile (Spice)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands",
+    "zone": "Netherlands",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands Antilles",
+    "zone": "Netherlands Antilles",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands Antilles (Curacao)",
+    "zone": "Netherlands Antilles (Curacao)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands Antilles",
+    "zone": "Netherlands Antilles-Mobile (Bonaire)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands Antilles",
+    "zone": "Netherlands Antilles-Mobile (Bonaire-Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands Antilles",
+    "zone": "Netherlands Antilles-Mobile (Curacao)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands Antilles",
+    "zone": "Netherlands Antilles-Mobile (Curacao-Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands Antilles",
+    "zone": "Netherlands Antilles-Mobile (Saba)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands Antilles",
+    "zone": "Netherlands Antilles-Mobile (St.Eustatius)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands",
+    "zone": "Netherlands-Mobile (Kpn)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands",
+    "zone": "Netherlands-Mobile (Lycamobile)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands",
+    "zone": "Netherlands-Mobile (Other)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands",
+    "zone": "Netherlands-Mobile (T-Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands",
+    "zone": "Netherlands-Mobile (Tele 2)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands",
+    "zone": "Netherlands-Mobile (Telfort)",
+    "numbers": []
+  },
+  {
+    "country": "Netherlands",
+    "zone": "Netherlands-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "New Caledonia",
+    "zone": "New Caledonia",
+    "numbers": []
+  },
+  {
+    "country": "New Caledonia",
+    "zone": "New Caledonia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "New Zealand",
+    "zone": "New Zealand",
+    "numbers": []
+  },
+  {
+    "country": "New Zealand",
+    "zone": "New Zealand-Chatham Islands",
+    "numbers": []
+  },
+  {
+    "country": "New Zealand",
+    "zone": "New Zealand-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "New Zealand",
+    "zone": "New Zealand-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "New Zealand",
+    "zone": "New Zealand-Mobile (Telstra New Zealand)",
+    "numbers": []
+  },
+  {
+    "country": "New Zealand",
+    "zone": "New Zealand-Mobile (Tnz Off-Net)",
+    "numbers": []
+  },
+  {
+    "country": "New Zealand",
+    "zone": "New Zealand-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Nicaragua",
+    "zone": "Nicaragua",
+    "numbers": []
+  },
+  {
+    "country": "Nicaragua",
+    "zone": "Nicaragua-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Nicaragua",
+    "zone": "Nicaragua-Mobile (Movistar)",
+    "numbers": []
+  },
+  {
+    "country": "Niger",
+    "zone": "Niger",
+    "numbers": []
+  },
+  {
+    "country": "Niger (Special Services)",
+    "zone": "Niger (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Niger",
+    "zone": "Niger-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Niger",
+    "zone": "Niger-Mobile (Moov)",
+    "numbers": []
+  },
+  {
+    "country": "Niger",
+    "zone": "Niger-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Niger",
+    "zone": "Niger-Mobile (Sahelcom)",
+    "numbers": []
+  },
+  {
+    "country": "Nigeria",
+    "zone": "Nigeria",
+    "numbers": []
+  },
+  {
+    "country": "Nigeria PRS",
+    "zone": "Nigeria PRS",
+    "numbers": []
+  },
+  {
+    "country": "Nigeria",
+    "zone": "Nigeria-Lagos",
+    "numbers": []
+  },
+  {
+    "country": "Nigeria",
+    "zone": "Nigeria-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Nigeria",
+    "zone": "Nigeria-Mobile (Etisalat)",
+    "numbers": []
+  },
+  {
+    "country": "Nigeria",
+    "zone": "Nigeria-Mobile (Globacom)",
+    "numbers": []
+  },
+  {
+    "country": "Nigeria",
+    "zone": "Nigeria-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Nigeria",
+    "zone": "Nigeria-Mobile (Mtel)",
+    "numbers": []
+  },
+  {
+    "country": "Nigeria",
+    "zone": "Nigeria-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Niue",
+    "zone": "Niue",
+    "numbers": []
+  },
+  {
+    "country": "Niue",
+    "zone": "Niue-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Norfolk Islands",
+    "zone": "Norfolk Islands",
+    "numbers": []
+  },
+  {
+    "country": "North Korea",
+    "zone": "North Korea",
+    "numbers": []
+  },
+  {
+    "country": "Northern",
+    "zone": "Northern-Marianna Islands",
+    "numbers": []
+  },
+  {
+    "country": "Norway",
+    "zone": "Norway",
+    "numbers": []
+  },
+  {
+    "country": "Norway (Special Services)",
+    "zone": "Norway (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Norway",
+    "zone": "Norway-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Norway",
+    "zone": "Norway-Mobile (Netcom)",
+    "numbers": []
+  },
+  {
+    "country": "Norway",
+    "zone": "Norway-Mobile (Telenor)",
+    "numbers": []
+  },
+  {
+    "country": "Oman",
+    "zone": "Oman",
+    "numbers": []
+  },
+  {
+    "country": "Oman",
+    "zone": "Oman-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Oman",
+    "zone": "Oman-Mobile (Nawras)",
+    "numbers": []
+  },
+  {
+    "country": "Oman",
+    "zone": "Oman-Mobile (Omantel)",
+    "numbers": []
+  },
+  {
+    "country": "Oration",
+    "zone": "Oration",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan SCO",
+    "zone": "Pakistan SCO",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan-Islamabad",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan-Karachi",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan-Lahore",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan-Mobile (Mobilink)",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan-Mobile (SCO)",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan-Mobile (Telenor)",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan-Mobile (Ufone)",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan-Mobile (Warid)",
+    "numbers": []
+  },
+  {
+    "country": "Pakistan",
+    "zone": "Pakistan-Mobile (Zong)",
+    "numbers": []
+  },
+  {
+    "country": "Palau",
+    "zone": "Palau",
+    "numbers": []
+  },
+  {
+    "country": "Palestine",
+    "zone": "Palestine-Israel",
+    "numbers": []
+  },
+  {
+    "country": "Palestine",
+    "zone": "Palestine-Mobile (Israel)",
+    "numbers": []
+  },
+  {
+    "country": "Palestine",
+    "zone": "Palestine-Mobile (Jawwal)",
+    "numbers": []
+  },
+  {
+    "country": "Palestine",
+    "zone": "Palestine-Mobile (Wataniya)",
+    "numbers": []
+  },
+  {
+    "country": "Palestine",
+    "zone": "Palestine-Paltel",
+    "numbers": []
+  },
+  {
+    "country": "Panama",
+    "zone": "Panama",
+    "numbers": []
+  },
+  {
+    "country": "Panama",
+    "zone": "Panama - Mobile C&W",
+    "numbers": []
+  },
+  {
+    "country": "Panama",
+    "zone": "Panama - Mobile Claro",
+    "numbers": []
+  },
+  {
+    "country": "Panama",
+    "zone": "Panama - Mobile Digicel",
+    "numbers": []
+  },
+  {
+    "country": "Panama",
+    "zone": "Panama - Other",
+    "numbers": []
+  },
+  {
+    "country": "Panama",
+    "zone": "Panama - Telecarrier",
+    "numbers": []
+  },
+  {
+    "country": "Panama",
+    "zone": "Panama-Fixed (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Panama",
+    "zone": "Panama-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Panama",
+    "zone": "Panama-Mobile (CWP)",
+    "numbers": []
+  },
+  {
+    "country": "Panama",
+    "zone": "Panama-Premium",
+    "numbers": []
+  },
+  {
+    "country": "Papua New Guinea",
+    "zone": "Papua New Guinea",
+    "numbers": []
+  },
+  {
+    "country": "Paraguay",
+    "zone": "Paraguay",
+    "numbers": []
+  },
+  {
+    "country": "Paraguay",
+    "zone": "Paraguay-Asuncion",
+    "numbers": []
+  },
+  {
+    "country": "Paraguay",
+    "zone": "Paraguay-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Paraguay",
+    "zone": "Paraguay-Mobile (Claro)",
+    "numbers": []
+  },
+  {
+    "country": "Paraguay",
+    "zone": "Paraguay-Mobile (Personal)",
+    "numbers": []
+  },
+  {
+    "country": "Paraguay",
+    "zone": "Paraguay-Mobile (Tigo)",
+    "numbers": []
+  },
+  {
+    "country": "Paraguay",
+    "zone": "Paraguay-Mobile (Vox)",
+    "numbers": []
+  },
+  {
+    "country": "Peru",
+    "zone": "Peru",
+    "numbers": []
+  },
+  {
+    "country": "Peru (Lima)",
+    "zone": "Peru (Lima)",
+    "numbers": []
+  },
+  {
+    "country": "Peru VAS1",
+    "zone": "Peru VAS1",
+    "numbers": []
+  },
+  {
+    "country": "Peru",
+    "zone": "Peru-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Peru",
+    "zone": "Peru-Mobile (Claro)",
+    "numbers": []
+  },
+  {
+    "country": "Peru",
+    "zone": "Peru-Mobile (Movistar)",
+    "numbers": []
+  },
+  {
+    "country": "Peru",
+    "zone": "Peru-Mobile (Nextel)",
+    "numbers": []
+  },
+  {
+    "country": "Peru",
+    "zone": "Peru-Rural",
+    "numbers": []
+  },
+  {
+    "country": "Philippines",
+    "zone": "Philippines",
+    "numbers": []
+  },
+  {
+    "country": "Philippines",
+    "zone": "Philippines-Mobile (Globe)",
+    "numbers": []
+  },
+  {
+    "country": "Philippines",
+    "zone": "Philippines-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Philippines",
+    "zone": "Philippines-Mobile (Smart)",
+    "numbers": []
+  },
+  {
+    "country": "Poalnd",
+    "zone": "Poalnd-PRS",
+    "numbers": []
+  },
+  {
+    "country": "Poland Fix",
+    "zone": "Poland Fix",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Fix (OLO)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Fix SN22 (Warsaw)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Fix SN22 OLO (Warsaw)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Fix SN32 (Katowice)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Fix SN32 OLO (Katowice)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Fix SN61 (Poznan)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Fix SN61 OLO (Poznan)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Mobile (Aero2)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Mobile (Klucz)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Mobile (P4)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Mobile (Plus)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Mobile (Sferia)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-Mobile (T-Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Poland",
+    "zone": "Poland-PRS",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal-Azores",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal-Lisbon",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal-Madeira",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal-Mobile (Optimus)",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal-Mobile (PT Comunicacoes)",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal-Mobile (Vodafone Telecel)",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Portugal",
+    "zone": "Portugal-Premium Services",
+    "numbers": []
+  },
+  {
+    "country": "Puerto Rico",
+    "zone": "Puerto Rico",
+    "numbers": []
+  },
+  {
+    "country": "Puerto Rico",
+    "zone": "Puerto Rico-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Qatar",
+    "zone": "Qatar",
+    "numbers": []
+  },
+  {
+    "country": "Qatar",
+    "zone": "Qatar-Mobile (Ooredo)",
+    "numbers": []
+  },
+  {
+    "country": "Qatar",
+    "zone": "Qatar-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Reunion",
+    "zone": "Reunion",
+    "numbers": []
+  },
+  {
+    "country": "Reunion Island",
+    "zone": "Reunion Island",
+    "numbers": []
+  },
+  {
+    "country": "Reunion Island",
+    "zone": "Reunion Island-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Reunion Island",
+    "zone": "Reunion Island-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Romania",
+    "zone": "Romania",
+    "numbers": []
+  },
+  {
+    "country": "Romania",
+    "zone": "Romania-(Alternative Networks)",
+    "numbers": []
+  },
+  {
+    "country": "Romania",
+    "zone": "Romania-Bucharest",
+    "numbers": []
+  },
+  {
+    "country": "Romania",
+    "zone": "Romania-Mobile (Cosmote)",
+    "numbers": []
+  },
+  {
+    "country": "Romania",
+    "zone": "Romania-Mobile (Digi-Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Romania",
+    "zone": "Romania-Mobile (Lycamobile)",
+    "numbers": []
+  },
+  {
+    "country": "Romania",
+    "zone": "Romania-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Romania",
+    "zone": "Romania-Mobile (Telemobile)",
+    "numbers": []
+  },
+  {
+    "country": "Romania",
+    "zone": "Romania-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Romania",
+    "zone": "Romania-Premium Services",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Mobile (Beeline)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Mobile (Globaltel Satellite)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Mobile (Iridium)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Mobile (MVNO)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Mobile (Megafon)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Mobile (Mts)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Mobile (Other)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Mobile (Rostelecom)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Mobile (Tele2 Sahalinskay)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Mobile (Tele2)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Proper (Moscow Reg)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-Proper (Moscow)",
+    "numbers": []
+  },
+  {
+    "country": "Russia",
+    "zone": "Russia-St Petersburg",
+    "numbers": []
+  },
+  {
+    "country": "Rwanda",
+    "zone": "Rwanda",
+    "numbers": []
+  },
+  {
+    "country": "Rwanda",
+    "zone": "Rwanda-MTN",
+    "numbers": []
+  },
+  {
+    "country": "Rwanda",
+    "zone": "Rwanda-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Rwanda",
+    "zone": "Rwanda-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Rwanda",
+    "zone": "Rwanda-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Rwanda",
+    "zone": "Rwanda-Mobile (Tigo)",
+    "numbers": []
+  },
+  {
+    "country": "Rwanda",
+    "zone": "Rwanda-RwandaTel",
+    "numbers": []
+  },
+  {
+    "country": "Samoa US",
+    "zone": "Samoa US",
+    "numbers": []
+  },
+  {
+    "country": "Samoa Western",
+    "zone": "Samoa Western",
+    "numbers": []
+  },
+  {
+    "country": "San Marino",
+    "zone": "San Marino",
+    "numbers": []
+  },
+  {
+    "country": "San Marino",
+    "zone": "San Marino-VAS Premium SVC",
+    "numbers": []
+  },
+  {
+    "country": "Sao Tome & Principe",
+    "zone": "Sao Tome & Principe",
+    "numbers": []
+  },
+  {
+    "country": "Sao Tome & Principe",
+    "zone": "Sao Tome & Principe-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Sao Tome & Principe",
+    "zone": "Sao Tome & Principe-VAS1",
+    "numbers": []
+  },
+  {
+    "country": "Saudi (Fixed Mobily 9200)",
+    "zone": "Saudi (Fixed Mobily 9200)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi (Fixed Mobily)",
+    "zone": "Saudi (Fixed Mobily)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi (Fixed Zain)",
+    "zone": "Saudi (Fixed Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-(Special Fixed/UAN)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Atheeb",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-ITC",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Mobile (Al Jawwal)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Mobile (Bravo)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Mobile (Lebara)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Mobile (MVNO FNC)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Mobile (MVNO SALAM)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Mobile (Mobily)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Mobile (Virgin MVNO)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Mobile (Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Riyadh",
+    "numbers": []
+  },
+  {
+    "country": "Saudi Arabia",
+    "zone": "Saudi Arabia-Toll Free (Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi",
+    "zone": "Saudi-Arabia (Non Geographical (Atheeb) Off-net)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi",
+    "zone": "Saudi-Arabia (Non Geographical (ITC) Off-net)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi",
+    "zone": "Saudi-Arabia (Paid 800)",
+    "numbers": []
+  },
+  {
+    "country": "Saudi",
+    "zone": "Saudi-Arabia (Short Codes)",
+    "numbers": []
+  },
+  {
+    "country": "Senegal",
+    "zone": "Senegal",
+    "numbers": []
+  },
+  {
+    "country": "Senegal",
+    "zone": "Senegal-Expresso",
+    "numbers": []
+  },
+  {
+    "country": "Senegal",
+    "zone": "Senegal-Mobile (Expresso)",
+    "numbers": []
+  },
+  {
+    "country": "Senegal",
+    "zone": "Senegal-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Senegal",
+    "zone": "Senegal-Mobile (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Senegal",
+    "zone": "Senegal-Mobile (Tigo)",
+    "numbers": []
+  },
+  {
+    "country": "Serbia",
+    "zone": "Serbia",
+    "numbers": []
+  },
+  {
+    "country": "Serbia",
+    "zone": "Serbia-Belgrade",
+    "numbers": []
+  },
+  {
+    "country": "Serbia",
+    "zone": "Serbia-Kosovo (IPKO)",
+    "numbers": []
+  },
+  {
+    "country": "Serbia",
+    "zone": "Serbia-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Serbia",
+    "zone": "Serbia-Mobile (Telekom Serbia)",
+    "numbers": []
+  },
+  {
+    "country": "Serbia",
+    "zone": "Serbia-Mobile (Telenor)",
+    "numbers": []
+  },
+  {
+    "country": "Serbia",
+    "zone": "Serbia-Mobile (VIP)",
+    "numbers": []
+  },
+  {
+    "country": "Serbia",
+    "zone": "Serbia-Orion",
+    "numbers": []
+  },
+  {
+    "country": "Seychelles",
+    "zone": "Seychelles",
+    "numbers": []
+  },
+  {
+    "country": "Seychelles",
+    "zone": "Seychelles-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Seychelles",
+    "zone": "Seychelles-PRS",
+    "numbers": []
+  },
+  {
+    "country": "Sierra Leone",
+    "zone": "Sierra Leone",
+    "numbers": []
+  },
+  {
+    "country": "Sierra Leone",
+    "zone": "Sierra Leone-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Sierra Leone",
+    "zone": "Sierra Leone-Mobile (Africell)",
+    "numbers": []
+  },
+  {
+    "country": "Sierra Leone",
+    "zone": "Sierra Leone-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Sierra Leone",
+    "zone": "Sierra Leone-Mobile (Comium)",
+    "numbers": []
+  },
+  {
+    "country": "Sierra Leone",
+    "zone": "Sierra Leone-Mobile (Millicom/TIGO)",
+    "numbers": []
+  },
+  {
+    "country": "Sierra Leone",
+    "zone": "Sierra Leone-Mobile (SierraTel)",
+    "numbers": []
+  },
+  {
+    "country": "Singapore",
+    "zone": "Singapore",
+    "numbers": []
+  },
+  {
+    "country": "Singapore",
+    "zone": "Singapore-Fixed (VoIP)",
+    "numbers": []
+  },
+  {
+    "country": "Singapore",
+    "zone": "Singapore-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Singapore",
+    "zone": "Singapore-Mobile (SingTel)",
+    "numbers": []
+  },
+  {
+    "country": "Slovak Republic",
+    "zone": "Slovak Republic",
+    "numbers": []
+  },
+  {
+    "country": "Slovak Republic",
+    "zone": "Slovak Republic-Mobile (EUROTEL)",
+    "numbers": []
+  },
+  {
+    "country": "Slovak Republic",
+    "zone": "Slovak Republic-Mobile (ORANGE)",
+    "numbers": []
+  },
+  {
+    "country": "Slovak Republic",
+    "zone": "Slovak Republic-Mobile (OTHERS)",
+    "numbers": []
+  },
+  {
+    "country": "Slovenia",
+    "zone": "Slovenia",
+    "numbers": []
+  },
+  {
+    "country": "Slovenia (ALTERNATIVE A)",
+    "zone": "Slovenia (ALTERNATIVE A)",
+    "numbers": []
+  },
+  {
+    "country": "Slovenia (SIOL)",
+    "zone": "Slovenia (SIOL)",
+    "numbers": []
+  },
+  {
+    "country": "Slovenia (VOLJATEL)",
+    "zone": "Slovenia (VOLJATEL)",
+    "numbers": []
+  },
+  {
+    "country": "Slovenia",
+    "zone": "Slovenia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Slovenia",
+    "zone": "Slovenia-Mobile (MOBITEL)",
+    "numbers": []
+  },
+  {
+    "country": "Slovenia",
+    "zone": "Slovenia-Mobile (SI MOBILE)",
+    "numbers": []
+  },
+  {
+    "country": "Slovenia",
+    "zone": "Slovenia-Mobile (VEGA)",
+    "numbers": []
+  },
+  {
+    "country": "Slovenia",
+    "zone": "Slovenia-Premium Services",
+    "numbers": []
+  },
+  {
+    "country": "Solomon Islands",
+    "zone": "Solomon Islands",
+    "numbers": []
+  },
+  {
+    "country": "Solomon Islands",
+    "zone": "Solomon Islands-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Solomon Islands",
+    "zone": "Solomon Islands-VAS1",
+    "numbers": []
+  },
+  {
+    "country": "Somali",
+    "zone": "Somali-STG Burao",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia- STG (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Bosaso Golis",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Hargeysa Telesom",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Mobile (ASGSM)",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Mobile (Hargeysa Telesom)",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Mobile (Hormuud)",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Mobile (Onkod)",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Mobile (SOMAFONE)",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Mobile (Somcom)",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Nationlink Somalia",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-PRS 1",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-PRS 2",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-STG Galcom",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Skytel",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Skytel (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Soltelco",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Somaliland Telecom",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Somtel",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Telcom Somalia",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Telcom Somalia (Premium Services)",
+    "numbers": []
+  },
+  {
+    "country": "Somalia",
+    "zone": "Somalia-Xidigtel",
+    "numbers": []
+  },
+  {
+    "country": "South Africa",
+    "zone": "South Africa",
+    "numbers": []
+  },
+  {
+    "country": "South Africa (Special Services)",
+    "zone": "South Africa (Special Services)",
+    "numbers": []
+  },
+  {
+    "country": "South Africa",
+    "zone": "South Africa-Mobile (8TA Telekom)",
+    "numbers": []
+  },
+  {
+    "country": "South Africa",
+    "zone": "South Africa-Mobile (Cell C)",
+    "numbers": []
+  },
+  {
+    "country": "South Africa",
+    "zone": "South Africa-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "South Africa",
+    "zone": "South Africa-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "South Africa",
+    "zone": "South Africa-Mobile (Vodacom)",
+    "numbers": []
+  },
+  {
+    "country": "South Korea",
+    "zone": "South Korea",
+    "numbers": []
+  },
+  {
+    "country": "South Korea",
+    "zone": "South Korea-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "South Korea",
+    "zone": "South Korea-Seoul",
+    "numbers": []
+  },
+  {
+    "country": "South Ossetia",
+    "zone": "South Ossetia",
+    "numbers": []
+  },
+  {
+    "country": "South Ossetia",
+    "zone": "South Ossetia-Mobile (Ostelecom)",
+    "numbers": []
+  },
+  {
+    "country": "South Sudan",
+    "zone": "South Sudan",
+    "numbers": []
+  },
+  {
+    "country": "South Sudan",
+    "zone": "South Sudan-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "South Sudan",
+    "zone": "South Sudan-Mobile (Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Spain",
+    "zone": "Spain",
+    "numbers": []
+  },
+  {
+    "country": "Spain",
+    "zone": "Spain-Mobile (Lycatel)",
+    "numbers": []
+  },
+  {
+    "country": "Spain",
+    "zone": "Spain-Mobile (Movistar)",
+    "numbers": []
+  },
+  {
+    "country": "Spain",
+    "zone": "Spain-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Spain",
+    "zone": "Spain-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Spain",
+    "zone": "Spain-Mobile (TELEFONICA MOVISTAR)",
+    "numbers": []
+  },
+  {
+    "country": "Spain",
+    "zone": "Spain-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Spain",
+    "zone": "Spain-Mobile (Yoigo)",
+    "numbers": []
+  },
+  {
+    "country": "Spain",
+    "zone": "Spain-PRS",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Fixed (Dialog CDMA)",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Fixed (Lankabell)",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Fixed (SLT CDMA)",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Fixed (SLT)",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Fixed (Suntel)",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Mobile (Dialog)",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Mobile (Hutchison)",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Mobile (Mobitel)",
+    "numbers": []
+  },
+  {
+    "country": "Sri Lanka",
+    "zone": "Sri Lanka-Mobile (Tigo)",
+    "numbers": []
+  },
+  {
+    "country": "St Helena",
+    "zone": "St Helena",
+    "numbers": []
+  },
+  {
+    "country": "St Kitts & Nevis",
+    "zone": "St Kitts & Nevis",
+    "numbers": []
+  },
+  {
+    "country": "St Kitts & Nevis",
+    "zone": "St Kitts & Nevis-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "St Kitts & Nevis",
+    "zone": "St Kitts & Nevis-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "St Lucia",
+    "zone": "St Lucia",
+    "numbers": []
+  },
+  {
+    "country": "St Lucia",
+    "zone": "St Lucia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "St Lucia",
+    "zone": "St Lucia-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "St Maarten",
+    "zone": "St Maarten",
+    "numbers": []
+  },
+  {
+    "country": "St Maarten",
+    "zone": "St Maarten-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "St Pierre & Miquelon",
+    "zone": "St Pierre & Miquelon",
+    "numbers": []
+  },
+  {
+    "country": "St Pierre & Miquelon Mobile",
+    "zone": "St Pierre & Miquelon Mobile",
+    "numbers": []
+  },
+  {
+    "country": "St Vincent & Grenadines",
+    "zone": "St Vincent & Grenadines",
+    "numbers": []
+  },
+  {
+    "country": "St Vincent & Grenadines",
+    "zone": "St Vincent & Grenadines-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "St Vincent & Grenadines",
+    "zone": "St Vincent & Grenadines-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Sudan",
+    "zone": "Sudan",
+    "numbers": []
+  },
+  {
+    "country": "Sudan",
+    "zone": "Sudan-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Sudan",
+    "zone": "Sudan-Mobile (Sudatel)",
+    "numbers": []
+  },
+  {
+    "country": "Sudan",
+    "zone": "Sudan-Mobile (Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Suriname",
+    "zone": "Suriname",
+    "numbers": []
+  },
+  {
+    "country": "Suriname",
+    "zone": "Suriname-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Suriname",
+    "zone": "Suriname-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Swaziland",
+    "zone": "Swaziland",
+    "numbers": []
+  },
+  {
+    "country": "Swaziland",
+    "zone": "Swaziland-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Swaziland",
+    "zone": "Swaziland-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Sweden",
+    "zone": "Sweden",
+    "numbers": []
+  },
+  {
+    "country": "Sweden",
+    "zone": "Sweden-Mobile (Comviq)",
+    "numbers": []
+  },
+  {
+    "country": "Sweden",
+    "zone": "Sweden-Mobile (HI3G)",
+    "numbers": []
+  },
+  {
+    "country": "Sweden",
+    "zone": "Sweden-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Sweden",
+    "zone": "Sweden-Mobile (Telenor)",
+    "numbers": []
+  },
+  {
+    "country": "Sweden",
+    "zone": "Sweden-Mobile (Telia Mobitel)",
+    "numbers": []
+  },
+  {
+    "country": "Sweden",
+    "zone": "Sweden-Pager",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Corporate",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Cost Share",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Mobile (Lycamobile VM)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Mobile (Lycamobile)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Mobile (ORANGE VM)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Mobile (ORANGE)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Mobile (PAGING)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Mobile (SWISSCOM VM)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Mobile (SWISSCOM)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Mobile (Sunrise VM)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Mobile (Sunrise)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Mobile (UPC)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-PRS",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Swisscom VM (Fixnet)",
+    "numbers": []
+  },
+  {
+    "country": "Switzerland",
+    "zone": "Switzerland-Tollfree",
+    "numbers": []
+  },
+  {
+    "country": "Syria",
+    "zone": "Syria",
+    "numbers": []
+  },
+  {
+    "country": "Syria",
+    "zone": "Syria-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Syria",
+    "zone": "Syria-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Taiwan",
+    "zone": "Taiwan",
+    "numbers": []
+  },
+  {
+    "country": "Taiwan",
+    "zone": "Taiwan-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Taiwan",
+    "zone": "Taiwan-Taipeh",
+    "numbers": []
+  },
+  {
+    "country": "Tajikistan",
+    "zone": "Tajikistan",
+    "numbers": []
+  },
+  {
+    "country": "Tajikistan",
+    "zone": "Tajikistan-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Tajikistan",
+    "zone": "Tajikistan-Mobile (Babilon)",
+    "numbers": []
+  },
+  {
+    "country": "Tajikistan",
+    "zone": "Tajikistan-Mobile (Beeline-Tacom)",
+    "numbers": []
+  },
+  {
+    "country": "Tajikistan",
+    "zone": "Tajikistan-Mobile (Ink)",
+    "numbers": []
+  },
+  {
+    "country": "Tajikistan",
+    "zone": "Tajikistan-Mobile (MLT)",
+    "numbers": []
+  },
+  {
+    "country": "Tajikistan",
+    "zone": "Tajikistan-Mobile (TK)",
+    "numbers": []
+  },
+  {
+    "country": "Tajikistan",
+    "zone": "Tajikistan-Mobile (Tajiktelecom)",
+    "numbers": []
+  },
+  {
+    "country": "Tajikistan",
+    "zone": "Tajikistan-Mobile MLT (Megafon)",
+    "numbers": []
+  },
+  {
+    "country": "Tajikistan",
+    "zone": "Tajikistan-Mobile Tcell (Indigo-Somoncom)",
+    "numbers": []
+  },
+  {
+    "country": "Tanzania",
+    "zone": "Tanzania",
+    "numbers": []
+  },
+  {
+    "country": "Tanzania",
+    "zone": "Tanzania-Dar es Salaam",
+    "numbers": []
+  },
+  {
+    "country": "Tanzania",
+    "zone": "Tanzania-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Tanzania",
+    "zone": "Tanzania-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Tanzania",
+    "zone": "Tanzania-Mobile (Tigo)",
+    "numbers": []
+  },
+  {
+    "country": "Tanzania",
+    "zone": "Tanzania-Mobile (Vodacom)",
+    "numbers": []
+  },
+  {
+    "country": "Tanzania",
+    "zone": "Tanzania-Mobile (Zantel)",
+    "numbers": []
+  },
+  {
+    "country": "Thailand",
+    "zone": "Thailand",
+    "numbers": []
+  },
+  {
+    "country": "Thailand",
+    "zone": "Thailand-Bangkok",
+    "numbers": []
+  },
+  {
+    "country": "Thailand",
+    "zone": "Thailand-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Thailand",
+    "zone": "Thailand-Mobile (ACE SAT)",
+    "numbers": []
+  },
+  {
+    "country": "Thailand",
+    "zone": "Thailand-Mobile (AIS)",
+    "numbers": []
+  },
+  {
+    "country": "Thailand",
+    "zone": "Thailand-Mobile (DTAC)",
+    "numbers": []
+  },
+  {
+    "country": "Thailand",
+    "zone": "Thailand-Mobile (TRUE)",
+    "numbers": []
+  },
+  {
+    "country": "Thuraya",
+    "zone": "Thuraya",
+    "numbers": []
+  },
+  {
+    "country": "Togo",
+    "zone": "Togo",
+    "numbers": []
+  },
+  {
+    "country": "Togo",
+    "zone": "Togo-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Togo",
+    "zone": "Togo-Mobile (Moov)",
+    "numbers": []
+  },
+  {
+    "country": "Tokelau",
+    "zone": "Tokelau",
+    "numbers": []
+  },
+  {
+    "country": "Tokelau",
+    "zone": "Tokelau-PRS",
+    "numbers": []
+  },
+  {
+    "country": "Tonga",
+    "zone": "Tonga",
+    "numbers": []
+  },
+  {
+    "country": "Tonga",
+    "zone": "Tonga-PRS",
+    "numbers": []
+  },
+  {
+    "country": "Trinidad & Tobago",
+    "zone": "Trinidad & Tobago",
+    "numbers": []
+  },
+  {
+    "country": "Trinidad & Tobago",
+    "zone": "Trinidad & Tobago-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Tunisia",
+    "zone": "Tunisia",
+    "numbers": []
+  },
+  {
+    "country": "Tunisia",
+    "zone": "Tunisia-Fixed (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Tunisia",
+    "zone": "Tunisia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Tunisia",
+    "zone": "Tunisia-Mobile (Ooredoo)",
+    "numbers": []
+  },
+  {
+    "country": "Tunisia",
+    "zone": "Tunisia-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "Tunisia",
+    "zone": "Tunisia-Mobile (Tunisie Telecom)",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Ankara",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Istanbul",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Izmir",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Mobile (Avea)",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Mobile (Globalstar)",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Mobile (KktcVodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Mobile (Kktcell)",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Mobile (Turkcell)",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Nomadic Services",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Northern Cyprus",
+    "numbers": []
+  },
+  {
+    "country": "Turkey",
+    "zone": "Turkey-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Turkmenistan",
+    "zone": "Turkmenistan",
+    "numbers": []
+  },
+  {
+    "country": "Turkmenistan",
+    "zone": "Turkmenistan-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Turks & Caicos Islands",
+    "zone": "Turks & Caicos Islands",
+    "numbers": []
+  },
+  {
+    "country": "Turks & Caicos Islands (Mobile)",
+    "zone": "Turks & Caicos Islands (Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "Turks & Caicos Islands",
+    "zone": "Turks & Caicos Islands-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Tuvalu",
+    "zone": "Tuvalu",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Fix (Corporate)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Fix (VAS)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Fix (Wide Numbers)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (Guernsey)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (H3G)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (Jersey)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (Lycamobile)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (Manx)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (Nts) 0845",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (Nts) 0870",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (O2)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (Orange)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (Pns)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (Rest)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (SKY)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (T-Mobile)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (TIER 1)",
+    "numbers": []
+  },
+  {
+    "country": "UK",
+    "zone": "UK-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "URUGUAY",
+    "zone": "URUGUAY-Maldonado",
+    "numbers": []
+  },
+  {
+    "country": "URUGUAY",
+    "zone": "URUGUAY-Mobile (Movistar)",
+    "numbers": []
+  },
+  {
+    "country": "US Virgin Islands",
+    "zone": "US Virgin Islands",
+    "numbers": []
+  },
+  {
+    "country": "USA",
+    "zone": "USA",
+    "numbers": []
+  },
+  {
+    "country": "USA",
+    "zone": "USA-Tollfree",
+    "numbers": []
+  },
+  {
+    "country": "Uganda",
+    "zone": "Uganda",
+    "numbers": []
+  },
+  {
+    "country": "Uganda",
+    "zone": "Uganda-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Uganda",
+    "zone": "Uganda-Mobile (Africell)",
+    "numbers": []
+  },
+  {
+    "country": "Uganda",
+    "zone": "Uganda-Mobile (Airtel)",
+    "numbers": []
+  },
+  {
+    "country": "Uganda",
+    "zone": "Uganda-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Uganda",
+    "zone": "Uganda-Mobile (Smile)",
+    "numbers": []
+  },
+  {
+    "country": "Uganda",
+    "zone": "Uganda-Mobile (Utel)",
+    "numbers": []
+  },
+  {
+    "country": "Uganda",
+    "zone": "Uganda-Special Services",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Dnepropetrovsk",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Donetsk",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Kharkov",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Kherson",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Khmelnitskiy",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Kiev",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Krivoy Rog",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Lvov",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Mobile (Astelit Life)",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Mobile (Intertelecom)",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Mobile (Kyiv Star)",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Mobile (People.net)",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Mobile (Ukrtelecom 3G)",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Mobile (Vodafone)",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Nikolaev",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Premium Services",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Vinnitsa",
+    "numbers": []
+  },
+  {
+    "country": "Ukraine",
+    "zone": "Ukraine-Zaporozhye",
+    "numbers": []
+  },
+  {
+    "country": "United Arab Emirates",
+    "zone": "United Arab Emirates",
+    "numbers": []
+  },
+  {
+    "country": "United Arab Emirates",
+    "zone": "United Arab Emirates-Mobile (DU)",
+    "numbers": []
+  },
+  {
+    "country": "United Arab Emirates",
+    "zone": "United Arab Emirates-Mobile (Etisalat)",
+    "numbers": []
+  },
+  {
+    "country": "Uruguay",
+    "zone": "Uruguay",
+    "numbers": []
+  },
+  {
+    "country": "Uruguay",
+    "zone": "Uruguay-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Uruguay",
+    "zone": "Uruguay-Mobile (Ancel)",
+    "numbers": []
+  },
+  {
+    "country": "Uruguay",
+    "zone": "Uruguay-Mobile (Claro)",
+    "numbers": []
+  },
+  {
+    "country": "Uruguay",
+    "zone": "Uruguay-Montevideo",
+    "numbers": []
+  },
+  {
+    "country": "Uzbekistan",
+    "zone": "Uzbekistan",
+    "numbers": []
+  },
+  {
+    "country": "Uzbekistan",
+    "zone": "Uzbekistan-Mobile (Coscom)",
+    "numbers": []
+  },
+  {
+    "country": "Uzbekistan",
+    "zone": "Uzbekistan-Mobile (MTS)",
+    "numbers": []
+  },
+  {
+    "country": "Uzbekistan",
+    "zone": "Uzbekistan-Mobile (Other)",
+    "numbers": []
+  },
+  {
+    "country": "Uzbekistan",
+    "zone": "Uzbekistan-Mobile (Unitel)",
+    "numbers": []
+  },
+  {
+    "country": "Uzbekistan",
+    "zone": "Uzbekistan-Tashkent",
+    "numbers": []
+  },
+  {
+    "country": "Vanuatu",
+    "zone": "Vanuatu",
+    "numbers": []
+  },
+  {
+    "country": "Vanuatu",
+    "zone": "Vanuatu-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Vanuatu",
+    "zone": "Vanuatu-Mobile (Digicel)",
+    "numbers": []
+  },
+  {
+    "country": "Vanuatu",
+    "zone": "Vanuatu-VAS1",
+    "numbers": []
+  },
+  {
+    "country": "Vatican City",
+    "zone": "Vatican City",
+    "numbers": []
+  },
+  {
+    "country": "Venezuela",
+    "zone": "Venezuela",
+    "numbers": []
+  },
+  {
+    "country": "Venezuela Mobile (Digitel)",
+    "zone": "Venezuela Mobile (Digitel)",
+    "numbers": []
+  },
+  {
+    "country": "Venezuela Telefonica (Caracas)",
+    "zone": "Venezuela Telefonica (Caracas)",
+    "numbers": []
+  },
+  {
+    "country": "Venezuela Telefonica (ROC)",
+    "zone": "Venezuela Telefonica (ROC)",
+    "numbers": []
+  },
+  {
+    "country": "Venezuela",
+    "zone": "Venezuela-Caracas",
+    "numbers": []
+  },
+  {
+    "country": "Venezuela",
+    "zone": "Venezuela-Fix (CANTV)",
+    "numbers": []
+  },
+  {
+    "country": "Venezuela",
+    "zone": "Venezuela-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Venezuela",
+    "zone": "Venezuela-Mobile (Movilnet)",
+    "numbers": []
+  },
+  {
+    "country": "Venezuela",
+    "zone": "Venezuela-Mobile (Movistar)",
+    "numbers": []
+  },
+  {
+    "country": "Venezuela",
+    "zone": "Venezuela-Telefonica ROC",
+    "numbers": []
+  },
+  {
+    "country": "Vietnam",
+    "zone": "Vietnam",
+    "numbers": []
+  },
+  {
+    "country": "Vietnam",
+    "zone": "Vietnam-Mobile (Mobifone)",
+    "numbers": []
+  },
+  {
+    "country": "Vietnam",
+    "zone": "Vietnam-Mobile (Others)",
+    "numbers": []
+  },
+  {
+    "country": "Vietnam",
+    "zone": "Vietnam-Mobile (Vietel)",
+    "numbers": []
+  },
+  {
+    "country": "Vietnam",
+    "zone": "Vietnam-Mobile (Vinaphone)",
+    "numbers": []
+  },
+  {
+    "country": "Vietnam",
+    "zone": "Vietnam-VAS 1",
+    "numbers": []
+  },
+  {
+    "country": "Vietnam",
+    "zone": "Vietnam-VAS 2",
+    "numbers": []
+  },
+  {
+    "country": "Vietnam",
+    "zone": "Vietnam-VAS 3",
+    "numbers": []
+  },
+  {
+    "country": "Vietnam",
+    "zone": "Vietnam-VSAT",
+    "numbers": []
+  },
+  {
+    "country": "Wallis & Futuna",
+    "zone": "Wallis & Futuna",
+    "numbers": []
+  },
+  {
+    "country": "Yemen",
+    "zone": "Yemen",
+    "numbers": []
+  },
+  {
+    "country": "Yemen",
+    "zone": "Yemen-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Yemen",
+    "zone": "Yemen-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Yemen",
+    "zone": "Yemen-Mobile (Sabafone)",
+    "numbers": []
+  },
+  {
+    "country": "Zambia",
+    "zone": "Zambia",
+    "numbers": []
+  },
+  {
+    "country": "Zambia",
+    "zone": "Zambia-Mobile",
+    "numbers": []
+  },
+  {
+    "country": "Zambia",
+    "zone": "Zambia-Mobile (MTN)",
+    "numbers": []
+  },
+  {
+    "country": "Zambia",
+    "zone": "Zambia-Mobile (Zain)",
+    "numbers": []
+  },
+  {
+    "country": "Zambia",
+    "zone": "Zambia-Mobile (Zamtel)",
+    "numbers": []
+  },
+  {
+    "country": "Zimbabwe",
+    "zone": "Zimbabwe",
+    "numbers": []
+  },
+  {
+    "country": "Zimbabwe",
+    "zone": "Zimbabwe-Mobile (Econet)",
+    "numbers": []
+  },
+  {
+    "country": "Zimbabwe",
+    "zone": "Zimbabwe-Mobile (Tel-One)",
+    "numbers": []
+  },
+  {
+    "country": "Zimbabwe",
+    "zone": "Zimbabwe-Mobile (Telecel)",
+    "numbers": []
+  }
+]
