@@ -297,17 +297,12 @@ class TestRunnerView(QMainWindow):
         outer.setContentsMargins(16, 16, 16, 16)
         outer.setSpacing(12)
 
-        # Title row
-        title = QLabel("Test Runner")
-        title.setObjectName("SettingsTitle")
-        subtitle = QLabel(
-            "Place N concurrent test calls from your registered accounts "
-            "to one or more targets. Results stream live; export when done."
-        )
-        subtitle.setObjectName("SettingsSubtitle")
-        subtitle.setWordWrap(True)
-        outer.addWidget(title)
-        outer.addWidget(subtitle)
+        # In-content title removed -- the OS title bar already says
+        # "NOC_Beam test runner", and the old #SettingsTitle h1 was
+        # rendering with its top half clipped because the central
+        # widget's margin + QMainWindow chrome left it half-behind
+        # the chrome strip. Saves ~60 px of vertical real estate too;
+        # the Configure tab body gets the room.
 
         # ===== Top-level tabs =========================================
         self.tabs = QTabWidget(central)
@@ -344,33 +339,40 @@ class TestRunnerView(QMainWindow):
         tb_l.setHorizontalSpacing(14)
         tb_l.setVerticalSpacing(10)
 
-        # SUPPLIER picker -- top row, full width, only shown when
-        # active account is teles/genband.
+        # SUPPLIER picker -- compact, left-anchored. Lives on the SAME
+        # row as ORIGINATION + DESTINATION (built lower down). The old
+        # layout had supplier stretched full-width on its own row, which
+        # wasted real estate. Now it's just wide enough to read a
+        # carrier name (~240 px) and the routing row holds all three.
         self.supplier_row = _QWidget()
         _supp_l = QHBoxLayout(self.supplier_row)
         _supp_l.setContentsMargins(0, 0, 0, 0)
         _supp_l.setSpacing(8)
         self.supplier_label = QLabel("SUPPLIER")
         self.supplier_label.setObjectName("TestRunnerToolbarLabel")
-        self.supplier_label.setMinimumWidth(80)
+        self.supplier_label.setMinimumWidth(70)
+        self.supplier_label.setMaximumWidth(90)
         self.supplier_combo = SupplierDropdown()
         self.supplier_combo.setObjectName("TestRunnerSupplier")
-        self.supplier_combo.setMinimumContentsLength(18)
+        self.supplier_combo.setMinimumContentsLength(14)
         self.supplier_combo.setMaxVisibleItems(18)
-        self.supplier_combo.setMinimumWidth(280)
-        self.supplier_combo.setSizePolicy(_SP.Policy.Expanding, _SP.Policy.Fixed)
+        self.supplier_combo.setMinimumWidth(200)
+        self.supplier_combo.setMaximumWidth(260)
+        self.supplier_combo.setSizePolicy(_SP.Policy.Preferred, _SP.Policy.Fixed)
         self._all_suppliers: list[tuple[str, str]] = []
         _le = self.supplier_combo.lineEdit()
         if _le is not None:
-            _le.setPlaceholderText("Search supplier or C080")
+            _le.setPlaceholderText("Search or C080")
             _le.textEdited.connect(self._on_supplier_text_edited)
             _le.returnPressed.connect(self._on_supplier_return_pressed)
         self.supplier_combo.currentIndexChanged.connect(self._on_supplier_changed)
         self.supplier_combo.activated.connect(self._on_supplier_activated)
         _supp_l.addWidget(self.supplier_label)
-        _supp_l.addWidget(self.supplier_combo, 1)
+        _supp_l.addWidget(self.supplier_combo)
         self.supplier_row.setVisible(False)
-        tb_l.addWidget(self.supplier_row, 0, 0, 1, 6)
+        # NOTE: supplier_row is NOT added to the toolbar grid any more.
+        # It's added to the combined routing row built lower down,
+        # alongside ORIGINATION + DESTINATION cells.
         self._batch_supplier_id: str = ""
 
         # Separator no longer needed in a grid layout; keep a hidden
@@ -462,22 +464,30 @@ class TestRunnerView(QMainWindow):
         _any_dest = destinations_module.any_zone_has_numbers(self._destinations_items)
 
         def _build_dest_cell(label_text: str) -> tuple[_QWidget, SupplierDropdown, QComboBox, QToolButton, QLabel]:
-            """Compact horizontal cell: [LABEL] [country] [zone] ↻ [hint?]"""
+            """Compact horizontal cell: [LABEL] [country] [zone] ↻ [hint?]
+
+            Sized to share a row with the supplier picker -- so country
+            and zone widths are tight (was 220+180 = ~400 px per cell,
+            now ~140+120 = ~260 px per cell). The inline hint label is
+            only shown when destinations.json is empty; it's hidden in
+            normal use to keep the row narrow.
+            """
             cell = _QWidget()
             rl = QHBoxLayout(cell)
             rl.setContentsMargins(0, 0, 0, 0)
             rl.setSpacing(6)
             lbl = QLabel(label_text)
             lbl.setObjectName("TestRunnerToolbarLabel")
-            lbl.setMinimumWidth(78)
-            lbl.setMaximumWidth(90)
+            lbl.setMinimumWidth(72)
+            lbl.setMaximumWidth(88)
             country = SupplierDropdown()
             country.setObjectName(f"TestRunnerDest{label_text.title()}Country")
-            country.setMinimumWidth(140)
-            country.setMaximumWidth(220)
+            country.setMinimumWidth(120)
+            country.setMaximumWidth(180)
             zone = QComboBox()
             zone.setObjectName(f"TestRunnerDest{label_text.title()}Zone")
-            zone.setMinimumWidth(180)
+            zone.setMinimumWidth(100)
+            zone.setMaximumWidth(160)
             reload_btn = QToolButton()
             reload_btn.setObjectName(f"TestRunnerDest{label_text.title()}Reload")
             reload_btn.setText("↻")
@@ -486,20 +496,24 @@ class TestRunnerView(QMainWindow):
             hint.setObjectName(f"TestRunnerDest{label_text.title()}Hint")
             hint.setStyleSheet("color: palette(mid); font-style: italic;")
             rl.addWidget(lbl)
-            rl.addWidget(country, 1)
-            rl.addWidget(zone, 2)
+            rl.addWidget(country)
+            rl.addWidget(zone)
             rl.addWidget(reload_btn)
             rl.addWidget(hint, 1)
             return cell, country, zone, reload_btn, hint
 
-        # ORIGINATION + DESTINATION live on a SINGLE compact row right
-        # under the supplier picker — they're contextual to "where this
-        # call comes from / goes to", they belong next to supplier, not
-        # buried in their own toolbar block.
+        # ===== Combined routing row: SUPPLIER + ORIGINATION + DESTINATION ====
+        # All three pickers live on ONE row -- the operator's mental
+        # model is "I'm dialing FROM this supplier, FROM this country/
+        # zone, TO this country/zone", and that read better as a single
+        # left-to-right strip than as three stacked rows. Supplier is
+        # only added when the active account is teles/genband (handled
+        # by _refresh_supplier_picker toggling supplier_row.setVisible).
         self.origination_row = _QWidget()
         _od_l = QHBoxLayout(self.origination_row)
         _od_l.setContentsMargins(0, 0, 0, 0)
-        _od_l.setSpacing(18)
+        _od_l.setSpacing(14)
+        _od_l.addWidget(self.supplier_row)
         (
             _orig_cell,
             self.origination_country,
@@ -514,8 +528,9 @@ class TestRunnerView(QMainWindow):
             self.destination_reload,
             self.destination_hint,
         ) = _build_dest_cell("DESTINATION")
-        _od_l.addWidget(_orig_cell, 1)
-        _od_l.addWidget(_dest_cell, 1)
+        _od_l.addWidget(_orig_cell)
+        _od_l.addWidget(_dest_cell)
+        _od_l.addStretch(1)
         # destination_row alias kept for back-compat with tests that
         # toggle it as a whole; it's the same widget as origination_row
         # (single combined row now).
@@ -598,14 +613,18 @@ class TestRunnerView(QMainWindow):
         tabs_row.addWidget(self._run_count_badge)
         lc_l.addLayout(tabs_row)
 
-        # Stacked widget for tab content. Cap at ~120px so the paste box
-        # stays compact and the results table gets the rest of the body.
+        # Stacked widget for tab content. Cap at ~90px so the paste
+        # box stays as a tight strip and the results table dominates
+        # the body. Operators paste a few numbers; they don't write
+        # essays in here. The whole left_card is non-stretching
+        # (setStretchFactor(0,0) on the splitter) so this cap is the
+        # effective height of the strip.
         self._target_stack = QStackedWidget()
         self._target_stack.addWidget(self.targets_edit)
         self._target_stack.addWidget(self.callers_edit)
-        self._target_stack.setMaximumHeight(140)
-        self.targets_edit.setMaximumHeight(120)
-        self.callers_edit.setMaximumHeight(120)
+        self._target_stack.setMaximumHeight(90)
+        self.targets_edit.setMaximumHeight(86)
+        self.callers_edit.setMaximumHeight(86)
         lc_l.addWidget(self._target_stack, 1)
         # Keep test_runner_view's old import-from-locals path happy
         # (some code paths reference QStackedWidget via the local
@@ -643,7 +662,10 @@ class TestRunnerView(QMainWindow):
         # of the body on the default window.
         split.setStretchFactor(0, 0)
         split.setStretchFactor(1, 1)
-        split.setSizes([130, 600])
+        # Tighter starting split so the empty results table grid is the
+        # first thing the operator sees -- 100 px paste box up top,
+        # everything else for results.
+        split.setSizes([100, 700])
         outer.addWidget(split, 1)
 
         # ===== Sticky footer ==========================================
