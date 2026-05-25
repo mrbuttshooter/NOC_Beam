@@ -73,6 +73,31 @@ class _BaseModel:
             log.warning("%s: %s not found at %s", type(self).__name__,
                         self._onnx_filename, path)
             return
+        # ONNX external-data sidecar pre-flight. PANNs (Cnn14_16k) stores
+        # weights in Cnn14_16k.onnx.data next to the .onnx graph. If the
+        # PyInstaller bundle is from before the build/noc_beam.spec fix
+        # that globs *.onnx.data, ort.InferenceSession() raises with a
+        # noisy "External data path does not exist" stack. Skip cleanly
+        # instead: SileroVad still loads, the rules engine still runs,
+        # FAS verdicts just lose the music/noise signal. Detect by
+        # checking for an adjacent .data sidecar when the .onnx is
+        # suspiciously small (<200 KB -- the graph-only files are tiny
+        # whereas embedded-weights models are tens of MB).
+        try:
+            data_sidecar = path.with_name(path.name + ".data")
+            graph_kb = path.stat().st_size // 1024
+            if graph_kb < 200 and not data_sidecar.exists():
+                log.warning(
+                    "%s: external-data sidecar missing (%s); skipping. "
+                    "Your build is missing the .onnx.data file -- rebuild "
+                    "with build/noc_beam.spec from commit ba369d8 or later.",
+                    type(self).__name__, data_sidecar,
+                )
+                return
+        except Exception:
+            # Pre-flight is best-effort; fall through to the real load
+            # and let any exception path log.exception as before.
+            pass
         try:
             self._sess = ort.InferenceSession(
                 str(path), providers=["CPUExecutionProvider"]

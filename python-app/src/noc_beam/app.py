@@ -144,13 +144,57 @@ def run(argv: list[str]) -> int:
                     ):
                         _seen_orphans.add(id(obj))
                         parent = obj.parent()
+                        # Extra identifiers so we can pinpoint the source
+                        # of an orphan QLabel: objectName() catches anything
+                        # that set one (rail/title-bar QSS selectors), and
+                        # text() shows the label content for unstyled
+                        # one-shot labels (e.g. "Welcome to NOC_Beam").
+                        obj_name = ""
+                        text_snippet = ""
+                        try:
+                            obj_name = obj.objectName() or ""
+                        except Exception:
+                            pass
+                        try:
+                            # Only QLabel/QPushButton/QToolButton/QLineEdit
+                            # expose text(); guard with hasattr because
+                            # PhoneShell etc. don't.
+                            if hasattr(obj, "text"):
+                                txt = obj.text()
+                                if isinstance(txt, str):
+                                    text_snippet = txt[:60]
+                        except Exception:
+                            pass
                         log.warning(
-                            "[ORPHAN-WINDOW] %s title=%r parent=%s flags=%s",
+                            "[ORPHAN-WINDOW] %s objectName=%r text=%r title=%r "
+                            "parent=%s flags=%s",
                             type(obj).__name__,
+                            obj_name,
+                            text_snippet,
                             obj.windowTitle(),
                             type(parent).__name__ if parent else "None",
                             int(obj.windowFlags()),
                         )
+                        # Stack trace at Show-time pins the calling code.
+                        # Only attempt for the QLabel case (others are
+                        # legit windows and we don't want trace noise).
+                        if type(obj).__name__ == "QLabel":
+                            try:
+                                import traceback
+                                stack = traceback.format_stack(limit=15)
+                                # Strip Qt event-loop frames; keep the
+                                # last ~6 user frames before this filter.
+                                user_frames = [
+                                    f for f in stack
+                                    if "noc_beam" in f
+                                ][-6:]
+                                if user_frames:
+                                    log.warning(
+                                        "[ORPHAN-WINDOW] stack:\n%s",
+                                        "".join(user_frames),
+                                    )
+                            except Exception:
+                                pass
                 except Exception:
                     pass
                 return False
