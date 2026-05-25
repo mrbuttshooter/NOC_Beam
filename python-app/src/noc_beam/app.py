@@ -176,9 +176,12 @@ def run(argv: list[str]) -> int:
                             int(obj.windowFlags()),
                         )
                         # Stack trace at Show-time pins the calling code.
-                        # Only attempt for the QLabel case (others are
-                        # legit windows and we don't want trace noise).
-                        if type(obj).__name__ == "QLabel":
+                        # Cover the generic Qt classes that shouldn't
+                        # normally be top-level (QLabel, plain QWidget,
+                        # bare QFrame). Named subclasses like PhoneShell,
+                        # TestRunnerView, QMenu, QComboBox popups are
+                        # expected to be top-level so we skip those.
+                        if type(obj).__name__ in ("QLabel", "QWidget", "QFrame"):
                             try:
                                 import traceback
                                 stack = traceback.format_stack(limit=15)
