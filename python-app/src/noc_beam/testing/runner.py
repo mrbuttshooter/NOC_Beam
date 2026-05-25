@@ -47,6 +47,14 @@ class _ActiveCall:
     cleanup_timer: QTimer | None = None
     rtt_ms: float | None = None
     completed: bool = False
+    # Reachability pass-criterion bookkeeping: we now require an
+    # actual 180 Ringing before declaring success. 183 Session
+    # Progress (or any other 1xx without subsequent 180) is treated
+    # as early-media-only and FAILED at timeout — many wholesale
+    # carriers send 183 + canned "all circuits busy" recordings that
+    # tone-sound like a real ringback but never deliver a call.
+    saw_180: bool = False
+    saw_other_1xx: bool = False
 
 
 CLEANUP_FALLBACK_SECONDS = 1.0
@@ -394,13 +402,37 @@ class TestRunner(QObject):
                 self._release_active(active)
             return
 
-        if (
-            self.spec.pass_criterion == "reachability"
-            and state == "EARLY"
-            and code in (180, 183)
-        ):
-            self._complete_active(active, "PASS", code, reason, "")
-            return
+        # Reachability pass criterion: tightened semantics.
+        #
+        # Previously ANY 1xx (180 or 183) in EARLY passed. That over-
+        # counted carriers that send 183 + "this number is not in
+        # service" recordings as reachable. New rules (per LOGIC_REVIEW
+        # 2026-05-25):
+        #   180 Ringing in EARLY -> PASS reason "180_then_bye"
+        #     (we hangup right away -- destination sees a missed call).
+        #   183 (or other 1xx) in EARLY -> note it, but do NOT pass.
+        #     Wait for 180 or 200 or timeout.
+        #   200 in CONFIRMED after 180 -> PASS reason "answered".
+        #   200 in CONFIRMED without prior 180 -> PASS reason
+        #     "200_no_180_warn" (some endpoints skip 180).
+        if self.spec.pass_criterion == "reachability":
+            if state == "EARLY":
+                if code == 180:
+                    active.saw_180 = True
+                    self._complete_active(
+                        active, "PASS", code, reason, "180_then_bye"
+                    )
+                    return
+                if 100 <= code < 200:
+                    # 183 Session Progress, 100 Trying, 181/182, etc.
+                    # Record that we saw early media so timeout reason
+                    # is "early_media_only_no_180", not bare "timeout".
+                    active.saw_other_1xx = True
+                    return
+            if state == "CONFIRMED" and code == 200:
+                reason_code = "answered" if active.saw_180 else "200_no_180_warn"
+                self._complete_active(active, "PASS", code, reason, reason_code)
+                return
 
         if self.spec.pass_criterion == "full-call" and state == "CONFIRMED":
             if active.hold_timer is not None:
@@ -433,12 +465,24 @@ class TestRunner(QObject):
         active = self._active.get(call_id)
         if active is None:
             return
+        # Reachability: if we got 183/100/etc. but never a 180, surface
+        # "early_media_only_no_180" so downstream analysts can spot
+        # carriers that advertise early media without ever ringing the
+        # destination (a common pattern for SIT/IVR call-progress fraud).
+        if (
+            self.spec.pass_criterion == "reachability"
+            and active.saw_other_1xx
+            and not active.saw_180
+        ):
+            notes = "early_media_only_no_180"
+        else:
+            notes = "timeout"
         self._complete_active(
             active,
             "FAIL",
             408,
             "Request Timeout",
-            "timeout",
+            notes,
             hangup=True,
         )
 
