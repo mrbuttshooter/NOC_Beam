@@ -39,6 +39,15 @@ log = logging.getLogger(__name__)
 _NO_RETRY_CODES = {401, 403, 405, 407}     # don't retry hard rejections
 _RETRY_INTERVALS_MS = [1000, 2000, 4000, 8000, 16000, 30000]
 
+# After this many sustained retries at the 30 s cap (≈30 min of continuous
+# failure) the chain switches to a long-sleep interval. A field log from a
+# user's machine showed a single 503-pinned account racking up 1180+
+# attempts in 9 hours at 30 s each — pointless network noise and a fast
+# track to carrier rate-limit bans. We keep retrying forever (carriers
+# sometimes recover after hours) but slow the cadence drastically.
+MAX_FAST_RETRIES = 60
+LONG_SLEEP_INTERVAL_MS = 15 * 60 * 1000   # 15 minutes
+
 
 class RegistrationRetry(QObject):
     """Owns one timer per account_id; reads endpoint from the singleton."""
@@ -85,7 +94,21 @@ class RegistrationRetry(QObject):
 
     def _schedule_retry(self, account_id: str, code: int, reason: str) -> None:
         attempt = self._attempts.get(account_id, 0)
-        interval = _RETRY_INTERVALS_MS[min(attempt, len(_RETRY_INTERVALS_MS) - 1)]
+        # After MAX_FAST_RETRIES sustained failures, switch to long-sleep
+        # mode: keep retrying forever but at LONG_SLEEP_INTERVAL_MS rather
+        # than the 30 s cap. The attempt counter keeps incrementing; only
+        # the interval changes. Log the transition exactly once (on the
+        # first scheduling that uses the long-sleep interval).
+        if attempt >= MAX_FAST_RETRIES:
+            interval = LONG_SLEEP_INTERVAL_MS
+            if attempt == MAX_FAST_RETRIES:
+                log.warning(
+                    "Account %s reached MAX_FAST_RETRIES=%d; switching to "
+                    "long-sleep retry (%d min interval)",
+                    account_id, MAX_FAST_RETRIES, LONG_SLEEP_INTERVAL_MS // 60000,
+                )
+        else:
+            interval = _RETRY_INTERVALS_MS[min(attempt, len(_RETRY_INTERVALS_MS) - 1)]
         self._attempts[account_id] = attempt + 1
         log.warning(
             "Registration failure for %s (%d %s); retry in %d ms (attempt %d)",
