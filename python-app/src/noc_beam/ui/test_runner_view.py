@@ -310,6 +310,14 @@ class TestRunnerView(QMainWindow):
         # ===== Top-level tabs =========================================
         self.tabs = QTabWidget(central)
         self.tabs.setObjectName("TestRunnerTabs")
+        # Document mode -- flat tabs without the "merge active tab
+        # into pane border" trick. The generic QTabWidget::pane rule
+        # (top:-1px, background:#FFFFFF) was rendering a white
+        # rectangle on top of the active "Configure" tab text in
+        # standard mode; document mode skips that pane-overlap
+        # behaviour entirely so the tab text always paints
+        # cleanly, regardless of QSS cascade.
+        self.tabs.setDocumentMode(True)
         outer.addWidget(self.tabs, 1)
 
         configure_page = QWidget()
