@@ -56,7 +56,7 @@ class SettingsDialog(QDialog):
     """Sidebar-nav settings. ``account`` is the active SIP account whose
     identity / server / registration is shown under the Account pane."""
 
-    NAV_ITEMS = ("General", "Audio", "Codecs", "Appearance", "FAS detection", "Suppliers", "Account", "Advanced")
+    NAV_ITEMS = ("General", "Audio", "Codecs", "Appearance", "FAS detection", "Suppliers", "Destinations", "Account", "Advanced")
 
     # Apply-without-close: the host (phone_shell._on_settings) connects
     # to this and runs its apply_to + save_settings + push-to-PJSIP path
@@ -186,6 +186,7 @@ class SettingsDialog(QDialog):
             "Appearance":    self._build_appearance_pane,
             "FAS detection": self._build_fas_pane,
             "Suppliers":     self._build_suppliers_pane,
+            "Destinations":  self._build_destinations_pane,
             "Account":       self._build_account_pane,
             "Advanced":      self._build_advanced_pane,
         }[key]
@@ -384,6 +385,252 @@ class SettingsDialog(QDialog):
         row_btns.addWidget(del_btn)
         row_btns.addWidget(check_all_btn)
         row_btns.addWidget(uncheck_all_btn)
+        row_btns.addStretch(1)
+        row_btns.addWidget(save_btn)
+        layout.addLayout(row_btns)
+
+        return w
+
+    def _build_destinations_pane(self) -> QWidget:
+        """Editable catalogue of carrier test numbers per Sale Code zone.
+
+        4-column table: Country | Zone | Number | (delete). One number
+        per row even though the JSON schema accepts a list -- if a
+        saved row has multiple numbers the row is shown read-only with
+        a tooltip directing the operator to edit the JSON file by hand
+        (rare; matches spec §6.5).
+
+        The seed catalogue ships 1,400 rows with empty number fields;
+        operators fill them in here as they verify test numbers. The
+        Test Runner picker hides zones with empty numbers via
+        zones_with_numbers(); this editor shows them all so the
+        operator can find any zone to fill.
+        """
+        from PySide6.QtCore import Qt as _Qt
+        from PySide6.QtWidgets import (
+            QHeaderView,
+            QLineEdit,
+            QPushButton,
+            QTableWidget,
+            QTableWidgetItem,
+        )
+
+        from noc_beam.config.destinations import (
+            Destination,
+            load_destinations,
+            save_destinations,
+        )
+
+        w = QWidget()
+        w.setObjectName("SettingsPane")
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("Destinations / Test Numbers")
+        title.setObjectName("SettingsTitle")
+        layout.addWidget(title)
+
+        blurb = QLabel(
+            "Saved live test numbers organised by country and sale zone. "
+            "Picked in the Test Runner to skip manual paste. The seed "
+            "catalogue ships 1,400 zones with blank numbers — fill them "
+            "in here as you verify each route. Zones with no number stay "
+            "hidden from the Test Runner picker until populated."
+        )
+        blurb.setObjectName("SettingsBlurb")
+        blurb.setWordWrap(True)
+        layout.addWidget(blurb)
+
+        # Live filter -- 1,400 rows makes a search field non-optional.
+        search = QLineEdit()
+        search.setPlaceholderText("Filter (country or zone substring)...")
+        layout.addWidget(search)
+
+        # Count summary -- updates as the operator types numbers in.
+        summary = QLabel("")
+        summary.setObjectName("SettingsBlurb")
+        layout.addWidget(summary)
+
+        # 4 columns: Country | Zone | Number | delete-button.
+        # Country + Zone are read-only labels (changing them would
+        # corrupt the (country, zone) key); Number is the editable
+        # cell. Multi-number rows mark the Number column read-only
+        # with a tooltip.
+        table = QTableWidget(0, 4)
+        table.setHorizontalHeaderLabels(["Country", "Zone", "Number", ""])
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
+        table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.ResizeToContents
+        )
+        table.horizontalHeader().setSectionResizeMode(
+            3, QHeaderView.ResizeMode.ResizeToContents
+        )
+        layout.addWidget(table, 1)
+
+        # Track extra numbers for multi-number rows so save() can
+        # preserve them (the editor only exposes number[0]).
+        # row_index -> tuple of "extra" numbers (everything past [0]).
+        extra_numbers: dict[int, tuple[str, ...]] = {}
+
+        def _update_summary() -> None:
+            total = table.rowCount()
+            filled = 0
+            for r in range(total):
+                num_item = table.item(r, 2)
+                if num_item is not None and (num_item.text() or "").strip():
+                    filled += 1
+            summary.setText(
+                f"{filled} zones with at least one number / {total} total"
+            )
+
+        def _make_readonly_item(text: str) -> QTableWidgetItem:
+            item = QTableWidgetItem(text)
+            item.setFlags(
+                _Qt.ItemFlag.ItemIsEnabled | _Qt.ItemFlag.ItemIsSelectable
+            )
+            return item
+
+        def _attach_delete_button(row: int) -> None:
+            btn = QPushButton("Delete")
+            btn.setObjectName("DestRowDeleteBtn")
+
+            def _delete_this_row():
+                # Find the current row by walking the table — using a
+                # captured `row` int goes stale after sorting / deletes.
+                for r in range(table.rowCount()):
+                    if table.cellWidget(r, 3) is btn:
+                        # Re-key extra_numbers around the removed row.
+                        new_extras: dict[int, tuple[str, ...]] = {}
+                        for k, v in extra_numbers.items():
+                            if k < r:
+                                new_extras[k] = v
+                            elif k > r:
+                                new_extras[k - 1] = v
+                        extra_numbers.clear()
+                        extra_numbers.update(new_extras)
+                        table.removeRow(r)
+                        _update_summary()
+                        return
+
+            btn.clicked.connect(_delete_this_row)
+            table.setCellWidget(row, 3, btn)
+
+        def _reload() -> None:
+            table.blockSignals(True)
+            table.setRowCount(0)
+            extra_numbers.clear()
+            for d in load_destinations():
+                row = table.rowCount()
+                table.insertRow(row)
+                table.setItem(row, 0, _make_readonly_item(d.country))
+                table.setItem(row, 1, _make_readonly_item(d.zone))
+                first = d.numbers[0] if d.numbers else ""
+                num_item = QTableWidgetItem(first)
+                if len(d.numbers) > 1:
+                    # Multi-number row: lock editing, tooltip the why,
+                    # and remember the extras so save() round-trips
+                    # them intact.
+                    num_item.setFlags(
+                        _Qt.ItemFlag.ItemIsEnabled | _Qt.ItemFlag.ItemIsSelectable
+                    )
+                    num_item.setToolTip(
+                        "Multi-number rows are edited in the JSON file "
+                        "directly (this row has "
+                        f"{len(d.numbers)} numbers)."
+                    )
+                    extra_numbers[row] = tuple(d.numbers[1:])
+                table.setItem(row, 2, num_item)
+                _attach_delete_button(row)
+            table.blockSignals(False)
+            _update_summary()
+
+        def _read_all() -> list[Destination]:
+            out: list[Destination] = []
+            for r in range(table.rowCount()):
+                country_item = table.item(r, 0)
+                zone_item = table.item(r, 1)
+                num_item = table.item(r, 2)
+                country = (country_item.text() if country_item else "").strip()
+                zone = (zone_item.text() if zone_item else "").strip()
+                first = (num_item.text() if num_item else "").strip()
+                if not country or not zone:
+                    continue
+                extras = extra_numbers.get(r, ())
+                if first:
+                    numbers = (first, *extras)
+                elif extras:
+                    # The user cleared the first number but extras
+                    # remain — keep extras as the new list rather than
+                    # silently losing them.
+                    numbers = extras
+                else:
+                    numbers = ()
+                out.append(Destination(country=country, zone=zone, numbers=numbers))
+            return out
+
+        def _add():
+            row = table.rowCount()
+            table.insertRow(row)
+            # Country + Zone editable on a new row so the operator can
+            # type them in; once saved+reloaded they become read-only.
+            table.setItem(row, 0, QTableWidgetItem(""))
+            table.setItem(row, 1, QTableWidgetItem(""))
+            table.setItem(row, 2, QTableWidgetItem(""))
+            _attach_delete_button(row)
+            table.editItem(table.item(row, 0))
+            _update_summary()
+
+        def _save():
+            try:
+                save_destinations(_read_all())
+                save_btn.setText("Saved ✓")
+                # Parent the revert timer to the button so closing the
+                # dialog cascades destruction; otherwise a bare
+                # QTimer.singleShot can fire on a deleted button.
+                self._dst_save_revert_timer = QTimer(save_btn)
+                self._dst_save_revert_timer.setSingleShot(True)
+                self._dst_save_revert_timer.timeout.connect(
+                    lambda: save_btn.setText("Save")
+                )
+                self._dst_save_revert_timer.start(2000)
+            except Exception:
+                log.exception("Failed to save destinations")
+                save_btn.setText("Save FAILED")
+
+        def _filter(txt: str):
+            needle = txt.lower().strip()
+            for r in range(table.rowCount()):
+                if not needle:
+                    table.setRowHidden(r, False)
+                    continue
+                country = (
+                    table.item(r, 0).text() if table.item(r, 0) else ""
+                ).lower()
+                zone = (
+                    table.item(r, 1).text() if table.item(r, 1) else ""
+                ).lower()
+                visible = needle in country or needle in zone
+                table.setRowHidden(r, not visible)
+
+        search.textChanged.connect(_filter)
+        table.itemChanged.connect(lambda _it: _update_summary())
+
+        _reload()
+
+        row_btns = QHBoxLayout()
+        add_btn = QPushButton("Add row")
+        save_btn = QPushButton("Save")
+        save_btn.setObjectName("PrimaryAction")
+        add_btn.clicked.connect(_add)
+        save_btn.clicked.connect(_save)
+        row_btns.addWidget(add_btn)
         row_btns.addStretch(1)
         row_btns.addWidget(save_btn)
         layout.addLayout(row_btns)
