@@ -1524,6 +1524,12 @@ class SettingsDialog(QDialog):
 
         new_priorities: dict[str, int] = {}
         codec_map: dict[str, int] = {}
+        # Initialize `spins` up-front so the variable is always bound
+        # before any later reference. Previously it was only assigned
+        # inside the legacy `else` branch, which produced
+        # UnboundLocalError if any code path under the `if` branch
+        # (or downstream) tried to inspect it.
+        spins: dict = {}
         # Read from the new drag-drop columns first (the modern UI).
         # Fall back to the legacy spinbox dict if a custom build used
         # _codec_priority_spins instead.
