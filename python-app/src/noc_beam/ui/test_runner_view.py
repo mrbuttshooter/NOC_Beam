@@ -96,10 +96,12 @@ class TestRunnerView(QMainWindow):
         self._row_by_call_index: dict[int, int] = {}
 
         self.setWindowTitle("NOC_Beam test runner")
-        # Wider default so toolbar fits horizontally + results table
-        # has room for all columns without horizontal scroll.
-        self.resize(960, 600)
-        self.setMinimumSize(820, 480)
+        # Default ~1280x800 so the operator sees the full toolbar, both
+        # destination rows, and a results table tall enough for ~15
+        # streamed rows without scroll. Min stays modest so the window
+        # works on smaller laptop displays.
+        self.resize(1280, 800)
+        self.setMinimumSize(900, 600)
 
         self.callers_edit = _PasteAtEndTextEdit()
         self.callers_edit.setObjectName("TestRunnerPasteBox")
@@ -453,25 +455,28 @@ class TestRunnerView(QMainWindow):
             self._destinations_items = []
         _any_dest = destinations_module.any_zone_has_numbers(self._destinations_items)
 
-        def _build_dest_row(label_text: str, callback) -> tuple[_QWidget, SupplierDropdown, QComboBox, QToolButton, QLabel]:
-            row = _QWidget()
-            rl = QHBoxLayout(row)
+        def _build_dest_cell(label_text: str) -> tuple[_QWidget, SupplierDropdown, QComboBox, QToolButton, QLabel]:
+            """Compact horizontal cell: [LABEL] [country] [zone] ↻ [hint?]"""
+            cell = _QWidget()
+            rl = QHBoxLayout(cell)
             rl.setContentsMargins(0, 0, 0, 0)
-            rl.setSpacing(8)
+            rl.setSpacing(6)
             lbl = QLabel(label_text)
             lbl.setObjectName("TestRunnerToolbarLabel")
-            lbl.setMinimumWidth(110)
+            lbl.setMinimumWidth(78)
+            lbl.setMaximumWidth(90)
             country = SupplierDropdown()
             country.setObjectName(f"TestRunnerDest{label_text.title()}Country")
-            country.setMinimumWidth(180)
+            country.setMinimumWidth(140)
+            country.setMaximumWidth(220)
             zone = QComboBox()
             zone.setObjectName(f"TestRunnerDest{label_text.title()}Zone")
-            zone.setMinimumWidth(280)
+            zone.setMinimumWidth(180)
             reload_btn = QToolButton()
             reload_btn.setObjectName(f"TestRunnerDest{label_text.title()}Reload")
             reload_btn.setText("↻")
             reload_btn.setToolTip("Reload destinations.json")
-            hint = QLabel("Configure zones in Settings → Destinations")
+            hint = QLabel("Configure in Settings → Destinations")
             hint.setObjectName(f"TestRunnerDest{label_text.title()}Hint")
             hint.setStyleSheet("color: palette(mid); font-style: italic;")
             rl.addWidget(lbl)
@@ -479,29 +484,42 @@ class TestRunnerView(QMainWindow):
             rl.addWidget(zone, 2)
             rl.addWidget(reload_btn)
             rl.addWidget(hint, 1)
-            return row, country, zone, reload_btn, hint
+            return cell, country, zone, reload_btn, hint
 
+        # ORIGINATION + DESTINATION live on a SINGLE compact row right
+        # under the supplier picker — they're contextual to "where this
+        # call comes from / goes to", they belong next to supplier, not
+        # buried in their own toolbar block.
+        self.origination_row = _QWidget()
+        _od_l = QHBoxLayout(self.origination_row)
+        _od_l.setContentsMargins(0, 0, 0, 0)
+        _od_l.setSpacing(18)
         (
-            self.origination_row,
+            _orig_cell,
             self.origination_country,
             self.origination_zone,
             self.origination_reload,
             self.origination_hint,
-        ) = _build_dest_row("ORIGINATION", None)
+        ) = _build_dest_cell("ORIGINATION")
         (
-            self.destination_row,
+            _dest_cell,
             self.destination_country,
             self.destination_zone,
             self.destination_reload,
             self.destination_hint,
-        ) = _build_dest_row("DESTINATION", None)
+        ) = _build_dest_cell("DESTINATION")
+        _od_l.addWidget(_orig_cell, 1)
+        _od_l.addWidget(_dest_cell, 1)
+        # destination_row alias kept for back-compat with tests that
+        # toggle it as a whole; it's the same widget as origination_row
+        # (single combined row now).
+        self.destination_row = self.origination_row
         # Rows are ALWAYS visible — engineers need to see the feature exists.
         # When the catalogue has no populated zones, the dropdowns are
         # disabled and the inline hint label points the operator to
         # Settings → Destinations to add their first number.
         self._apply_destination_empty_state(not _any_dest)
         outer.addWidget(self.origination_row)
-        outer.addWidget(self.destination_row)
         self._populate_destination_pickers()
 
         # ===== Pre-flight strip ======================================
@@ -522,13 +540,17 @@ class TestRunnerView(QMainWindow):
         pf_l.addWidget(self.summary_pending)
         outer.addWidget(preflight)
 
-        # ===== Body: split 35/65 (Targets | Results) =================
-        split = QSplitter(Qt.Orientation.Horizontal, central)
+        # ===== Body: vertical split — small Targets/Callers on top, =
+        # big Results below. (Was a horizontal 35/65 split that gave
+        # Targets/Callers the entire height of the body even though the
+        # paste boxes only need ~120px. Operators wanted the paste box
+        # compact so the results table dominates.)
+        split = QSplitter(Qt.Orientation.Vertical, central)
         split.setObjectName("TestRunnerSplit")
         split.setChildrenCollapsible(False)
-        split.setHandleWidth(8)
+        split.setHandleWidth(6)
 
-        # ---- LEFT: tabbed Targets/Callers ----
+        # ---- TOP: tabbed Targets/Callers (compact) ----
         left_card = QFrame()
         left_card.setObjectName("SettingsCard")
         # Hidden legacy marker for back-compat selectors
@@ -570,10 +592,14 @@ class TestRunnerView(QMainWindow):
         tabs_row.addWidget(self._run_count_badge)
         lc_l.addLayout(tabs_row)
 
-        # Stacked widget for tab content
+        # Stacked widget for tab content. Cap at ~120px so the paste box
+        # stays compact and the results table gets the rest of the body.
         self._target_stack = QStackedWidget()
         self._target_stack.addWidget(self.targets_edit)
         self._target_stack.addWidget(self.callers_edit)
+        self._target_stack.setMaximumHeight(140)
+        self.targets_edit.setMaximumHeight(120)
+        self.callers_edit.setMaximumHeight(120)
         lc_l.addWidget(self._target_stack, 1)
         # Keep test_runner_view's old import-from-locals path happy
         # (some code paths reference QStackedWidget via the local
@@ -606,9 +632,12 @@ class TestRunnerView(QMainWindow):
         right_l.addWidget(self.table, 1)
         split.addWidget(right_card)
 
-        split.setStretchFactor(0, 35)
-        split.setStretchFactor(1, 65)
-        split.setSizes([320, 600])
+        # Vertical split: top (targets/callers) compact, bottom (results)
+        # flexes. Stretch + initial sizes give the results table ~80%
+        # of the body on the default window.
+        split.setStretchFactor(0, 0)
+        split.setStretchFactor(1, 1)
+        split.setSizes([130, 600])
         outer.addWidget(split, 1)
 
         # ===== Sticky footer ==========================================
