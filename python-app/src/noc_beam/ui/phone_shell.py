@@ -747,6 +747,39 @@ class PhoneShell(QMainWindow):
         ):
             self._signals.bind(sig, slot)
 
+    def _on_sip_endpoint_started(self) -> None:
+        """Slot for sip_events().endpoint_started.
+
+        Sets the status banner and re-fires _on_supplier_changed with the
+        currently-selected supplier so any swap that was attempted (and
+        skipped) during startup -- before the endpoint was ready -- is
+        applied cleanly now. _on_supplier_changed guards itself against
+        no-op cases (username/auth_user already match the supplier UID,
+        which is the common path because _start_sip ->
+        _add_account_to_endpoint -> _ensure_teles_supplier_identity
+        already materialised the right username on the first add), so
+        this is a cheap recovery hook rather than a duplicate add.
+        """
+        self._set_status("Ready", "ok")
+        try:
+            combo = getattr(self, "supplier_combo", None)
+            if combo is None:
+                return
+            idx = combo.currentIndex()
+            if idx < 0:
+                return
+            # Defer to the next event-loop tick so we don't block the
+            # endpoint_started emission stack (some subscribers expect a
+            # quick return). The supplier-swap path itself does I/O
+            # (load_suppliers + add_account); running it inline from a
+            # signal slot is the kind of long re-entrant call that has
+            # bitten this file before.
+            QTimer.singleShot(
+                0, lambda i=idx: self._on_supplier_changed(i)
+            )
+        except Exception:
+            log.exception("Post-startup supplier re-fire failed")
+
     def _set_status(self, text, level="muted", link_text="", link_action="",
                      transient: bool = False):
         # Prepend a coloured dot glyph so the registration / endpoint
