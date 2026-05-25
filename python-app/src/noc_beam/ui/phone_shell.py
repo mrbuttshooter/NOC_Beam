@@ -1914,8 +1914,14 @@ class PhoneShell(QMainWindow):
         # call it again here or every update fires the diff-pass twice.
 
     def _on_call_record_removed(self, call_id):
-        if call_id == self._selected_call_id:
-            self._selected_call_id = None
+        # Hide/repoint the main card when the removed call is the selected
+        # one OR when the card is still showing it (the two can drift apart
+        # when teardown races state changes -- which left the call card
+        # stuck on screen after a hangup).
+        widget_showing = getattr(self.call_widget, "call_id", None) == call_id
+        if call_id == self._selected_call_id or widget_showing:
+            if call_id == self._selected_call_id:
+                self._selected_call_id = None
             next_active = self.calls.first_active()
             if next_active is not None: self._select_call(next_active.call_id)
             else:
@@ -2043,15 +2049,32 @@ class PhoneShell(QMainWindow):
         try:
             call = ep.make_call(self._active_account_id, target)
             cid = call.getInfo().id
-            self.calls.register(CallRecord(
-                call_id=cid, account_id=self._active_account_id,
-                account_label=self._account_label(self._active_account_id),
-                remote_uri=target,
-                dialed_uri=display_target,
-                supplier_id=supplier_id,
-                supplier_label=supplier_label,
-                direction="out",
-            ))
+            # make_call fires onCallState(CALLING) reentrantly on this
+            # thread, so _on_call_state may have already registered a
+            # bare record for `cid`. Enrich that record in place instead
+            # of re-registering (which logged "duplicate call_id" and
+            # silently dropped the supplier/dialed metadata -> CDRs lost
+            # the supplier and dialed number).
+            existing = self.calls.get(cid)
+            if existing is None:
+                self.calls.register(CallRecord(
+                    call_id=cid, account_id=self._active_account_id,
+                    account_label=self._account_label(self._active_account_id),
+                    remote_uri=target,
+                    dialed_uri=display_target,
+                    supplier_id=supplier_id,
+                    supplier_label=supplier_label,
+                    direction="out",
+                ))
+            else:
+                existing.account_id = self._active_account_id
+                existing.account_label = self._account_label(self._active_account_id)
+                existing.remote_uri = existing.remote_uri or target
+                existing.dialed_uri = display_target
+                existing.supplier_id = supplier_id
+                existing.supplier_label = supplier_label
+                existing.direction = "out"
+                self.calls.call_updated.emit(cid)
             self.calls.update_state(cid, CallState.CALLING)
             self._select_call(cid); self.dialpad.set_in_call(True)
             self.bottom_tabs.select(int(Tab.DIALPAD))
@@ -2622,7 +2645,16 @@ class PhoneShell(QMainWindow):
         try:
             live = SipEndpoint.instance().find_call(call_id)
             if live is not None:
+                log.info("hangup_one: tearing down call %s (state=%s)", call_id, rec.state)
                 SipEndpoint.instance().hangup_call(live)
+            else:
+                # No live SipCall for this id means no CANCEL/BYE can be
+                # sent -- the far end is left hanging. Surface it instead
+                # of silently faking a local teardown.
+                log.error(
+                    "hangup_one: find_call(%s) returned None (state=%s) -- "
+                    "no CANCEL/BYE sent on the wire", call_id, rec.state,
+                )
             self._finish_call_locally(call_id, code, "Local hangup")
         except Exception:
             log.exception("hangup_one failed for call %s", call_id)

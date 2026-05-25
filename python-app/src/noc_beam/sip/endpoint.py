@@ -875,44 +875,55 @@ class SipEndpoint:
         call.answer(prm)
 
     def hangup_call(self, call: SipCall, code: int | None = None) -> None:
-        """Terminate a call with the right SIP status code for its state.
+        """Terminate a call with the right SIP method for its state.
 
         SIP semantics:
-          * CONFIRMED dialog -> BYE with 200 (normal completion)
-          * CALLING / EARLY  -> CANCEL (pjsua2 emits CANCEL on hangup
-            of a non-confirmed dialog regardless of statusCode, but we
-            tag 487 Request Terminated for clean CDR/trace output)
-          * INCOMING ringing -> 486 Busy Here is the polite default
+          * CONFIRMED dialog        -> BYE
+          * CALLING / EARLY (UAC)   -> CANCEL
+          * INCOMING ringing (UAS)  -> 486 Busy Here is the polite default
           * Caller explicitly passes 603 only when REJECTING an incoming
 
-        Default-was-603 was a long-standing bug: CDRs/SIP-traces showed
-        every normal hangup as Decline; CUCM and BroadWorks dialplans
-        branch on 603 (forward-on-decline) so this was wire-protocol
-        wrong. Pick the code from the call's current state.
+        CRITICAL: for an outbound (UAC) early dialog we must NOT push a
+        final-response code (e.g. 487) into CallOpParam.statusCode. On
+        PJSIP 2.14.1 that makes pjsip_inv_end_session take the UAS
+        response branch -- it tears down local media but never puts the
+        CANCEL on the wire, so the far end keeps ringing forever (the
+        call "stays calling" after the user hangs up). statusCode 0 is
+        the documented pjsua2 idiom for "let the stack pick CANCEL vs
+        BYE", which emits a clean CANCEL for early dialogs.
         """
-        if code is None:
-            try:
-                # int() wrap is defensive: some pjsua2 SWIG/Cython
-                # builds return a wrapped enum object whose __eq__ vs
-                # int silently returns False. Without the wrap, every
-                # comparison falls through to the else branch below
-                # and an INCOMING call gets answered with 200 OK then
-                # immediately BYE'd instead of being properly rejected
-                # with 486 Busy Here.
-                state = int(call.getInfo().state)
-            except Exception:
-                state = -1
-            # pjsua2 PJSIP_INV_STATE_* numbers. 5 = CONFIRMED.
-            if state == 5:
-                code = 200
-            elif state in (1, 3, 4):  # CALLING, EARLY, CONNECTING
-                code = 487
-            elif state == 2:  # INCOMING (we're the callee)
-                code = 486
-            else:
-                code = 200
+        explicit = code is not None
+        try:
+            # int() wrap is defensive: some pjsua2 SWIG/Cython builds
+            # return a wrapped enum whose __eq__ vs int returns False.
+            state = int(call.getInfo().state)
+        except Exception:
+            state = -1
+
         prm = pj.CallOpParam(True)
-        prm.statusCode = code
+        if explicit:
+            # Caller knows exactly what response it wants (e.g. 603
+            # Decline / 486 Busy when rejecting an incoming call).
+            prm.statusCode = code
+            log.info("hangup_call: explicit code=%s (state=%s)", code, state)
+            call.hangup(prm)
+            return
+
+        # pjsua2 PJSIP_INV_STATE_* numbers: 1=CALLING 3=EARLY 4=CONNECTING.
+        if state in (1, 3, 4):
+            # Outbound early dialog -> bare CANCEL. Leave statusCode 0
+            # so pjsip_inv_end_session emits CANCEL, not a UAS response.
+            log.info("hangup_call: early UAC dialog (state=%s) -> CANCEL", state)
+            call.hangup(prm)
+            return
+        if state == 2:  # INCOMING (we're the callee) -> polite busy
+            prm.statusCode = 486
+            log.info("hangup_call: incoming (state=2) -> 486 Busy Here")
+            call.hangup(prm)
+            return
+        # CONFIRMED (5) or unknown -> normal BYE. statusCode 0 lets the
+        # stack send BYE; do not force 603 (CUCM/BroadWorks branch on it).
+        log.info("hangup_call: state=%s -> BYE", state)
         call.hangup(prm)
 
     def hold_call(self, call: SipCall) -> None:
