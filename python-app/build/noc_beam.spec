@@ -43,8 +43,15 @@ if native_pkg.exists():
 # --fas-smoke at runtime will report missing files.
 fas_models_dir = SRC / "noc_beam" / "audio" / "models"
 if fas_models_dir.exists():
-    for f in fas_models_dir.glob("*.onnx"):
-        datas.append((str(f), "noc_beam/audio/models"))
+    # Collect all model-adjacent files. ONNX models stored in the
+    # external-data format (e.g. Cnn14_16k.onnx + Cnn14_16k.onnx.data)
+    # fail to load at runtime with "External data path does not exist"
+    # unless the sidecar is bundled next to the .onnx. Also collect
+    # *.bin and *.weights defensively in case other models use those
+    # sidecar naming conventions.
+    for pattern in ("*.onnx", "*.onnx.data", "*.bin", "*.weights"):
+        for f in fas_models_dir.glob(pattern):
+            datas.append((str(f), "noc_beam/audio/models"))
 
 chromaprint_dir = SRC / "noc_beam" / "_native" / "chromaprint"
 if chromaprint_dir.exists():
