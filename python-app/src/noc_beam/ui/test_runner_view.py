@@ -1256,20 +1256,25 @@ class TestRunnerView(QMainWindow):
 
     def _spec_from_ui(self) -> PlanSpec:
         # Pass criterion in the spec stays as the legacy "reachability"
-        # / "full-call" literal so the runner (Agent A's lane) doesn't
-        # need to learn a new value. FAS Verdict in the UI maps to
-        # reachability under the hood (FAS scoring is layered on top
-        # of the runner's reachability semantics).
+        # / "full-call" literal so the runner doesn't need to learn a
+        # new value. FAS Verdict in the UI maps to full-call with a
+        # ≥13 s hold — the FAS worker scoring schedule is [4, 8, 13] s
+        # after CONFIRMED (see audio/fas_worker.py:SCORE_TIMES_S), so
+        # shorter holds give the model no audio to score. Previously
+        # this mapped to "reachability", which hung up on 180/200 and
+        # tore the FAS tap down before it captured >1 PJSIP frame.
         pc = self.pass_combo.currentData() or "reachability"
+        hold_s = float(self.hold_spin.value())
         if pc == "fas-verdict":
-            pc = "reachability"
+            pc = "full-call"
+            hold_s = max(hold_s, 13.0)
         return PlanSpec(
             callers=normalise_lines(self.callers_edit.toPlainText()),
             targets=normalise_lines(self.targets_edit.toPlainText()),
             mode=self.mode_combo.currentData(),
             pass_criterion=pc,
             parallel=_PINNED_PARALLEL,
-            hold_seconds=float(self.hold_spin.value()),
+            hold_seconds=hold_s,
             timeout_seconds=float(self.timeout_spin.value()),
             times=int(self.times_spin.value()),
             tries_per_pair=self._tries_per_pair_value(),

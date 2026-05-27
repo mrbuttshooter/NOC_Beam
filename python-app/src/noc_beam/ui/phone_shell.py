@@ -1745,7 +1745,6 @@ class PhoneShell(QMainWindow):
     def _attach_fas_to_call_media(self, call_id, codec):
         try:
             from noc_beam.audio.fas_engine import attach_fas_to_call
-            from noc_beam.sip.endpoint import SipEndpoint  # idempotent
             live = SipEndpoint.instance().find_call(call_id)
             if live is None:
                 return
@@ -1802,7 +1801,6 @@ class PhoneShell(QMainWindow):
         # answered call that isn't selected stays silent both ways
         # instead of blaring through the speakers.
         try:
-            from noc_beam.sip.endpoint import SipEndpoint
             ep = SipEndpoint.instance()
             ep.set_call_audio_focus(self._selected_call_id)
         except Exception:
