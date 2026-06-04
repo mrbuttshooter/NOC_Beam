@@ -243,6 +243,7 @@ if (-not $SkipNativeBuild -and -not (Test-Path "$NativeOut\_pjsua2.pyd")) {
 #define PJ_ENABLE_EXTRA_CHECK       1
 #define PJSUA_MAX_ACC               32
 #define PJSUA_MAX_CALLS             16
+#define PJSIP_HAS_100REL            0
 #include <pj/config_site_sample.h>
 "@ | Set-Content -Encoding ASCII $ConfigSite
     }

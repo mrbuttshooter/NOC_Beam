@@ -116,6 +116,14 @@ Create `pjlib\include\pj\config_site.h`:
 #define PJ_ENABLE_EXTRA_CHECK       1
 #define PJSUA_MAX_ACC               32
 #define PJSUA_MAX_CALLS             16
+// 100rel/PRACK OFF. Field traces (2026-06) showed the Teles Communi5 SBC,
+// once it sees Supported: 100rel, switches the call into a reliable-
+// provisional / 183-early-media path and then never delivers the final
+// response (e.g. the callee's 486 reject) -- calls hung until cancelled
+// manually. The legacy eyeBeam tool does not offer 100rel and gets a
+// clean 486 on the same switch. pjsua2's Python API can't drop the
+// globally-advertised capability, so disable it at the pjsip build level.
+#define PJSIP_HAS_100REL            0
 #include <pj/config_site_sample.h>
 ```
 
