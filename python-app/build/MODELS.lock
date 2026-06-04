@@ -27,24 +27,38 @@
 #   - NOTE: the .onnx.data sidecar MUST sit next to the .onnx or the
 #           InferenceSession fails. The spec globs *.onnx.data for this.
 #
-# aasist.onnx            anti-spoof / false-answer (PRIMARY)       *** MISSING ***
-#   - input : float32 PCM, 4 s @ 16 kHz = 64000 samples, shape (1, 64000)
-#   - output: logits, softmax over 2 classes; index 1 = spoof,
-#             index 0 = bonafide  (see audio/fas_models.py AasistDetector)
-#   - role  : this is the model that actually decides "false answer /
-#             synthetic / recorded audio". Without it the ensemble is
-#             VAD + event-classification only and verdicts collapse to
-#             INCONCLUSIVE (~0.15 confidence) no matter how much audio is
-#             captured. Flagged in LOGIC_REVIEW_2026-05-25.md and
-#             confirmed in field logs (2026-06).
-#   - ACTION: obtain a vetted AASIST ONNX export matching the I/O contract
-#             above (ASVspoof-trained, e.g. clovaai/aasist exported to
-#             ONNX), verify it loads + scores on a known bonafide/spoof
-#             pair, then drop it in at
-#             src/noc_beam/audio/models/aasist.onnx and rebuild.
-#             DO NOT bundle an unverified checkpoint into a production
-#             fraud-detection build.
+# aasist.onnx            anti-spoof / false-answer (PRIMARY)       PRESENT
+#   - input : float32 PCM, 4.04 s @ 16 kHz = 64600 samples, shape (1, 64600)
+#             (AASIST positional embeddings are FIXED to nb_samp=64600;
+#              feeding any other length is rejected by onnxruntime)
+#   - output: logits, shape (1, 2). softmax over 2 classes;
+#             index 0 = spoof, index 1 = bonafide.
+#             VERIFIED against clovaai main.py produce_evaluation_file:
+#             `_, batch_out = model(x); score = batch_out[:, 1]` is the
+#             bonafide / CM score -> idx 1 = bonafide. AasistDetector
+#             returns softmax[0] (spoof prob) accordingly.
+#   - role  : the model that actually decides "false answer / synthetic /
+#             recorded audio". Without it the ensemble is VAD + event-
+#             classification only and verdicts collapse to INCONCLUSIVE
+#             (~0.15) regardless of captured audio. Flagged in
+#             LOGIC_REVIEW_2026-05-25.md, confirmed in field logs 2026-06.
+#   - source: clovaai/aasist (MIT), models/weights/AASIST.pth
+#             checkpoint sha256:
+#               51d2d9cf0738172f61e2a384ec50a54a55363240f67c971ed55a92435bc1a1c0
+#             exported -> aasist.onnx (self-contained, weights inline) sha256:
+#               03972ac4e5f714c0dfa340bbacff3ef407fa9643388dd2aedcce4fc8cac4d43e
+#   - rebuild: python build/export_aasist_onnx.py   (downloads the MIT
+#             checkpoint by pinned SHA, loads it with weights_only=True so
+#             only tensors are read and no embedded code can run, then
+#             exports + parity-checks the ONNX). torch is used ONLY by that
+#             script, never bundled into the app.
+#   - NOTE  : the ONNX export is verified faithful to the PyTorch model
+#             (logit parity < 1e-3). It is NOT yet accuracy-validated on a
+#             labelled ASVspoof eval set in-tree -- spoof scores are
+#             sound in direction (noise/synthetic -> high spoof) but a
+#             formal EER check against held-out data is still advisable.
 # ---------------------------------------------------------------------------
 #
-# Once a trusted download URL exists for any model, add it here and extend
-# build/fetch_fas_models.py to fetch + checksum it at build time.
+# All three models load at FAS engine start; a missing one triggers the
+# "FAS DEGRADED MODE" error log (audio/fas_engine._log_model_inventory)
+# and the spec's "FAS DEGRADED BUILD" banner.

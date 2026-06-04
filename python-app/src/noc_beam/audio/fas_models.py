@@ -167,8 +167,13 @@ class AasistDetector(_BaseModel):
             x = samples.astype(np.float32) / 32768.0
         else:
             x = samples.astype(np.float32, copy=False)
-        # AASIST typically expects 4 seconds at 16 kHz = 64000 samples.
-        target = 64000
+        # AASIST expects exactly nb_samp = 64600 samples at 16 kHz: the
+        # model's positional embeddings (pos_S / pos_T) are fixed-size
+        # tensors derived from that length, so the ONNX input axis is
+        # pinned to 64600. Feeding 64000 (the old value) makes onnxruntime
+        # reject the tensor -> inference returns None and AASIST silently
+        # contributes nothing. Pad/trim to 64600.
+        target = 64600
         if x.size < target:
             x = np.pad(x, (0, target - x.size))
         else:
@@ -179,13 +184,20 @@ class AasistDetector(_BaseModel):
             input_name = inputs[0].name if inputs else "input"
             out = self._sess.run(None, {input_name: x})
             logits = out[0].squeeze()
-            # AASIST convention: index 1 = spoof, index 0 = bonafide.
+            # AASIST 2-class output convention (verified against clovaai's
+            # eval code, which uses batch_out[:, 1] as the bonafide / CM
+            # score): index 0 = spoof, index 1 = bonafide. We return the
+            # SPOOF probability, so take softmax[0]. The previous code
+            # returned softmax[1] -- the bonafide prob -- which INVERTED
+            # every verdict (genuine calls flagged fraud and vice versa).
             if logits.ndim == 0:
+                # Single-logit fallback (shouldn't happen for AASIST):
+                # treat the lone logit as P(spoof) via sigmoid.
                 return float(1.0 / (1.0 + np.exp(-logits)))
             ex = np.exp(logits - np.max(logits))
             sm = ex / ex.sum()
             if sm.size >= 2:
-                return float(sm[1])
+                return float(sm[0])
             return float(sm[0])
         except Exception:
             log.exception("AasistDetector inference failed")
