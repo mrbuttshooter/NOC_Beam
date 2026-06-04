@@ -105,6 +105,19 @@ if PJSUA2_AVAILABLE:
             ac = pj.AccountConfig()
             cfg = self.cfg
 
+            # Do NOT offer RFC 4028 session timers. Matched SIP traces on
+            # the SAME Teles route showed the legacy eyeBeam tool (which
+            # sends NO Session-Expires/Supported:timer) completes the call
+            # to the callee and gets a clean 486/BYE, while NOC_Beam --
+            # which offered session timers -- stalled at 183 early-media and
+            # never reached the callee (so no reject ever came and the call
+            # hung). Disabling session timers makes our INVITE match
+            # eyeBeam's minimal profile. Guarded for older pjsua2 builds.
+            try:
+                ac.callConfig.timerUse = pj.PJSUA_SIP_TIMER_INACTIVE
+            except Exception:
+                pass
+
             # Append :port when the user set a non-default port. Without
             # this the per-account port field in the dialog was decorative.
             port = int(getattr(cfg, "port", 0) or 0)
