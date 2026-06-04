@@ -250,7 +250,16 @@ class SipEndpoint:
                         if getattr(acc.cfg, "register", True):
                             acc.setRegistration(False)
                     except Exception:
-                        log.exception("Un-register on stop failed for %s", acc.cfg.id)
+                        # IP-authenticated trunks (no REGISTER support, 405)
+                        # were never registered, so un-REGISTER on shutdown
+                        # always throws here. That's benign teardown noise,
+                        # not a failure -- log at debug, not exception, so
+                        # it stops surfacing a scary stack on every clean
+                        # exit. Accounts that DID register still un-register
+                        # fine above this line.
+                        log.debug("Un-register on stop skipped for %s "
+                                  "(likely never registered)", acc.cfg.id,
+                                  exc_info=True)
                 if self._ep is not None:
                     deadline = time.monotonic() + 1.5
                     while time.monotonic() < deadline:
@@ -1158,7 +1167,21 @@ class SipEndpoint:
         if method == "info":
             self._send_dtmf_info(call, digits)
         else:
-            call.dialDtmf(digits)
+            # RFC2833 / inband path. pjsua2's dialDtmf raises pjsua2.Error
+            # when the negotiated media has no telephone-event (RFC 4733)
+            # format -- common on IP-trunk routes that answer with an
+            # early-media announcement and never offer telephone-event.
+            # Field logs showed every keypress dying as "send_dtmf failed"
+            # with no digit ever reaching the IVR. Fall back to SIP INFO so
+            # the digit still gets out instead of being silently dropped.
+            try:
+                call.dialDtmf(digits)
+            except Exception:
+                log.warning(
+                    "RFC2833 DTMF failed (no telephone-event negotiated?); "
+                    "falling back to SIP INFO for %d digit(s)", len(digits),
+                )
+                self._send_dtmf_info(call, digits)
 
     def _send_dtmf_info(self, call: SipCall, digits: str) -> None:
         """One SIP INFO per digit with an `application/dtmf-relay` body.

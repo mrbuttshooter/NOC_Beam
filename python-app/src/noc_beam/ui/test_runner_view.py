@@ -1692,11 +1692,16 @@ class TestRunnerView(QMainWindow):
             wl.addWidget(placeholder)
             self.table.setCellWidget(row, 4, wrapper)
             return
-        badge = FasBadge(verdict)
-        badge.update_verdict(verdict, confidence, reasons)
+        # Parent the badge to its wrapper at construction time. Creating it
+        # parentless (then reparenting via addWidget) made it a transient
+        # top-level window, which the orphan-window watchdog flagged on
+        # every verdict update -- 92 "[ORPHAN-WINDOW] FasBadge" lines in a
+        # single field session. Build the wrapper first, pass it as parent.
         wrapper = QWidget()
         wl = QHBoxLayout(wrapper)
         wl.setContentsMargins(6, 2, 6, 2)
+        badge = FasBadge(verdict, wrapper)
+        badge.update_verdict(verdict, confidence, reasons)
         wl.addWidget(badge)
         self.table.setCellWidget(row, 4, wrapper)
 

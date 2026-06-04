@@ -1,0 +1,50 @@
+# FAS model manifest / drop-in contract
+#
+# The FAS (False Answer Supervision) engine is an ensemble of three ONNX
+# models. They live in:
+#
+#     python-app/src/noc_beam/audio/models/
+#
+# and are bundled by build/noc_beam.spec, which globs *.onnx and
+# *.onnx.data from that directory. The models are .gitignored (large
+# binaries), so they are NOT in the repo and must be present in that
+# directory at build time. A build with a model missing still runs, but
+# in DEGRADED mode (see noc_beam.audio.fas_engine._log_model_inventory,
+# which logs "FAS DEGRADED MODE" at engine start).
+#
+# Format per entry:
+#   filename       required role                                  status
+#
+# ---------------------------------------------------------------------------
+# silero_vad.onnx        voice-activity detection                  PRESENT
+#   - input : float32 PCM, 16 kHz mono
+#   - source: Silero VAD (snakers4/silero-vad), ONNX export
+#
+# Cnn14_16k.onnx         audio-event classification (PANNs)        PRESENT
+#   + Cnn14_16k.onnx.data  (external-weights sidecar, ~327 MB)
+#   - input : float32 PCM, 16 kHz mono
+#   - source: PANNs Cnn14 16 kHz, ONNX export with external data
+#   - NOTE: the .onnx.data sidecar MUST sit next to the .onnx or the
+#           InferenceSession fails. The spec globs *.onnx.data for this.
+#
+# aasist.onnx            anti-spoof / false-answer (PRIMARY)       *** MISSING ***
+#   - input : float32 PCM, 4 s @ 16 kHz = 64000 samples, shape (1, 64000)
+#   - output: logits, softmax over 2 classes; index 1 = spoof,
+#             index 0 = bonafide  (see audio/fas_models.py AasistDetector)
+#   - role  : this is the model that actually decides "false answer /
+#             synthetic / recorded audio". Without it the ensemble is
+#             VAD + event-classification only and verdicts collapse to
+#             INCONCLUSIVE (~0.15 confidence) no matter how much audio is
+#             captured. Flagged in LOGIC_REVIEW_2026-05-25.md and
+#             confirmed in field logs (2026-06).
+#   - ACTION: obtain a vetted AASIST ONNX export matching the I/O contract
+#             above (ASVspoof-trained, e.g. clovaai/aasist exported to
+#             ONNX), verify it loads + scores on a known bonafide/spoof
+#             pair, then drop it in at
+#             src/noc_beam/audio/models/aasist.onnx and rebuild.
+#             DO NOT bundle an unverified checkpoint into a production
+#             fraud-detection build.
+# ---------------------------------------------------------------------------
+#
+# Once a trusted download URL exists for any model, add it here and extend
+# build/fetch_fas_models.py to fetch + checksum it at build time.

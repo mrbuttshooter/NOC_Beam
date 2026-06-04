@@ -52,6 +52,23 @@ if fas_models_dir.exists():
     for pattern in ("*.onnx", "*.onnx.data", "*.bin", "*.weights"):
         for f in fas_models_dir.glob(pattern):
             datas.append((str(f), "noc_beam/audio/models"))
+    # Loud build-time check: a FAS build missing the anti-spoof model is
+    # degraded (verdicts collapse to INCONCLUSIVE). Announce it on every
+    # build so shipping a degraded bundle is a deliberate choice, never a
+    # silent accident. See build/MODELS.lock for the model contract.
+    _required_models = ("silero_vad.onnx", "aasist.onnx", "Cnn14_16k.onnx")
+    _missing_models = [m for m in _required_models
+                       if not (fas_models_dir / m).exists()]
+    if _missing_models:
+        print("=" * 70)
+        print("  *** WARNING: FAS DEGRADED BUILD ***")
+        print("  Missing model(s):", ", ".join(_missing_models))
+        if "aasist.onnx" in _missing_models:
+            print("  aasist.onnx is the PRIMARY anti-spoof signal -- without")
+            print("  it FAS verdicts are unreliable. See build/MODELS.lock.")
+        print("=" * 70)
+    else:
+        print("FAS models OK: all of", ", ".join(_required_models), "bundled.")
 
 chromaprint_dir = SRC / "noc_beam" / "_native" / "chromaprint"
 if chromaprint_dir.exists():

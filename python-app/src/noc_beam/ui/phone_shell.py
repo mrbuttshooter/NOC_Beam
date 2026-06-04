@@ -1633,6 +1633,15 @@ class PhoneShell(QMainWindow):
         elif code in (401, 403, 407, 423):
             self._set_status(f"Account: {label} -- auth failed ({code})", "warn",
                              "Click here to retry", "retry-register")
+        elif code == 405:
+            # 405 Method Not Allowed means the registrar refuses REGISTER
+            # entirely -- the hallmark of an IP-authenticated trunk (e.g.
+            # Teles UK/NY: "no password -- assuming IP-based auth"). This is
+            # expected and permanent, not a fault; registration_retry
+            # already declines to retry it. Log at INFO so it stops
+            # spamming the WARN stream on every account add / reconnect.
+            log.info("Account %s does not support REGISTER (405) -- "
+                     "treating as IP-authenticated trunk", label)
         else:
             # Operator deployment: their switches don't support REGISTER, so
             # non-auth registration failures (408/5xx) are expected and the

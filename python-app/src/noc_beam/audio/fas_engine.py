@@ -51,6 +51,49 @@ def start_fas_engine(enabled: bool = True) -> None:
         w.start()
         _worker_started = True
         log.info("FAS engine started")
+        _log_model_inventory()
+
+
+def _log_model_inventory() -> None:
+    """Report which FAS models are bundled, loudly flagging a degraded
+    build. AASIST is the anti-spoof / false-answer discriminator; without
+    it the ensemble is just VAD + audio-event classification and verdicts
+    collapse toward INCONCLUSIVE regardless of how much audio is captured
+    (field logs showed conf pinned at 0.15 on a 33 s call with >1 MB of
+    PCM). This warning makes a degraded build a deliberate, visible
+    choice instead of a silent one-line warning buried mid-session.
+    """
+    try:
+        from noc_beam.audio.models import model_path
+    except Exception:
+        return
+    required = {
+        "silero_vad.onnx": "voice-activity detection",
+        "aasist.onnx": "anti-spoof / false-answer (PRIMARY FAS signal)",
+        "Cnn14_16k.onnx": "audio-event classification",
+    }
+    present, missing = [], []
+    for fname, role in required.items():
+        try:
+            ok = model_path(fname).exists()
+        except Exception:
+            ok = False
+        (present if ok else missing).append((fname, role))
+    for fname, role in present:
+        log.info("FAS model present: %s (%s)", fname, role)
+    if missing:
+        names = ", ".join(f for f, _ in missing)
+        log.error(
+            "FAS DEGRADED MODE: missing model(s) [%s]. Verdicts will be "
+            "unreliable. Drop the file(s) into noc_beam/audio/models/ and "
+            "rebuild. See build/MODELS.lock for the required model contract.",
+            names,
+        )
+        if any(f == "aasist.onnx" for f, _ in missing):
+            log.error(
+                "FAS: aasist.onnx absent -> NO anti-spoof signal; FAS "
+                "cannot confidently flag false-answer/synthetic audio.",
+            )
 
 
 def stop_fas_engine() -> None:
