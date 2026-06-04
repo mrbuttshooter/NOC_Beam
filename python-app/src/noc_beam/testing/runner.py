@@ -16,7 +16,7 @@ from noc_beam.testing.plan import TestCall, TestSpec, expand
 @dataclass
 class TestResult:
     call: TestCall
-    result: Literal["PASS", "FAIL"]
+    result: Literal["PASS", "FAIL", "ERROR"]
     sip_code: int | None
     sip_reason: str
     rtt_ms: float | None
@@ -156,6 +156,11 @@ class TestRunner(QObject):
         # correctly. Was previously created lazily via getattr.
         self._dispatching = False
         self._run_complete_emitted = False
+        # CPS pacing: monotonic timestamp of the last dispatch + the
+        # pending re-arm timer. Used to enforce spec.max_cps so a fast-
+        # failing route can't make the runner hammer the trunk.
+        self._last_dispatch_mono: float | None = None
+        self._pacing_timer: QTimer | None = None
         # Cache of the last FAS verdict seen per call_id, so we can write
         # the verdict into TestResult at completion time (CallManager
         # record is dropped on DISCONNECTED before we finalise).
@@ -259,6 +264,15 @@ class TestRunner(QObject):
             while self._queue and self._slots_in_use() < self.spec.parallel:
                 if self._cancelled:
                     return
+                # CPS pacing: if we dialled too recently, re-arm after the
+                # remaining gap instead of dialling now. This throttles
+                # both the initial burst and the re-dial-on-completion path
+                # (a 503 that returns in <50ms freed a slot and the runner
+                # immediately re-dialled, sustaining trunk congestion).
+                wait_s = self._dispatch_wait_remaining()
+                if wait_s > 0:
+                    self._arm_paced_refill(wait_s)
+                    return
                 # Per-target serialization: never dispatch a call whose
                 # target URI already has an in-flight call. With N
                 # distinct targets, this caps effective parallelism at
@@ -273,9 +287,29 @@ class TestRunner(QObject):
                     # A completion event will re-trigger _fill_slots.
                     return
                 self._dispatch_one_call(call)
+                self._last_dispatch_mono = time.monotonic()
                 self._yield_to_event_loop()
         finally:
             self._dispatching = False
+
+    def _dispatch_wait_remaining(self) -> float:
+        """Seconds to wait before the next dial is allowed under max_cps.
+        0.0 when pacing is disabled or enough time has already elapsed."""
+        cps = float(getattr(self.spec, "max_cps", 0.0) or 0.0)
+        if cps <= 0.0 or self._last_dispatch_mono is None:
+            return 0.0
+        interval = 1.0 / cps
+        elapsed = time.monotonic() - self._last_dispatch_mono
+        return max(0.0, interval - elapsed)
+
+    def _arm_paced_refill(self, wait_s: float) -> None:
+        """Re-post _fill_slots after `wait_s` so dispatch resumes within
+        the CPS budget. Only one pacing timer is ever pending because the
+        caller returns immediately after arming."""
+        timer = self._make_timer(wait_s)
+        timer.timeout.connect(self._fill_slots)
+        self._pacing_timer = timer
+        timer.start()
 
     @staticmethod
     def _yield_to_event_loop() -> None:
@@ -437,8 +471,28 @@ class TestRunner(QObject):
         # already handled below.
         if code in (401, 407):
             return
+        # Transport / local PJSIP failure (e.g. "End of file (PJ_EEOF)" when
+        # the shared TCP connection to the SBC is closed). pjsua2 surfaces
+        # these as a synthetic 503, but the supplier never rejected the
+        # call -- the socket died under us. Classify as ERROR (a test-
+        # harness/transport artefact) so it is NOT counted against the
+        # route's success rate or blamed on the supplier. Check BEFORE the
+        # 4xx-6xx branch because the synthetic code is 503.
+        if self._is_transport_error(reason):
+            self._complete_active(
+                active, "ERROR", code, reason,
+                "transport drop (connection closed) — not a supplier reject",
+            )
+            if state == "DISCONNECTED":
+                self._release_active(active)
+            return
         if 400 <= code <= 699:
-            self._complete_active(active, "FAIL", code, reason, reason)
+            # 503 Service Unavailable is route congestion (typically
+            # Q.850 cause 34 "no circuit/channel available"), not a call
+            # that failed to set up. Label it so results distinguish "the
+            # trunk is full / we paced too hard" from a real reject.
+            notes = "congestion (503 no circuit/channel)" if code == 503 else reason
+            self._complete_active(active, "FAIL", code, reason, notes)
             if state == "DISCONNECTED":
                 self._release_active(active)
             return
@@ -487,14 +541,35 @@ class TestRunner(QObject):
             return
 
         if state == "DISCONNECTED":
-            self._complete_active(
-                active,
-                "FAIL",
-                code or 0,
-                reason or "Disconnected",
-                reason or "Disconnected",
-            )
+            # A bare transport drop can arrive here with code 0 and a
+            # PJSIP error reason -- classify it as ERROR, not a route FAIL.
+            if self._is_transport_error(reason):
+                self._complete_active(
+                    active, "ERROR", code or 0, reason or "Transport error",
+                    "transport drop (connection closed) — not a supplier reject",
+                )
+            else:
+                self._complete_active(
+                    active,
+                    "FAIL",
+                    code or 0,
+                    reason or "Disconnected",
+                    reason or "Disconnected",
+                )
             self._release_active(active)
+
+    @staticmethod
+    def _is_transport_error(reason: str) -> bool:
+        """True when a disconnect reason is a PJSIP/PJLIB internal error
+        (transport-level), not a SIP response from the peer.
+
+        These carry the symbolic error name, e.g. "End of file (PJ_EEOF)",
+        "(PJSIP_ETRANSPORTDISCONNECTED)", "(PJ_ETIMEDOUT)". Real SIP reason
+        phrases ("Service Unavailable", "Busy Here", "Decline", ...) never
+        contain a PJ_E/PJSIP_E token, so this is a safe discriminator.
+        """
+        r = (reason or "").upper()
+        return "PJ_E" in r or "PJSIP_E" in r
 
     def _on_hold_complete(self, call_id: int, code: int, reason: str) -> None:
         active = self._active.get(call_id)
@@ -530,7 +605,7 @@ class TestRunner(QObject):
     def _complete_active(
         self,
         active: _ActiveCall,
-        result: Literal["PASS", "FAIL"],
+        result: Literal["PASS", "FAIL", "ERROR"],
         sip_code: int | None,
         sip_reason: str,
         notes: str,
@@ -615,7 +690,7 @@ class TestRunner(QObject):
         self,
         *,
         call: TestCall,
-        result: Literal["PASS", "FAIL"],
+        result: Literal["PASS", "FAIL", "ERROR"],
         sip_code: int | None,
         sip_reason: str,
         rtt_ms: float | None,

@@ -8,6 +8,14 @@ PassCriterion = Literal["reachability", "full-call"]
 
 _VALID_MODES = ("matrix", "paired", "fan-out", "fan-in", "fas-sweep")
 
+# Default calls-per-second cap applied by the Test Runner UI. The runner
+# itself defaults max_cps=0.0 (unlimited) for backward compatibility, but
+# the view passes this so production runs are paced. A fast-failing route
+# (e.g. 503 "no circuit/channel available" returning in <50ms) otherwise
+# lets the runner re-dial instantly on every freed slot, hammering the
+# trunk and self-inflicting congestion.
+DEFAULT_MAX_CPS = 5.0
+
 
 def _clamp_int(value: int, lo: int, hi: int) -> int:
     try:
@@ -38,11 +46,16 @@ class TestSpec:
     # detection has cooling-off time between probes.
     jitter_low_s: float = 30.0
     jitter_high_s: float = 120.0
+    # Calls-per-second ceiling for dispatch. 0.0 = unlimited (legacy
+    # behaviour). >0 enforces a minimum gap of 1/max_cps between
+    # consecutive dials, on top of the `parallel` concurrency cap.
+    max_cps: float = 0.0
 
     def __post_init__(self) -> None:
         self.parallel = _clamp_int(self.parallel, 1, 16)
         self.hold_seconds = max(self.hold_seconds, 0.0)
         self.timeout_seconds = max(self.timeout_seconds, 0.1)
+        self.max_cps = max(0.0, float(self.max_cps))
         self.times = _clamp_int(self.times, 1, 50)
         self.tries_per_pair = _clamp_int(self.tries_per_pair, 1, 50)
         # Jitter window: keep low <= high; both non-negative.

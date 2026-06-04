@@ -60,7 +60,7 @@ from noc_beam.config.store import AccountConfig
 from noc_beam.config import destinations as destinations_module
 from noc_beam.testing.plan import TestCall as PlanCall
 from noc_beam.testing.plan import TestSpec as PlanSpec
-from noc_beam.testing.plan import expand, normalise_lines
+from noc_beam.testing.plan import DEFAULT_MAX_CPS, expand, normalise_lines
 from noc_beam.testing.runner import TestResult as RunnerResult
 from noc_beam.testing.runner import TestRunner as Runner
 from noc_beam.ui.supplier_dropdown import SupplierDropdown
@@ -1276,6 +1276,9 @@ class TestRunnerView(QMainWindow):
             parallel=_PINNED_PARALLEL,
             hold_seconds=hold_s,
             timeout_seconds=float(self.timeout_spin.value()),
+            # Pace production runs so a fast-failing route (instant 503
+            # congestion) can't make the runner hammer the trunk.
+            max_cps=DEFAULT_MAX_CPS,
             times=int(self.times_spin.value()),
             tries_per_pair=self._tries_per_pair_value(),
             jitter_low_s=float(self.jitter_low_spin.value()),
@@ -1701,7 +1704,7 @@ class TestRunnerView(QMainWindow):
         """Render the RESULT column as a coloured pill badge."""
         # Normalise the level for QSS branching.
         level = result.lower() if result else "queued"
-        if level not in ("pass", "fail", "running", "queued"):
+        if level not in ("pass", "fail", "error", "running", "queued"):
             level = "queued"
         # Clear any previous text item so the cell widget owns the cell.
         self.table.takeItem(row, 3)
@@ -1719,15 +1722,24 @@ class TestRunnerView(QMainWindow):
     def _refresh_summary(self) -> None:
         passed = sum(1 for result in self.results if result.result == "PASS")
         failed = sum(1 for result in self.results if result.result == "FAIL")
+        # Transport/local failures (PJ_EEOF connection drops etc.) are NOT
+        # supplier rejects, so they're counted separately and kept out of
+        # the "failed" total -- otherwise the scorecard blames the route
+        # for a dropped TCP connection.
+        errored = sum(1 for result in self.results if result.result == "ERROR")
         # Running count maintained as an integer (incremented in
         # _on_call_started, decremented in _on_call_completed). Was
         # scanning every table row's findChild(QLabel) on every signal
         # tick -- O(N) per event, quadratic over the whole run.
         running = getattr(self, "_running_count", 0)
-        completed = passed + failed + running
+        completed = passed + failed + errored + running
         pending = max(0, self.table.rowCount() - completed)
         self.summary_passed.setText(f"{passed} passed")
-        self.summary_failed.setText(f"{failed} failed")
+        # Surface errors next to failed without folding them in, so real
+        # supplier rejects stay distinguishable from transport drops.
+        self.summary_failed.setText(
+            f"{failed} failed" + (f" · {errored} error" if errored else "")
+        )
         self.summary_running.setText(f"{running} running")
         self.summary_pending.setText(f"{pending} pending")
 

@@ -513,3 +513,71 @@ def test_every_result_has_consistent_required_fields() -> None:
         assert r.started_at > 0.0
         assert r.from_account == "acc-1"
         assert r.to_uri
+
+
+# ---------- Transport / local PJSIP errors (not supplier rejects) ----------
+@pytest.mark.parametrize("code,reason", [
+    (503, "End of file (PJ_EEOF)"),            # shared TCP connection closed
+    (503, "(PJSIP_ETRANSPORTDISCONNECTED)"),
+    (0, "Timeout (PJ_ETIMEDOUT)"),
+])
+def test_transport_errors_classified_ERROR_not_supplier_fail(code: int, reason: str) -> None:
+    """PJ_EEOF and friends are the local TCP connection dying, not a
+    supplier reject. They must be ERROR (kept out of the FAIL/route
+    success rate), even though pjsua2 surfaces them as a synthetic 503."""
+    events = SipEvents()
+    endpoint = StubEndpoint()
+    runner = Runner(spec(), [account()], endpoint=endpoint, events=events)
+    results: list[RunnerResult] = []
+    runner.call_completed.connect(results.append)
+    runner.start()
+    call_id = first_call_id(endpoint)
+    emit_state(events, endpoint, call_id, "DISCONNECTED", code, reason)
+    wait_for_completed(results)
+    assert results[0].result == "ERROR"
+    assert reason in results[0].sip_reason
+
+
+def test_real_503_congestion_stays_FAIL_not_error() -> None:
+    """A genuine 503 from the supplier (no PJ_E token in the reason) is a
+    route FAIL with a congestion note — NOT reclassified as ERROR."""
+    events = SipEvents()
+    endpoint = StubEndpoint()
+    runner = Runner(spec(), [account()], endpoint=endpoint, events=events)
+    results: list[RunnerResult] = []
+    runner.call_completed.connect(results.append)
+    runner.start()
+    call_id = first_call_id(endpoint)
+    emit_state(events, endpoint, call_id, "DISCONNECTED", 503, "Service Unavailable")
+    wait_for_completed(results)
+    assert results[0].result == "FAIL"
+    assert results[0].sip_code == 503
+    assert "congestion" in results[0].notes.lower()
+
+
+def test_max_cps_paces_dispatch_of_distinct_targets() -> None:
+    """With max_cps set and several distinct targets, the runner must not
+    fire them all in the same instant — consecutive dials are spaced by
+    >= 1/max_cps. Without pacing all 3 dispatch synchronously at start()."""
+    events = SipEvents()
+    endpoint = StubEndpoint()
+    spec_ = RunnerSpec(
+        callers=["1001"],
+        targets=["2001", "2002", "2003"],
+        mode="paired",
+        pass_criterion="reachability",
+        parallel=10,
+        hold_seconds=0.01,
+        timeout_seconds=0.3,
+        max_cps=20.0,  # 50 ms minimum gap between dials
+    )
+    runner = Runner(spec_, [account()], endpoint=endpoint, events=events)
+    runner.start()
+    # First dial fires synchronously inside start(); the next two are
+    # gated behind the pacing timer, so they have NOT all landed yet.
+    assert len(endpoint.dispatched) == 1, (
+        f"pacing failed: {len(endpoint.dispatched)} dials fired in the same instant"
+    )
+    # Let the pacing timers drain; eventually all 3 distinct targets dial.
+    wait_until(lambda: len(endpoint.dispatched) >= 3, timeout_ms=2000)
+    assert len(endpoint.dispatched) >= 3

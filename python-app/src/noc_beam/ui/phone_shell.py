@@ -1682,16 +1682,31 @@ class PhoneShell(QMainWindow):
             self.ringer.start()
 
     def _is_test_runner_call(self, call_id: int) -> bool:
-        if call_id in self._test_runner_call_ids:
-            return True
+        # Reconcile against the LIVE call's origin every time -- do NOT
+        # trust the cache blindly. pjsua2 reuses integer call-id slots, so
+        # a manual call can inherit an id a previous test-runner call left
+        # in _test_runner_call_ids. The old code returned True on a cached
+        # hit without re-checking, so _on_call_state early-returned for the
+        # manual call forever: the manager never recorded CONFIRMED and the
+        # call card froze on "Calling..." while pjsua2 drove the call to
+        # answer on its own.
         try:
             live = SipEndpoint.instance().find_call(call_id)
-            if getattr(live, "origin", "") == "test_runner":
+        except Exception:
+            live = None
+        if live is not None:
+            origin = getattr(live, "origin", "") or ""
+            if origin == "test_runner":
                 self._test_runner_call_ids.add(call_id)
                 return True
-        except Exception:
-            pass
-        return False
+            # Live call exists and is NOT a test-runner call -> the id was
+            # reused. Drop the stale cache entry and treat as a normal call.
+            self._test_runner_call_ids.discard(call_id)
+            return False
+        # No live call (e.g. DISCONNECTED already removed it from acc.calls
+        # before this queued signal ran). Fall back to the cache so a
+        # test-runner call still mid-teardown is routed correctly.
+        return call_id in self._test_runner_call_ids
 
     def _note_fas_call_state(self, call_id: int, new_state: CallState) -> None:
         if new_state == CallState.CONFIRMED:
