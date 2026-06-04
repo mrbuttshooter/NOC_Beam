@@ -116,16 +116,25 @@ Create `pjlib\include\pj\config_site.h`:
 #define PJ_ENABLE_EXTRA_CHECK       1
 #define PJSUA_MAX_ACC               32
 #define PJSUA_MAX_CALLS             16
-// 100rel/PRACK OFF. Field traces (2026-06) showed the Teles Communi5 SBC,
-// once it sees Supported: 100rel, switches the call into a reliable-
-// provisional / 183-early-media path and then never delivers the final
-// response (e.g. the callee's 486 reject) -- calls hung until cancelled
-// manually. The legacy eyeBeam tool does not offer 100rel and gets a
-// clean 486 on the same switch. pjsua2's Python API can't drop the
-// globally-advertised capability, so disable it at the pjsip build level.
-#define PJSIP_HAS_100REL            0
 #include <pj/config_site_sample.h>
 ```
+
+### 5a-bis. Disable 100rel / PRACK advertisement (REQUIRED)
+
+Field traces (2026-06) showed the Teles Communi5 SBC, once it sees
+`Supported: 100rel` on our INVITE, switches the call into a reliable-
+provisional / 183-early-media path and then **never delivers the final
+response** (the callee's 486 reject) — calls hang until cancelled
+manually. The legacy eyeBeam tool advertises neither PRACK nor 100rel and
+gets a clean 486 on the same switch.
+
+There is **no** real `PJSIP_HAS_100REL` macro, so this can't be done from
+`config_site.h`. Patch `pjsip\src\pjsip-ua\sip_100rel.c` — in
+`mod_100rel_load()`, remove (or `#if 0` out) the two
+`pjsip_endpt_add_capability()` calls that add `PRACK` to `Allow` and
+`100rel` to `Supported`. The module still loads (inbound PRACK still
+works); we just stop offering it on outbound requests. `build_windows.ps1`
+applies this patch automatically.
 
 ### 5b. Configure include/lib paths
 

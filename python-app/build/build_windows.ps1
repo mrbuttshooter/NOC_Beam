@@ -243,7 +243,6 @@ if (-not $SkipNativeBuild -and -not (Test-Path "$NativeOut\_pjsua2.pyd")) {
 #define PJ_ENABLE_EXTRA_CHECK       1
 #define PJSUA_MAX_ACC               32
 #define PJSUA_MAX_CALLS             16
-#define PJSIP_HAS_100REL            0
 #include <pj/config_site_sample.h>
 "@ | Set-Content -Encoding ASCII $ConfigSite
     }
@@ -252,6 +251,34 @@ if (-not $SkipNativeBuild -and -not (Test-Path "$NativeOut\_pjsua2.pyd")) {
     $opusCodecText = Get-Content -Raw -Path $OpusCodecSource
     $opusCodecText = $opusCodecText.Replace('#   pragma comment(lib, "libopus.a")', '#   pragma comment(lib, "opus.lib")')
     Set-Content -Encoding ASCII -Path $OpusCodecSource -Value $opusCodecText
+
+    # --- Disable 100rel / PRACK advertisement ---
+    # Field traces (2026-06) proved the Teles Communi5 SBC, once it sees
+    # Supported: 100rel on our INVITE, switches the call into a reliable-
+    # provisional / 183-early-media path and then never delivers the final
+    # response (the callee's 486 reject) -- calls hung until cancelled
+    # manually. The legacy eyeBeam tool advertises neither PRACK nor 100rel
+    # and gets a clean 486 on the same switch. There is NO real
+    # PJSIP_HAS_100REL macro, so we patch sip_100rel.c's mod_100rel_load to
+    # stop adding PRACK (Allow) and 100rel (Supported) as endpoint
+    # capabilities. The module still loads, so inbound PRACK still works; we
+    # just don't OFFER it on outbound requests.
+    $Rel100Source = "pjsip\src\pjsip-ua\sip_100rel.c"
+    $rel100Text = Get-Content -Raw -Path $Rel100Source
+    # Whitespace-tolerant regex: match the two add_capability(...) calls in
+    # mod_100rel_load (PRACK->Allow and 100rel->Supported) regardless of the
+    # exact spacing/newlines pjproject ships. Singleline so . spans lines.
+    $rel100Pattern = 'pjsip_endpt_add_capability\(\s*endpt,\s*&mod_100rel\.mod,\s*PJSIP_H_ALLOW.*?&tag_100rel\s*\)\s*;'
+    $rel100New = '/* NOC_Beam: 100rel/PRACK advertisement disabled (see build script). */'
+    if ($rel100Text -match $rel100Pattern) {
+        $rel100Text = [System.Text.RegularExpressions.Regex]::Replace($rel100Text, $rel100Pattern, $rel100New, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        Set-Content -Encoding ASCII -Path $Rel100Source -Value $rel100Text
+        Write-Host "Patched sip_100rel.c: 100rel/PRACK advertisement removed." -ForegroundColor Green
+    } elseif ($rel100Text -match "NOC_Beam: 100rel/PRACK advertisement disabled") {
+        Write-Host "sip_100rel.c already patched (100rel/PRACK disabled)." -ForegroundColor Green
+    } else {
+        Write-Host "WARNING: sip_100rel.c 100rel block not found; 100rel may still be advertised. Verify manually." -ForegroundColor Yellow
+    }
 
     $env:OPENSSL_DIR = "$ThirdParty\openssl-install"
     $env:BCG729_DIR  = "$ThirdParty\bcg729-install"
