@@ -31,6 +31,12 @@ _enabled = False
 _worker_started = False
 # call_id -> {"tap": FasWavTap, "audio": pj.AudioMedia | None}
 _per_call: dict[int, dict[str, Any]] = {}
+# Guards _per_call. Attach + per-call detach now both run on the Qt main
+# thread (detach was moved out of the PJSIP-thread onCallState), but
+# stop_fas_engine() can iterate during shutdown -- the RLock makes all
+# mutations safe and allows attach() -> _detach_internal() reentry.
+import threading as _threading
+_per_call_lock = _threading.RLock()
 
 
 def is_enabled() -> bool:
@@ -103,7 +109,9 @@ def stop_fas_engine() -> None:
     worker's last poll doesn't reference torn-down buffers.
     """
     global _worker_started, _enabled
-    for call_id in list(_per_call.keys()):
+    with _per_call_lock:
+        _open_ids = list(_per_call.keys())
+    for call_id in _open_ids:
         detach_fas_from_call(call_id)
     fas_router().teardown()
     if _worker_started:
@@ -140,7 +148,9 @@ def attach_fas_to_call(call_id: int, call_audio: Any, **meta: Any) -> None:
         return
     if not PJSUA2_AVAILABLE:
         return
-    if call_id in _per_call:
+    with _per_call_lock:
+        already_attached = call_id in _per_call
+    if already_attached:
         # Re-attach with the new media handle. Don't return early.
         log.info("FAS re-attach call=%s (onCallMediaState fired again)", call_id)
         _detach_internal(call_id, quiet=True)
@@ -169,7 +179,8 @@ def attach_fas_to_call(call_id: int, call_audio: Any, **meta: Any) -> None:
             log.warning("FAS WAV tap start failed for call %s", call_id)
             fas_router().detach(call_id)
             return
-        _per_call[call_id] = {"tap": tap, "audio": call_audio}
+        with _per_call_lock:
+            _per_call[call_id] = {"tap": tap, "audio": call_audio}
         fas_worker().track(call_id)
         log.debug("FAS attached to call %s", call_id)
     except Exception:
@@ -187,7 +198,8 @@ def _detach_internal(call_id: int, *, quiet: bool) -> None:
     failures are logged at debug level since the stale handle is
     expected to be partially broken."""
     fas_worker().untrack(call_id)
-    entry = _per_call.pop(call_id, None)
+    with _per_call_lock:
+        entry = _per_call.pop(call_id, None)
     if entry:
         tap = entry.get("tap")
         try:

@@ -147,9 +147,16 @@ if PJSUA2_AVAILABLE:
                 if not value or "{" not in value:
                     return value
                 if fallback and "{" not in fallback:
-                    # Substitute {id} with the fallback's digit portion
-                    # if reasonable; otherwise use the fallback verbatim.
-                    sub = fallback.lstrip("Uu")
+                    # Substitute {id} with the fallback's digit portion if
+                    # reasonable; otherwise use the fallback verbatim.
+                    # Strip a SINGLE leading carrier 'U' only when it's the
+                    # "U<digits>" UID pattern (e.g. "U080" -> "080"). The
+                    # old lstrip("Uu") stripped ALL leading U/u, so a real
+                    # auth_user like "User123" became "ser123" -- a silent
+                    # wrong-identity substitution.
+                    sub = fallback
+                    if len(fallback) > 1 and fallback[0] in "Uu" and fallback[1:].isdigit():
+                        sub = fallback[1:]
                     return value.replace("{id}", sub) if "{id}" in value else fallback
                 # No useful fallback — strip the placeholder. Refuse the
                 # "anonymous" fallback: that was registering accounts as

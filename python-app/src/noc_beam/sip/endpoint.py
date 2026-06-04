@@ -120,6 +120,11 @@ class SipEndpoint:
         self._lock = threading.RLock()
         self._log_writer = None
         self._base_codec_priorities: dict[str, int] = {}
+        # Per-call operator mic-mute state. set_call_mute records it here so
+        # set_call_audio_focus does NOT re-arm the mic on a call the
+        # operator explicitly muted (the focus re-wire used to clobber the
+        # mute -> silent mic leakage).
+        self._muted_call_ids: set[int] = set()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -921,7 +926,12 @@ class SipEndpoint:
             return
 
         # pjsua2 PJSIP_INV_STATE_* numbers: 1=CALLING 3=EARLY 4=CONNECTING.
-        if state in (1, 3, 4):
+        # Only CALLING/EARLY are cancellable: a bare CANCEL is valid only
+        # before the final 2xx. CONNECTING (4) means a 2xx has already been
+        # received/sent, so CANCEL is invalid -- it must be a BYE. Grouping
+        # 4 with 1/3 sent a CANCEL that races/!=protocol; let it fall
+        # through to the BYE branch below.
+        if state in (1, 3):
             # Outbound early dialog -> bare CANCEL. Leave statusCode 0
             # so pjsip_inv_end_session emits CANCEL, not a UAS response.
             log.info("hangup_call: early UAC dialog (state=%s) -> CANCEL", state)
@@ -1018,6 +1028,27 @@ class SipEndpoint:
             raise ValueError("Plain number requires an account context for the domain")
         return f"sip:{target}@{acc.cfg.domain}"
 
+    def _ensure_thread_registered(self) -> None:
+        """Register the calling thread with PJSIP if it isn't already.
+
+        pjsua2 requires every thread that calls into the library to be
+        registered. The Qt main thread that calls libInit is registered
+        implicitly, but the docstring elsewhere claimed an explicit
+        registration that never happened -- be defensive on builds that
+        don't auto-register so audio-device / call ops from the main thread
+        can't trip an unregistered-thread assertion. Idempotent and cheap.
+        """
+        ep = self._ep
+        if ep is None:
+            return
+        try:
+            if not ep.libIsThreadRegistered():
+                ep.libRegisterThread("qt-main")
+        except Exception:
+            # Older pjsua2 builds may lack libIsThreadRegistered; the
+            # implicit libInit registration covers the common path.
+            pass
+
     def set_call_audio_focus(self, focused_call_id: int | None) -> None:
         """Route audio so ONLY the focused call is audible / talked-to.
 
@@ -1040,6 +1071,7 @@ class SipEndpoint:
         """
         if self._ep is None:
             return
+        self._ensure_thread_registered()
         dev_mgr = self._ep.audDevManager()
         try:
             capture = dev_mgr.getCaptureDevMedia()
@@ -1073,9 +1105,18 @@ class SipEndpoint:
                     except Exception:
                         continue
                     if is_focused:
-                        try: capture.startTransmit(aud)
-                        except Exception as exc:
-                            log.debug("audio focus startTransmit (mic->call) failed: %s", exc)
+                        # Respect an operator-set per-call mute: only wire
+                        # the mic if this call isn't muted. Previously the
+                        # focus re-wire unconditionally re-armed the mic,
+                        # silently un-muting a call the operator had muted.
+                        if info.id not in self._muted_call_ids:
+                            try: capture.startTransmit(aud)
+                            except Exception as exc:
+                                log.debug("audio focus startTransmit (mic->call) failed: %s", exc)
+                        else:
+                            try: capture.stopTransmit(aud)
+                            except Exception as exc:
+                                log.debug("audio focus keep-muted stopTransmit failed: %s", exc)
                         try: aud.startTransmit(playback)
                         except Exception as exc:
                             log.debug("audio focus startTransmit (call->speaker) failed: %s", exc)
@@ -1103,6 +1144,7 @@ class SipEndpoint:
         """
         if self._ep is None:
             return
+        self._ensure_thread_registered()
         try:
             dev_mgr = self._ep.audDevManager()
             dev_mgr.getPlaybackDevMedia().adjustRxLevel(0.0 if muted else 1.0)
@@ -1124,7 +1166,17 @@ class SipEndpoint:
         """
         if self._ep is None:
             return
+        self._ensure_thread_registered()
         info = call.getInfo()
+        # Record the intent so set_call_audio_focus won't re-arm the mic on
+        # a muted call during a later focus re-wire.
+        try:
+            if muted:
+                self._muted_call_ids.add(int(info.id))
+            else:
+                self._muted_call_ids.discard(int(info.id))
+        except Exception:
+            pass
         for mi in info.media:
             if mi.type != 1 or mi.status != 1:   # audio + active
                 continue

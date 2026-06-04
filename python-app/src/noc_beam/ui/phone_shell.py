@@ -1857,6 +1857,18 @@ class PhoneShell(QMainWindow):
 
 
     def _on_call_ended(self, call_id):
+        # Detach FAS on the MAIN thread. This used to run inside
+        # SipCall.onCallState (PJSIP worker thread), where tap.stop()'s
+        # recorder teardown + up-to-2s reader join blocked SIP signaling
+        # and raced this same call's main-thread attach on the shared
+        # _per_call dict. Doing it here keeps all attach/detach on one
+        # thread. Runs for EVERY call (incl. test-runner) before the
+        # test-runner early-return below.
+        try:
+            from noc_beam.audio.fas_engine import detach_fas_from_call
+            detach_fas_from_call(call_id)
+        except Exception:
+            log.exception("FAS detach failed for call %s", call_id)
         self._fas_confirmed_call_ids.discard(call_id)
         self._pending_fas_media.pop(call_id, None)
         if self._is_test_runner_call(call_id):
@@ -1875,7 +1887,12 @@ class PhoneShell(QMainWindow):
                 answered = bool(rec is not None and rec.connected_at is not None)
             else:
                 code, answered = final
-            if code and code >= 400 and not answered:
+            # Don't play a reorder/busy tone when WE hung the call up. A
+            # local hangup of a ringing/early call ends with a 4xx/6xx
+            # code (e.g. 487 Request Terminated), which used to trigger a
+            # spurious failure tone even though the operator initiated it.
+            locally_ended = call_id in self._locally_finished_call_ids
+            if code and code >= 400 and not answered and not locally_ended:
                 if getattr(self, "failure_tone", None) is not None:
                     self.failure_tone.play_for_code(code)
         except Exception:

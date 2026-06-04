@@ -48,8 +48,18 @@ if PJSUA2_AVAILABLE:
         # pjsua2 callbacks (PJSIP thread)
         # ------------------------------------------------------------------
         def onCallState(self, prm) -> None:  # noqa: N802, ANN001
+            # getInfo() is the only thing that can tell us the state. If it
+            # raises we genuinely cannot proceed, but we MUST NOT let an
+            # exception in the emit below skip the DISCONNECTED cleanup
+            # (which previously leaked the SipCall in acc.calls and never
+            # fired call_ended). So getInfo, emit, and cleanup are three
+            # independent try blocks.
             try:
                 info = self.getInfo()
+            except Exception:
+                log.exception("onCallState: getInfo() failed; cannot route state")
+                return
+            try:
                 state_name = _STATE_NAMES.get(info.state, str(info.state))
                 self.remote_uri = info.remoteUri
                 sip_events().call_state_changed.emit(
@@ -59,31 +69,30 @@ if PJSUA2_AVAILABLE:
                     info.lastStatusCode,
                     info.lastReason,
                 )
-                if info.state == 6:  # PJSIP_INV_STATE_DISCONNECTED
-                    # Detach FAS first so the worker stops scoring before
-                    # the buffer goes away. No-op if not attached.
-                    try:
-                        from noc_beam.audio.fas_engine import detach_fas_from_call
-
-                        detach_fas_from_call(info.id)
-                    except Exception:
-                        log.exception("FAS detach raised on call %s", info.id)
-                    sip_events().call_ended.emit(info.id)
-                    # Drop from the account's calls list so find_call
-                    # doesn't return this stale instance when PJSIP
-                    # later reuses the same internal call-id slot
-                    # for a new call. Without this, mute / hangup /
-                    # quality-sample can act on a destroyed SipCall
-                    # whose media indices are stale -- subtle race
-                    # in long-running test sessions.
-                    try:
-                        acc = getattr(self, "_account", None)
-                        if acc is not None and self in acc.calls:
-                            acc.calls.remove(self)
-                    except Exception:
-                        log.exception("Could not remove disconnected SipCall from acc.calls")
             except Exception:
-                log.exception("onCallState error")
+                log.exception("onCallState emit error for call %s",
+                              getattr(info, "id", "?"))
+            if info.state == 6:  # PJSIP_INV_STATE_DISCONNECTED
+                # FAS detach is intentionally NOT done here. tap.stop()
+                # tears down the recorder and joins the reader (up to 2 s),
+                # and this callback runs on a PJSIP worker thread -- doing
+                # it here blocks SIP signaling AND races the main-thread
+                # attach path on the shared _per_call dict. PhoneShell's
+                # main-thread call_ended handler performs the detach.
+                try:
+                    sip_events().call_ended.emit(info.id)
+                except Exception:
+                    log.exception("call_ended emit failed for call %s", info.id)
+                # Drop from the account's calls list so find_call doesn't
+                # return this stale instance when PJSIP reuses the call-id
+                # slot. Independent try so an emit failure above can't skip
+                # it.
+                try:
+                    acc = getattr(self, "_account", None)
+                    if acc is not None and self in acc.calls:
+                        acc.calls.remove(self)
+                except Exception:
+                    log.exception("Could not remove disconnected SipCall from acc.calls")
 
         def onCallMediaState(self, prm) -> None:  # noqa: N802, ANN001
             # This callback runs on the PJSIP worker thread. It MUST NOT
@@ -121,7 +130,11 @@ if PJSUA2_AVAILABLE:
                         #   2. attach FAS engine to this call (via the
                         #      _attach_fas_after_media slot wired in
                         #      PhoneShell._on_call_media).
+                        # Emit ONCE: the first active audio media is enough,
+                        # and the handler rebuilds the FAS tap per emit, so
+                        # emitting per-media caused redundant tap rebuilds.
                         sip_events().call_media_active.emit(info.id, codec, clock, chans)
+                        break
             except Exception:
                 log.exception("onCallMediaState error")
 

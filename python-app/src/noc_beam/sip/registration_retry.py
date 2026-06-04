@@ -118,6 +118,11 @@ class RegistrationRetry(QObject):
         old_timer = self._timers.pop(account_id, None)
         if old_timer is not None:
             old_timer.stop()
+            # deleteLater the replaced timer. Without this every retry left
+            # a stopped QTimer parented to self, accumulating one dead timer
+            # per attempt for the whole session (a 503-pinned account could
+            # rack up hundreds).
+            old_timer.deleteLater()
         timer = QTimer(self)
         timer.setSingleShot(True)
         timer.timeout.connect(lambda aid=account_id: self._do_retry(aid))
@@ -150,6 +155,9 @@ class RegistrationRetry(QObject):
         acc = ep.get_account(account_id)
         if acc is None:
             log.info("Retry skipped — account %s no longer registered", account_id)
+            # The account is gone; clear its backoff state and timer so the
+            # _attempts/_timers entries don't linger forever after removal.
+            self._reset(account_id)
             return
         try:
             # pjsua2: account.setRegistration(True) issues a fresh REGISTER.
@@ -177,8 +185,16 @@ class RegistrationRetry(QObject):
         timer = self._timers.pop(account_id, None)
         if timer is not None:
             timer.stop()
+            timer.deleteLater()
 
     def reset(self, account_id: str) -> None:
         """Public clear -- call this from the host when an account is
         removed so a stale retry doesn't fire after removal."""
         self._reset(account_id)
+
+    def reset_all(self) -> None:
+        """Clear every account's backoff state + timers. Call on endpoint
+        restart so a fresh endpoint doesn't inherit stale retry schedules
+        and unbounded _attempts entries from the previous run."""
+        for account_id in list(self._attempts.keys()) + list(self._timers.keys()):
+            self._reset(account_id)
