@@ -152,7 +152,18 @@ def attach_fas_to_call(call_id: int, call_audio: Any, **meta: Any) -> None:
         # lifecycle issues that exhausted four attempts to fix.
         from noc_beam.audio.fas_tap import FasWavTap
 
-        tap = FasWavTap(call_id, call_audio, retain_on_disk=True)
+        # Honor the FasSettings.record_clips privacy toggle. retain_on_disk
+        # was hardcoded True, so call audio (PII) was written to disk and
+        # kept forever even when the operator turned clip retention OFF.
+        # When off, FasWavTap still records to a temp WAV (the tap needs a
+        # file to tail) but unlinks it on stop().
+        retain = True
+        try:
+            from noc_beam.config.store import load_settings
+            retain = bool(load_settings().fas.record_clips)
+        except Exception:
+            retain = True
+        tap = FasWavTap(call_id, call_audio, retain_on_disk=retain)
         fas_router().attach(call_id, **meta)
         if not tap.start():
             log.warning("FAS WAV tap start failed for call %s", call_id)

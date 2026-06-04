@@ -1010,20 +1010,6 @@ class SipEndpoint:
         call.xfer(target_uri, prm)
         log.info("Blind transfer: %s", target_uri)
 
-    def attended_transfer(self, original: SipCall, consult: SipCall) -> None:
-        """REFER with Replaces — hand `original`'s remote over to `consult`'s.
-
-        Preconditions: both calls are CONFIRMED on this endpoint and on the
-        same account. pjsua2 builds the Replaces header automatically when
-        we call `xferReplaces(original, consult, ...)` — but the API is
-        ``original.xferReplaces(consult, prm)``: tell the *consult* peer to
-        REPLACE their dialog with the original one.
-        """
-        prm = pj.CallOpParam(True)
-        original.xferReplaces(consult, prm)
-        log.info("Attended transfer issued (call %s ⇋ call %s)",
-                 original.getInfo().id, consult.getInfo().id)
-
     def _normalize_uri(self, target: str, account_id: str | None) -> str:
         if target.startswith(("sip:", "sips:", "tel:")):
             return target

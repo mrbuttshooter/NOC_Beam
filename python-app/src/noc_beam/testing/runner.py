@@ -304,8 +304,15 @@ class TestRunner(QObject):
 
     def _arm_paced_refill(self, wait_s: float) -> None:
         """Re-post _fill_slots after `wait_s` so dispatch resumes within
-        the CPS budget. Only one pacing timer is ever pending because the
-        caller returns immediately after arming."""
+        the CPS budget. Cancel any prior pacing timer first: a call
+        completing while a pacing tick is already pending would otherwise
+        stack a second QTimer (timer + connection leak, and a double
+        _fill_slots burst that defeats the CPS cap)."""
+        if self._pacing_timer is not None:
+            try:
+                self._pacing_timer.stop()
+            except Exception:
+                pass
         timer = self._make_timer(wait_s)
         timer.timeout.connect(self._fill_slots)
         self._pacing_timer = timer
@@ -780,6 +787,21 @@ class TestRunner(QObject):
             self.events.call_state_changed.disconnect(self._on_call_state_changed)
         except Exception:
             pass
+        # Same leak applies to the FAS verdict signal: if we don't drop it,
+        # a stale runner keeps caching verdicts for a future run's call_ids
+        # (cross-run contamination of the result table). Disconnect it too.
+        try:
+            self.events.call_fas_verdict.disconnect(self._on_fas_verdict)
+        except Exception:
+            pass
+        # Stop any pending pacing timer so a fired-after-complete tick can't
+        # re-enter _fill_slots on a finished run.
+        if self._pacing_timer is not None:
+            try:
+                self._pacing_timer.stop()
+            except Exception:
+                pass
+            self._pacing_timer = None
         self.run_complete.emit(list(self._results))
 
     def _make_timer(self, seconds: float) -> QTimer:

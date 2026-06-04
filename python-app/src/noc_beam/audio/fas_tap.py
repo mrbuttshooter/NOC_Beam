@@ -150,7 +150,14 @@ class _WavTailReader(threading.Thread):
         fas_router().push(self.call_id, buf)
         self.frames_pushed += 1
         self.bytes_pushed += len(buf)
-        self._offset = size - len(self._carry)
+        # Advance past everything we read from the file. The odd trailing
+        # byte (if any) is held in self._carry IN MEMORY and prepended on
+        # the next poll -- it must NOT be re-read from disk. The old
+        # `size - len(self._carry)` rewound the offset onto the carried
+        # byte, so the next read pulled it from the file too, duplicating
+        # it and byte-swapping every following int16 sample (a noise burst
+        # into the inference window).
+        self._offset = size
 
 
 class FasWavTap:

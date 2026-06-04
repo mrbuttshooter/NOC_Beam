@@ -38,19 +38,32 @@ _SIP_START = re.compile(
 import os as _os
 
 _AUTH_HEADER_RE = re.compile(
-    r"^(Authorization|Proxy-Authorization|WWW-Authenticate|Proxy-Authenticate)\s*:.*$",
+    # Include RFC 3261 line folding: continuation lines start with SP/HT.
+    # Without the trailing group a folded Authorization value spilled its
+    # secret onto the next line and leaked unredacted.
+    r"^(Authorization|Proxy-Authorization|WWW-Authenticate|Proxy-Authenticate)\s*:.*(?:\r?\n[ \t].*)*$",
     re.IGNORECASE | re.MULTILINE,
 )
 # Pulls username, response, nonce out of digest challenges so even if
 # the line is reformatted across versions we still scrub the secrets.
+# The value alternation matches a full quoted string ("...") OR an
+# unquoted token. The old `"?[^",\s]*"?` stopped at the first comma, so a
+# quoted value CONTAINING a comma leaked its tail.
 _DIGEST_SECRET_FIELDS = re.compile(
-    r'(username|response|nonce|cnonce|opaque|nc)\s*=\s*"?[^",\s]*"?',
+    r'(username|response|nonce|cnonce|opaque|nc)\s*=\s*("(?:[^"\\]|\\.)*"|[^",\s]+)',
     re.IGNORECASE,
 )
 # User-part of SIP URIs in From/To/Contact headers.
 _URI_USER_RE = re.compile(
     r"(sip[s]?:)([^@\s<>;,\"]+)@",
 )
+# tel: URI numbers (P-Asserted-Identity / Diversion / Remote-Party-ID
+# commonly carry the caller's real number as a tel: URI, which the sip:
+# masker above never touched).
+_TEL_USER_RE = re.compile(r"(tel:)\+?[0-9][0-9\-().]*")
+# Quoted display-name in address headers ("Alice Smith" <sip:...>) -- the
+# display name is PII (real name / caller-id) and was never redacted.
+_DISPLAY_NAME_RE = re.compile(r'"(?:[^"\\]|\\.)*"\s*(?=<)')
 
 
 def _diagnostic_mode_enabled() -> bool:
@@ -60,21 +73,37 @@ def _diagnostic_mode_enabled() -> bool:
     )
 
 
+_redact_cache_val = True
+_redact_cache_ts = 0.0
+_REDACT_TTL_S = 5.0
+
+
 def trace_redaction_enabled() -> bool:
     """Return whether SIP trace bodies should be redacted before emit.
 
     The env var remains as a hard override for support/debug sessions.
     Otherwise use the persisted Settings -> Advanced privacy toggle.
     Default to redaction if settings cannot be read.
+
+    Result is cached for a few seconds: this is called on the PJSIP log
+    thread for EVERY SIP message, and load_settings() re-reads/parses the
+    settings file from disk -- doing that per packet was a real per-message
+    disk hit on the signaling hot path.
     """
     if _diagnostic_mode_enabled():
         return False
+    global _redact_cache_val, _redact_cache_ts
+    now = time.monotonic()
+    if now - _redact_cache_ts < _REDACT_TTL_S:
+        return _redact_cache_val
     try:
         from noc_beam.config.store import load_settings
 
-        return bool(load_settings().compliance.trace_pii_redaction)
+        _redact_cache_val = bool(load_settings().compliance.trace_pii_redaction)
     except Exception:
-        return True
+        _redact_cache_val = True
+    _redact_cache_ts = now
+    return _redact_cache_val
 
 
 def redact_sip_body(body: str) -> str:
@@ -105,6 +134,9 @@ def redact_sip_body(body: str) -> str:
             masked = user[:2] + "***"
         return f"{scheme}{masked}@"
     out = _URI_USER_RE.sub(_user_mask, out)
+    # tel: numbers (PAI/Diversion) and quoted display-names are PII too.
+    out = _TEL_USER_RE.sub(lambda m: f"{m.group(1)}<redacted>", out)
+    out = _DISPLAY_NAME_RE.sub('"<redacted>" ', out)
     return out
 # PJSIP 2.10+ dropped the literal "packet" word in some builds. Match
 # both the historical "RX 451 bytes packet from UDP 1.2.3.4:5060"
@@ -215,16 +247,3 @@ class TraceLogWriter(_LogWriterBase):
         self._capturing = False
 
 
-def install_trace_logger(ep) -> TraceLogWriter | None:  # noqa: ANN001
-    """Attach a TraceLogWriter to the running pjsua2 Endpoint config."""
-    if not PJSUA2_AVAILABLE:
-        return None
-    try:
-        writer = TraceLogWriter()
-        # In pjsua2 the writer is attached via EpConfig.logConfig.writer
-        # before libInit(). The Endpoint here exposes it post-creation through
-        # the log_cb. We keep a reference so it isn't GC'd.
-        return writer
-    except Exception:
-        log.exception("Could not install trace logger")
-        return None

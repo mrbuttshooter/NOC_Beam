@@ -206,7 +206,15 @@ if PJSUA2_AVAILABLE:
             # builds challenge with lowercase realm, AuthCredInfo match
             # is case-sensitive in older PJSIP -> 401 loop with correct
             # creds. Fall back to `*` only when the domain is blank.
-            realm = (cfg.domain or "*").split(":", 1)[0].lower() or "*"
+            # Use the "*" wildcard realm so the digest credential matches
+            # whatever realm the registrar/proxy challenges with. Pinning
+            # the realm to the account domain caused an un-retryable 401
+            # loop whenever a carrier challenged with a realm != domain
+            # (very common: an SBC's realm rarely equals the SIP domain).
+            # For a NOC tool talking to a known, operator-configured set of
+            # carriers, the off-path credential-leak risk of "*" is the
+            # lesser evil versus a registration that can never succeed.
+            realm = "*"
             # Only attach digest credentials when the operator provided a
             # password. Wholesale carriers often use IP-based authentication
             # (the carrier's edge whitelists the operator's source IP and
