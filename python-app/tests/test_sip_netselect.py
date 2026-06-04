@@ -41,10 +41,15 @@ def test_route_target_appends_account_port_without_proxy() -> None:
     assert route_target_for_account(cfg) == "sip.example.test:5070"
 
 
-def test_teles_accounts_default_to_tcp_transport() -> None:
+def test_teles_udp_accounts_stay_udp() -> None:
+    # Regression: NOC_Beam used to force Teles accounts onto TCP, which
+    # broke call teardown -- over TCP the Communi5 switch can't deliver the
+    # in-dialog far-end BYE/486, so remote hangups/rejects never reach the
+    # app and the call hangs. eyeBeam works over UDP on the same route. So
+    # a UDP-configured Teles account must stay UDP.
     cfg = AccountConfig(id="a", switch_type="teles", transport="udp")
 
-    assert effective_transport_for_account(cfg) == "tcp"
+    assert effective_transport_for_account(cfg) == "udp"
 
 
 def test_teles_accounts_preserve_explicit_tls_transport() -> None:

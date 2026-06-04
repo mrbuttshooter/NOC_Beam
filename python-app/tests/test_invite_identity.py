@@ -38,7 +38,10 @@ def test_invite_local_uri_keeps_transport_and_port() -> None:
     )
 
 
-def test_teles_invite_local_uri_defaults_to_tcp_transport() -> None:
+def test_teles_invite_local_uri_udp_has_no_transport_param() -> None:
+    # Teles UDP accounts are no longer force-coerced to TCP (that broke
+    # in-dialog BYE/486 delivery on the Communi5 switch). UDP URIs carry
+    # no transport param.
     cfg = AccountConfig(
         id="a",
         display_name="96171488860",
@@ -49,7 +52,7 @@ def test_teles_invite_local_uri_defaults_to_tcp_transport() -> None:
     )
 
     assert SipEndpoint._format_invite_local_uri(cfg) == (
-        '"96171488860" <sip:U080@208.87.170.99;transport=tcp>'
+        '"96171488860" <sip:U080@208.87.170.99>'
     )
 
 

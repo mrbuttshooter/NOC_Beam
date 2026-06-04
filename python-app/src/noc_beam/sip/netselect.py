@@ -77,10 +77,17 @@ def route_target_for_account(cfg: AccountConfig) -> str:
 
 
 def effective_transport_for_account(cfg: AccountConfig) -> str:
-    transport = (getattr(cfg, "transport", "") or "udp").lower()
-    if (getattr(cfg, "switch_type", "") or "").lower() == "teles" and transport == "udp":
-        return "tcp"
-    return transport
+    # Honor the account's configured transport (default UDP). We used to
+    # force Teles accounts onto TCP here, but a matched SIP-trace pair on
+    # the SAME Teles route proved that breaks call teardown: over TCP the
+    # Communi5 switch can return responses on the connection but cannot
+    # deliver the IN-DIALOG far-end BYE/486 to us, so a remote hangup or
+    # reject never reaches NOC_Beam and the call hangs (the switch even
+    # returns 481 to our later BYE -- it had already cleared the call).
+    # The legacy eyeBeam tool runs over UDP on the same route and gets the
+    # BYE/486 fine. So: no forced UDP->TCP coercion. An operator can still
+    # pick TCP/TLS explicitly per account if a particular trunk needs it.
+    return (getattr(cfg, "transport", "") or "udp").lower()
 
 
 def local_address_for_sip_target(value: str, default_transport: str = "udp") -> str:

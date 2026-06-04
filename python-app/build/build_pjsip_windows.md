@@ -119,23 +119,6 @@ Create `pjlib\include\pj\config_site.h`:
 #include <pj/config_site_sample.h>
 ```
 
-### 5a-bis. Disable 100rel / PRACK advertisement (REQUIRED)
-
-Field traces (2026-06) showed the Teles Communi5 SBC, once it sees
-`Supported: 100rel` on our INVITE, switches the call into a reliable-
-provisional / 183-early-media path and then **never delivers the final
-response** (the callee's 486 reject) — calls hang until cancelled
-manually. The legacy eyeBeam tool advertises neither PRACK nor 100rel and
-gets a clean 486 on the same switch.
-
-There is **no** real `PJSIP_HAS_100REL` macro, so this can't be done from
-`config_site.h`. Patch `pjsip\src\pjsip-ua\sip_100rel.c` — in
-`mod_100rel_load()`, remove (or `#if 0` out) the two
-`pjsip_endpt_add_capability()` calls that add `PRACK` to `Allow` and
-`100rel` to `Supported`. The module still loads (inbound PRACK still
-works); we just stop offering it on outbound requests. `build_windows.ps1`
-applies this patch automatically.
-
 ### 5b. Configure include/lib paths
 
 PJSIP looks up OpenSSL and BCG729 via environment variables. From the
