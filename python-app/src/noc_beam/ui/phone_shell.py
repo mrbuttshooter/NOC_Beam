@@ -1737,8 +1737,23 @@ class PhoneShell(QMainWindow):
                 self.call_widget.update_state(state, code, reason)
             return
         self._note_fas_call_state(call_id, new_state)
-        if self._is_test_runner_call(call_id):
+        # Only skip UI handling for a GENUINE test-runner call. A call that
+        # is tracked in the UI call-manager is by definition a manual call
+        # (test-runner calls return here BEFORE they're ever registered
+        # below), so it must ALWAYS be torn down. Without the
+        # self.calls.get() guard, a call mis-classified as test-runner
+        # (e.g. a pjsua2-reused id) would hit `return` on its DISCONNECTED
+        # and the card would never clear when the far end hung up -- the
+        # reported "NOC_Beam keeps the call running" freeze.
+        is_tr = self._is_test_runner_call(call_id)
+        if self.calls.get(call_id) is None and is_tr:
             return
+        if new_state == CallState.DISCONNECTED:
+            log.info(
+                "call %s DISCONNECTED (code=%s reason=%r tr=%s tracked=%s) "
+                "-> tearing down", call_id, code, reason, is_tr,
+                self.calls.get(call_id) is not None,
+            )
         if new_state == CallState.DISCONNECTED and self.calls.get(call_id) is None:
             if call_id in self._locally_finished_call_ids:
                 return
