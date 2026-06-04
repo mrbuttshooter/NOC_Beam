@@ -1891,7 +1891,7 @@ class PhoneShell(QMainWindow):
             # local hangup of a ringing/early call ends with a 4xx/6xx
             # code (e.g. 487 Request Terminated), which used to trigger a
             # spurious failure tone even though the operator initiated it.
-            locally_ended = call_id in self._locally_finished_call_ids
+            locally_ended = call_id in getattr(self, "_locally_finished_call_ids", set())
             if code and code >= 400 and not answered and not locally_ended:
                 if getattr(self, "failure_tone", None) is not None:
                     self.failure_tone.play_for_code(code)
@@ -2304,6 +2304,10 @@ class PhoneShell(QMainWindow):
                     if other is not None:
                         try:
                             ep.hold_call(other)
+                            # Reflect the hold in the CallRecord so the UI
+                            # state matches the wire. Without this the
+                            # auto-held call still rendered as CONFIRMED.
+                            self.calls.update_state(rec.call_id, CallState.HELD)
                         except Exception:
                             log.exception("auto-hold of call %s failed", rec.call_id)
         except Exception:

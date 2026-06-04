@@ -842,7 +842,10 @@ class SipEndpoint:
         host = SipEndpoint._account_host(cfg)
         transport = effective_transport_for_account(cfg)
         scheme = "sips" if transport == "tls" else "sip"
-        transport_param = f";transport={transport}" if transport in ("tcp", "tls") else ""
+        # Only TCP needs an explicit ;transport= param. The "sips:" scheme
+        # already implies TLS, so ";transport=tls" is redundant and some
+        # registrars reject the resulting URI ("sips:...;transport=tls").
+        transport_param = ";transport=tcp" if transport == "tcp" else ""
         return f'"{display}" <{scheme}:{user}@{host}{transport_param}>'
 
     @staticmethod
