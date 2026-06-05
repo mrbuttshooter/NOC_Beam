@@ -37,7 +37,9 @@ def test_build_script_writes_sha256_sidecar() -> None:
 
     assert "Get-FileHash -LiteralPath $ExePath -Algorithm SHA256" in script
     assert '"$($ExeHash.Hash)  NOC_Beam.exe"' in script
-    assert "NOC_Beam.exe.sha256" in (
+    # The workflow uploads the distribution zip + its sha256 sidecar
+    # (the onedir build's deliverable), not a single-file exe sidecar.
+    assert "NOC_Beam.zip.sha256" in (
         ROOT / ".github" / "workflows" / "build-windows.yml"
     ).read_text(encoding="utf-8")
 
