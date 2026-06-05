@@ -60,8 +60,16 @@ function Add-KnownNativeToolPaths {
 function Find-VcVars {
     $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
     if (Test-Path $vswhere) {
-        $installPath = & $vswhere -latest -products Microsoft.VisualStudio.Product.BuildTools -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+        # -products '*' matches ANY edition (Enterprise / Professional /
+        # Community / BuildTools). The old query filtered to BuildTools
+        # only, so CI runners with VS 2022 Enterprise (GitHub-hosted
+        # windows-latest) failed the prerequisite check in ~1s even though
+        # MSVC was fully installed and already on PATH.
+        $installPath = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
         if ($LASTEXITCODE -eq 0 -and $installPath) {
+            # vswhere may emit multiple lines if several installs match;
+            # -latest narrows it but take the first defensively.
+            $installPath = ($installPath | Select-Object -First 1)
             $candidate = Join-Path $installPath "VC\Auxiliary\Build\vcvars64.bat"
             if (Test-Path $candidate) {
                 return $candidate
@@ -69,7 +77,11 @@ function Find-VcVars {
         }
     }
 
+    # Edition-agnostic fallbacks for every VS 2022 SKU.
     $fallbacks = @(
+        "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat",
+        "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat",
+        "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat",
         "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
         "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
     )
