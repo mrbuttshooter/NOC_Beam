@@ -122,6 +122,10 @@ class AudioStrip(QFrame):
         # popup it.
         self.mic_dev_btn = QToolButton(self)
         self.mic_dev_btn.setObjectName("AudioChevron")
+        # Named even though it's an icon-less hidden menu holder, so the
+        # accessibility contract (every interactive control is named) holds.
+        self.mic_dev_btn.setAccessibleName("Select input device")
+        self.mic_dev_btn.setToolTip("Select input device")
         self.mic_dev_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.mic_dev_btn.hide()
 
@@ -140,6 +144,8 @@ class AudioStrip(QFrame):
         # Right-click on the speaker icon is the discoverable affordance.
         self.spk_dev_btn = QToolButton(self)
         self.spk_dev_btn.setObjectName("AudioChevron")
+        self.spk_dev_btn.setAccessibleName("Select output device")
+        self.spk_dev_btn.setToolTip("Select output device")
         self.spk_dev_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.spk_dev_btn.hide()
 

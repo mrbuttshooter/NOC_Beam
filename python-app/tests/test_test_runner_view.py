@@ -835,9 +835,13 @@ def test_origination_destination_rows_show_hint_when_no_zone_has_numbers(qt_app,
         assert not view.origination_zone.isEnabled()
         assert not view.destination_country.isEnabled()
         assert not view.destination_zone.isEnabled()
-        # Hint labels are showing (not explicitly hidden).
-        assert not view.origination_hint.isHidden()
-        assert not view.destination_hint.isHidden()
+        # The empty-state hint label is intentionally NOT shown: it used to
+        # render as a phantom standalone "Configure in Settings" window in
+        # the taskbar / Alt+Tab, so _apply_destination_empty_state now keeps
+        # it hidden and the DISABLED dropdowns (asserted above) are the
+        # empty-state signal. The label still exists and carries its text.
+        assert view.origination_hint.isHidden()
+        assert view.destination_hint.isHidden()
         assert "Settings" in view.origination_hint.text()
         assert "Settings" in view.destination_hint.text()
     finally:

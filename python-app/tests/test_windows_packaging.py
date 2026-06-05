@@ -43,19 +43,23 @@ def test_build_script_writes_sha256_sidecar() -> None:
 
 
 def test_focus_hiding_removed_from_primary_navigation_styles() -> None:
-    light = (ROOT / "python-app" / "src" / "noc_beam" / "ui" / "resources" / "light.qss").read_text(
-        encoding="utf-8"
-    )
-    dark = (ROOT / "python-app" / "src" / "noc_beam" / "ui" / "resources" / "dark.qss").read_text(
-        encoding="utf-8"
-    )
-    high_contrast = (
-        ROOT / "python-app" / "src" / "noc_beam" / "ui" / "resources" / "dark-hc.qss"
-    ).read_text(encoding="utf-8")
+    # Dark mode is GENERATED from light.qss at runtime via theme._to_dark
+    # (light.qss is the single source of truth -- there is no dark.qss
+    # file). Only light.qss and the hand-written dark-hc.qss exist on disk.
+    from noc_beam.ui.theme import _to_dark
 
-    assert "QToolButton#TabBtn:focus { outline: none; }" not in light
-    assert "QToolButton#RailBtn:focus { outline: none; }" not in dark
-    assert "QToolButton#RailBtn:focus { outline: none; }" not in high_contrast
+    res = ROOT / "python-app" / "src" / "noc_beam" / "ui" / "resources"
+    light = (res / "light.qss").read_text(encoding="utf-8")
+    dark = _to_dark(light)
+    high_contrast = (res / "dark-hc.qss").read_text(encoding="utf-8")
+
+    # Keyboard focus outlines must NOT be hidden on primary navigation
+    # controls (accessibility contract). Check across every rendered theme.
+    for qss in (light, dark, high_contrast):
+        assert "QToolButton#TabBtn:focus { outline: none; }" not in qss
+        assert "QToolButton#RailBtn:focus { outline: none; }" not in qss
+    # And focus IS styled where each control lives: the bottom-tab buttons
+    # in light/dark, the rail buttons in the high-contrast rail theme.
     assert "QToolButton#TabBtn:focus" in light
-    assert "QToolButton#RailBtn:focus" in dark
+    assert "QToolButton#TabBtn:focus" in dark
     assert "QToolButton#RailBtn:focus" in high_contrast
