@@ -380,7 +380,13 @@ setup(
 "@
     Set-Content -Encoding UTF8 -Path python\setup_msvc.py -Value $SetupMsvc
     Push-Location python
-    Invoke-VcCmd "`"$PythonExe`" setup_msvc.py build_ext --inplace"
+    # DISTUTILS_USE_SDK=1 (+ MSSdk=1) tells setuptools to USE the already-
+    # active vcvars environment (cl.exe is on PATH here) instead of trying
+    # to re-locate Visual Studio itself via vswhere. The self-location path
+    # fails on CI's bleeding-edge VS 2022 (17.14 / MSVC 14.44) with
+    # "Microsoft Visual C++ 14.0 or greater is required" -- even though
+    # MSBuild just compiled PJSIP with the exact same toolchain.
+    Invoke-VcCmd "set DISTUTILS_USE_SDK=1 && set MSSdk=1 && `"$PythonExe`" setup_msvc.py build_ext --inplace"
     Pop-Location
     Pop-Location
 
