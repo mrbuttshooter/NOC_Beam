@@ -116,6 +116,7 @@ class SipEndpoint:
         self._ep = None
         self._accounts: dict[str, SipAccount] = {}
         self._transports: dict[str, int] = {}
+        self._sip_port = 5060
         self._started = False
         self._lock = threading.RLock()
         self._log_writer = None
@@ -306,6 +307,9 @@ class SipEndpoint:
         accounts: list[AccountConfig] | None = None,
     ) -> None:
         assert self._ep is not None
+        # Remember the local SIP port so per-account Contact can be pinned to
+        # the routed egress address:port (fixes the in-dialog BYE black-hole).
+        self._sip_port = port or 5060
         advertised_address = self._sip_advertised_address(accounts)
 
         tcfg = pj.TransportConfig()
@@ -604,7 +608,7 @@ class SipEndpoint:
                 raise RuntimeError("Endpoint not started")
             if cfg.id in self._accounts:
                 self.remove_account(cfg.id)
-            acc = SipAccount(cfg, self._transports)
+            acc = SipAccount(cfg, self._transports, self._sip_port)
             ac_cfg = acc.configure()
             try:
                 acc.create(ac_cfg)

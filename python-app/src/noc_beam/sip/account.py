@@ -59,10 +59,12 @@ def _dtmf_method(setting: str) -> int:
 if PJSUA2_AVAILABLE:
 
     class SipAccount(pj.Account):  # type: ignore[misc, name-defined]
-        def __init__(self, cfg: AccountConfig, transports: dict[str, int]) -> None:
+        def __init__(self, cfg: AccountConfig, transports: dict[str, int],
+                     local_sip_port: int = 5060) -> None:
             super().__init__()
             self.cfg = cfg
             self._transports = transports
+            self._local_sip_port = int(local_sip_port or 5060)
             self.calls: list[SipCall] = []
             # Set by configure() when the requested transport isn't
             # bound; consumed by SipEndpoint.add_account after the
@@ -317,6 +319,28 @@ if PJSUA2_AVAILABLE:
                         "Account %s advertising media address %s",
                         cfg.id, media_address,
                     )
+                    # Pin the SIP Contact to the SAME routed egress address.
+                    # The shared SIP transport's publicAddress is GLOBAL (set
+                    # once at endpoint start from the first account) and can be
+                    # stale/wrong -- e.g. it advertised 10.35.150.219 while the
+                    # real egress to the switch is 10.235.43.101. Contact is the
+                    # address the far end sends IN-DIALOG requests to, so a wrong
+                    # Contact means the far-end BYE goes to a dead IP and an
+                    # ANSWERED call never tears down (proven on-wire: Teles BYE
+                    # to the phantom IP, NOC_Beam never told, call hung). Force
+                    # Contact to the correct egress; guarded for older pjsua2.
+                    try:
+                        _forced = (
+                            f"<sip:{_safe_user}@{media_address}:"
+                            f"{self._local_sip_port}{transport_param}>"
+                        )
+                        ac.sipConfig.contactForced = _forced
+                        log.info("Account %s forcing Contact %s", cfg.id, _forced)
+                    except Exception:
+                        log.warning(
+                            "Account %s: could not force Contact (older pjsua2 "
+                            "without sipConfig.contactForced?)", cfg.id,
+                        )
                 else:
                     # WARNING (not DEBUG) so support bundles surface this —
                     # silent fallback was regressing the NAT fix without
