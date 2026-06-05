@@ -128,11 +128,20 @@ jobs:
             $args += "-SkipPackagedSmoke"
           }
           powershell -ExecutionPolicy Bypass -File .\build\build_windows.ps1 @args
-          if (-not (Test-Path dist\NOC_Beam.exe)) {
-            throw "PyInstaller did not produce dist\NOC_Beam.exe"
+          # build_windows.ps1 produces a PyInstaller --onedir bundle
+          # (dist\NOC_Beam\NOC_Beam.exe) plus a distribution dist\NOC_Beam.zip,
+          # NOT a single-file dist\NOC_Beam.exe. Check the real outputs.
+          $exe = "dist\NOC_Beam\NOC_Beam.exe"
+          $zip = "dist\NOC_Beam.zip"
+          if (-not (Test-Path $exe)) {
+            throw "Build did not produce $exe"
           }
-          $size = [math]::Round((Get-Item dist\NOC_Beam.exe).Length / 1MB, 1)
-          Write-Host "Built NOC_Beam.exe ($size MB)"
+          if (-not (Test-Path $zip)) {
+            throw "Build did not produce $zip"
+          }
+          $exeMB = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          $zipMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+          Write-Host "Built NOC_Beam onedir exe ($exeMB MB); distribution zip ($zipMB MB)"
 
       - name: Verify packaged native SIP smoke report
         if: env.BUILD_MODE == 'full'
@@ -166,13 +175,13 @@ jobs:
           }
 
       # ---------------- Artifact ----------------
-      - name: Upload NOC_Beam.exe
+      - name: Upload NOC_Beam.zip
         uses: actions/upload-artifact@v4
         with:
           name: NOC_Beam-windows-x64-${{ env.BUILD_MODE }}
           path: |
-            python-app/dist/NOC_Beam.exe
-            python-app/dist/NOC_Beam.exe.sha256
+            python-app/dist/NOC_Beam.zip
+            python-app/dist/NOC_Beam.zip.sha256
           retention-days: 30
           if-no-files-found: error
 
