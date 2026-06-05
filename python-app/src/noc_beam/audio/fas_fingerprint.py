@@ -25,7 +25,18 @@ from pathlib import Path
 
 import numpy as np
 
-from noc_beam._native.chromaprint import fpcalc_path
+try:
+    from noc_beam._native.chromaprint import fpcalc_path
+except ImportError:
+    # _native is the gitignored, build-time native bundle (pjsua2 + the
+    # Chromaprint fpcalc binary). It is NOT present in the fast, no-native
+    # CI "test" job, so a hard top-level import here broke pytest at
+    # collection. Degrade gracefully: return a path that does not exist so
+    # fingerprint_clip() takes its existing `if not fp_bin.exists(): return
+    # None` branch and skips the fingerprint signal. Production and the
+    # packaged exe have _native, so this fallback is never taken there.
+    def fpcalc_path() -> Path:  # type: ignore[misc]
+        return Path("fpcalc-not-available")
 
 log = logging.getLogger(__name__)
 

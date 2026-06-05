@@ -24,7 +24,14 @@ import time
 from pathlib import Path
 from typing import Any
 
-from noc_beam._native.chromaprint import fpcalc_path
+try:
+    from noc_beam._native.chromaprint import fpcalc_path
+except ImportError:
+    # _native (gitignored build-time bundle) is absent in the no-native CI
+    # test job; degrade so import never crashes. The smoke tool checks
+    # fpcalc_path().exists() and reports it missing rather than erroring.
+    def fpcalc_path() -> Path:  # type: ignore[misc]
+        return Path("fpcalc-not-available")
 from noc_beam.audio.models import model_path
 
 # Keep in sync with build/MODELS.lock
