@@ -276,6 +276,11 @@ class FasSettings:
     # Block runs of N consecutive automated test calls when a supplier
     # crosses a FAS verdict. 0 = never auto-pause.
     auto_pause_on_fas_count: int = 0
+    # When True, a committed verdict may step DOWN one severity level if the
+    # score stays low for several consecutive scores (hysteresis). Default
+    # False preserves the original "never downgrade" behaviour; deterministic
+    # positives (ringback / fingerprint) stay hard-locked either way.
+    allow_deescalation: bool = False
 
 
 @dataclass

@@ -157,6 +157,54 @@ class AasistDetector(_BaseModel):
 
     _onnx_filename = "aasist.onnx"
 
+    # sha256 of the verified ONNX export whose output polarity we KNOW:
+    # softmax index 0 = spoof, index 1 = bonafide (see build/MODELS.lock,
+    # cross-checked against clovaai/aasist eval code). score() hard-codes
+    # softmax[0]; if the bundled binary ever differs from this hash, that
+    # assumption is UNVERIFIED and the verdict could be silently inverted
+    # (this exact bug shipped once). We cannot re-derive polarity without a
+    # labelled probe clip, so instead we verify the model IS the one we
+    # validated and shout loudly if it is not.
+    _VERIFIED_SHA256 = (
+        "03972ac4e5f714c0dfa340bbacff3ef407fa9643388dd2aedcce4fc8cac4d43e"
+    )
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.polarity_trusted = False
+
+    def _maybe_load(self) -> None:
+        first_attempt = not self._tried
+        super()._maybe_load()
+        if not first_attempt or self._sess is None:
+            return
+        # Polarity self-check (best-effort; never blocks a successful load).
+        try:
+            import hashlib
+
+            path = model_path(self._onnx_filename)
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digest == self._VERIFIED_SHA256:
+                self.polarity_trusted = True
+                log.info(
+                    "AasistDetector: polarity VERIFIED "
+                    "(sha256 matches MODELS.lock; softmax[0]=spoof)"
+                )
+            else:
+                self.polarity_trusted = False
+                log.error(
+                    "AASIST POLARITY UNVERIFIED: aasist.onnx sha256 %s... != "
+                    "known-good %s... . score() assumes softmax[0]=spoof; if "
+                    "this is a NEW export, re-confirm the class order or every "
+                    "FAS verdict may be INVERTED. See build/MODELS.lock.",
+                    digest[:12], self._VERIFIED_SHA256[:12],
+                )
+        except Exception:
+            log.warning(
+                "AasistDetector: could not hash model for polarity check",
+                exc_info=True,
+            )
+
     def score(self, samples: np.ndarray, sample_rate: int = 16000) -> float | None:
         self._maybe_load()
         if self._sess is None or samples.size == 0:

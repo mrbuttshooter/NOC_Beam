@@ -175,6 +175,58 @@ def test_recording_signal_is_machine_not_fas_by_itself():
     assert any(e.kind == "recorded_or_synthetic_audio" for e in v.evidence)
 
 
+def test_aasist_unavailable_caps_probable_fas_at_suspicious():
+    # silence(+2) + music(+1) + ringing(+1) = +4 with no deterministic
+    # positive. At the aggressive preset (fas=4) that would normally be
+    # PROBABLE_FAS, but the primary anti-spoof model is unavailable, so the
+    # verdict must be capped at SUSPICIOUS with an explanatory reason.
+    v = synthesise(
+        features=_features(silence=0.90, runs=0, stability=0.85),
+        silero_speech_prob=0.05,
+        aasist_spoof_prob=None,
+        panns={"speech": 0.05, "music": 0.80, "ringing": 0.60, "silence": 0.0, "noise": 0.05},
+        fingerprint_sim=0.0,
+        analyzed_seconds=8.0,
+        sustained_silence_seconds=8.0,
+        sensitivity="aggressive",
+    )
+    assert v.verdict == "SUSPICIOUS"
+    assert any("anti-spoof" in r.lower() for r in v.reasons)
+
+
+def test_aasist_available_still_reaches_probable_fas():
+    # Same signals but AASIST present (and high): the abstention guard must
+    # NOT fire -- a genuine spoof read should still escalate.
+    v = synthesise(
+        features=_features(silence=0.90, runs=0, stability=0.85),
+        silero_speech_prob=0.05,
+        aasist_spoof_prob=0.92,
+        panns={"speech": 0.05, "music": 0.80, "ringing": 0.60, "silence": 0.0, "noise": 0.05},
+        fingerprint_sim=0.0,
+        analyzed_seconds=8.0,
+        sustained_silence_seconds=8.0,
+        sensitivity="aggressive",
+    )
+    assert v.verdict == "PROBABLE_FAS"
+
+
+def test_deterministic_positive_is_exempt_from_abstention_cap():
+    # Fingerprint reuse (deterministic) + silence + music reaches the FAS
+    # threshold without AASIST; deterministic evidence is exempt from the
+    # anti-spoof-unavailable cap, so it stays PROBABLE_FAS.
+    v = synthesise(
+        features=_features(silence=0.90, runs=0),
+        silero_speech_prob=0.05,
+        aasist_spoof_prob=None,
+        panns=None,
+        fingerprint_sim=0.95,
+        analyzed_seconds=8.0,
+        sustained_silence_seconds=8.0,
+    )
+    # +3 fp +2 silence = +5 -> PROBABLE_FAS (balanced fas=5), deterministic.
+    assert v.verdict == "PROBABLE_FAS"
+
+
 def test_fingerprint_memory_scopes_by_supplier_when_present():
     memory = FingerprintMemory()
     fp = "10101010" * 8

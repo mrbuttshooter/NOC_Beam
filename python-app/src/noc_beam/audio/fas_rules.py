@@ -49,6 +49,11 @@ WEIGHT_GENERIC_IVR = 1
 WEIGHT_REAL_SPEECH = -3
 WEIGHT_VAD_HIGH = -2
 
+# AASIST spoof-probability firing threshold. Shared with the worker's
+# k-of-n temporal voting (fas_worker) so the "what counts as a spoof read"
+# bar is defined in exactly one place.
+AASIST_SPOOF_THRESHOLD = 0.70
+
 # Verdict thresholds per sensitivity preset.
 PRESETS: dict[str, dict[str, float]] = {
     "conservative": {"fas": 6, "suspicious": 3},
@@ -236,7 +241,7 @@ def synthesise(
         )
         positive_signal_count += 1
 
-    if aasist_spoof_prob is not None and aasist_spoof_prob >= 0.70:
+    if aasist_spoof_prob is not None and aasist_spoof_prob >= AASIST_SPOOF_THRESHOLD:
         score += WEIGHT_RECORDING_AASIST
         machine_signal = True
         add_evidence(
@@ -246,7 +251,7 @@ def synthesise(
             aasist_spoof_prob,
             f"audio detected as recorded/synthetic ({aasist_spoof_prob:.0%})",
             value=aasist_spoof_prob,
-            threshold=0.70,
+            threshold=AASIST_SPOOF_THRESHOLD,
         )
         positive_signal_count += 1
 
@@ -329,6 +334,25 @@ def synthesise(
         verdict = "HUMAN_LIKELY"
     else:
         verdict = "INCONCLUSIVE"
+
+    # ----- Availability-aware degradation -----
+    # AASIST is the only signal that can confidently distinguish
+    # synthetic / recorded audio from a live human. When it is
+    # UNAVAILABLE this tick we must not over-claim:
+    #   * never escalate to PROBABLE_FAS on non-deterministic evidence
+    #     alone -- cap at SUSPICIOUS and say why. Deterministic positives
+    #     (fingerprint reuse, post-answer ringback / call-progress tone)
+    #     stand on their own and are exempt.
+    #   * when the call still lands INCONCLUSIVE, surface that the verdict
+    #     was made WITHOUT the primary anti-spoof model so a 0.15 reading
+    #     is understood as "couldn't fully judge", not "definitely clean".
+    aasist_available = aasist_spoof_prob is not None
+    if not aasist_available:
+        if verdict == "PROBABLE_FAS" and not deterministic_positive:
+            verdict = "SUSPICIOUS"
+            reasons.append("anti-spoof model unavailable -- capped at suspicious")
+        elif verdict == "INCONCLUSIVE" and analyzed_seconds > 0:
+            reasons.append("anti-spoof model unavailable -- limited verdict")
 
     # Confidence: distance from "INCONCLUSIVE" centre, capped at 1.0.
     # Deterministic positives (ringback / fingerprint) pin confidence high.
