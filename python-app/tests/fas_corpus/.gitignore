@@ -1,0 +1,5 @@
+# The real corpus is machine/data-specific and may reference recorded call
+# audio. Keep it OUT of git -- only the schema example + README are tracked.
+manifest.jsonl
+baseline.json
+*.wav

@@ -137,6 +137,185 @@ class _CallScoreState:
         self.last_score_at = now
 
 
+# ----------------------------------------------------------------------
+# Shared scoring core
+#
+# These module-level helpers hold the ENTIRE per-snapshot scoring policy so
+# the live worker and the offline replay harness (fas_replay) run the
+# byte-identical path. Each takes a _CallScoreState it mutates and returns
+# the surfaced (verdict, confidence, reasons). Splitting them out also makes
+# the temporal fixes (k-of-n voting, voiced budget, hysteresis) unit-testable
+# without a QThread, models, or a live call.
+# ----------------------------------------------------------------------
+def vote_aasist(state: _CallScoreState, aasist_raw: float | None) -> float | None:
+    """k-of-n temporal vote on the AASIST spoof read. Mutates the rolling
+    history. Returns the value to feed downstream: the median when
+    corroborated, otherwise a value below the firing threshold so a lone
+    high frame can't latch the call. None when there is no read at all."""
+    from noc_beam.audio.fas_rules import AASIST_SPOOF_THRESHOLD
+
+    if aasist_raw is not None:
+        state.aasist_history.append(float(aasist_raw))
+        if len(state.aasist_history) > AASIST_VOTE_WINDOW:
+            del state.aasist_history[:-AASIST_VOTE_WINDOW]
+    recent = state.aasist_history
+    if not recent:
+        return None
+    if len(recent) >= AASIST_VOTE_MIN_AGREE:
+        above = sum(1 for p in recent if p >= AASIST_SPOOF_THRESHOLD)
+        if above >= AASIST_VOTE_MIN_AGREE:
+            return float(median(recent))      # corroborated -> may fire
+        return float(min(recent))             # below threshold -> won't fire
+    # Only one read so far: never enough to lock on its own.
+    return min(recent[-1], AASIST_SPOOF_THRESHOLD - 0.01)
+
+
+def evaluate_snapshot(
+    state: _CallScoreState,
+    *,
+    features,
+    silero_p: float | None,
+    aasist_p: float | None,
+    panns_out: dict | None,
+    fp_sim: float = 0.0,
+    fingerprint_match: dict | None = None,
+    analyzed_seconds: float,
+    sensitivity: str = "balanced",
+    window_seconds: float = 4.0,
+    elapsed_since_last: float = 0.0,
+    is_first_score: bool = False,
+) -> tuple[str, float, str]:
+    """Run the rules engine for one snapshot and apply the pre-surface gates
+    (silence/voiced accounting + minimum-voiced-budget cap). Returns the RAW
+    verdict before the surface policy (confidence gate + hysteresis), which
+    the caller applies via apply_surface_policy."""
+    from noc_beam.audio.fas_rules import synthesise
+
+    # Silence accounting (drives the sustained-silence FAS signal).
+    if features.silence_score >= 0.85:
+        if not is_first_score:
+            state.consecutive_silence_seconds += min(window_seconds, elapsed_since_last)
+        else:
+            state.consecutive_silence_seconds = window_seconds
+    else:
+        state.consecutive_silence_seconds = 0.0
+
+    # Voiced accounting (gates high verdicts until enough voice is heard).
+    if features.silence_score < SILENCE_GATE_SCORE:
+        if not is_first_score:
+            state.voiced_seconds += min(window_seconds, elapsed_since_last)
+        else:
+            state.voiced_seconds += window_seconds
+
+    verdict_obj = synthesise(
+        features=features,
+        silero_speech_prob=silero_p,
+        aasist_spoof_prob=aasist_p,
+        panns=panns_out,
+        fingerprint_sim=fp_sim,
+        fingerprint_match=fingerprint_match,
+        sensitivity=sensitivity,
+        analyzed_seconds=analyzed_seconds,
+        sustained_silence_seconds=state.consecutive_silence_seconds,
+    )
+    state.evidence_accumulator.add_many(verdict_obj.evidence)
+    verdict = verdict_obj.verdict
+    confidence = verdict_obj.confidence
+    accumulated_reasons = state.evidence_accumulator.reasons_text()
+    reasons = accumulated_reasons or verdict_obj.reasons_text()
+
+    if state.evidence_accumulator.has_sticky_positive():
+        state.deterministic_positive = True
+
+    # Minimum-voiced-budget gate (deterministic positives exempt).
+    if (
+        not state.deterministic_positive
+        and _SEVERITY.get(verdict, 0) > _SEVERITY["SUSPICIOUS"]
+        and state.voiced_seconds < MIN_VOICED_SECONDS_FOR_HIGH
+    ):
+        verdict = "SUSPICIOUS"
+        confidence = min(confidence, 0.45)
+        hold_reason = "awaiting more voice before a firm verdict"
+        reasons = f"{reasons}; {hold_reason}" if reasons else hold_reason
+
+    return verdict, confidence, reasons
+
+
+def apply_surface_policy(
+    state: _CallScoreState,
+    verdict: str,
+    confidence: float,
+    reasons: str,
+    *,
+    allow_deescalation: bool = False,
+) -> tuple[str, float, str]:
+    """Confidence gate + severity hysteresis + deterministic belt. Mutates
+    state's committed_severity / pending / last_* bookkeeping and returns the
+    verdict the badge should display."""
+    # ----- Confidence gate -----
+    min_conf = _MIN_CONFIDENCE_TO_SURFACE.get(verdict, 0.0)
+    if confidence < min_conf and state.committed_severity == 0:
+        verdict, confidence, reasons = "ANALYZING", 0.0, "gathering evidence"
+    elif confidence < min_conf:
+        verdict = state.last_verdict
+        confidence = state.last_confidence
+        reasons = state.last_reasons
+
+    # ----- Severity lock with hysteresis -----
+    new_sev = _SEVERITY.get(verdict, 0)
+    is_det = state.deterministic_positive or new_sev >= _SEVERITY["CONFIRMED_FAS"]
+
+    if new_sev > state.committed_severity:
+        state.low_score_streak = 0
+        if is_det:
+            state.committed_severity = new_sev
+            state.pending_severity = 0
+            state.pending_count = 0
+        else:
+            if state.pending_severity == new_sev:
+                state.pending_count += 1
+            else:
+                state.pending_severity = new_sev
+                state.pending_count = 1
+            if state.pending_count >= ESCALATION_CONFIRM_TICKS:
+                state.committed_severity = new_sev
+                state.pending_severity = 0
+                state.pending_count = 0
+            else:
+                verdict = state.last_verdict or "ANALYZING"
+                confidence = state.last_confidence
+                reasons = state.last_reasons
+    elif new_sev < state.committed_severity:
+        state.pending_severity = 0
+        state.pending_count = 0
+        state.low_score_streak += 1
+        if (
+            allow_deescalation
+            and not state.deterministic_positive
+            and state.low_score_streak >= DEESCALATION_PATIENCE
+        ):
+            state.committed_severity = new_sev
+            state.low_score_streak = 0
+        else:
+            verdict = state.last_verdict
+            confidence = max(confidence, state.last_confidence)
+            reasons = state.last_reasons
+    else:
+        state.pending_severity = 0
+        state.pending_count = 0
+        state.low_score_streak = 0
+
+    if state.deterministic_positive and _SEVERITY.get(verdict, 0) < _SEVERITY["SUSPICIOUS"]:
+        verdict = state.last_verdict
+        confidence = state.last_confidence
+        reasons = state.last_reasons
+
+    state.last_verdict = verdict
+    state.last_confidence = confidence
+    state.last_reasons = reasons
+    return verdict, confidence, reasons
+
+
 class FasInferenceWorker(QThread):
     """Single worker that scores every active call on a schedule.
 
@@ -240,74 +419,32 @@ class FasInferenceWorker(QThread):
         # (16 kHz on this PJSIP build); FAS_SAMPLE_RATE mirrors that.
         min_samples = FAS_SAMPLE_RATE * 2
         if clip.size == 0 or total_samples < min_samples:
-            verdict_obj = None
             verdict, confidence, reasons = "ANALYZING", 0.0, "warming up"
         else:
-            # Pass the router's native rate (matches the port's negotiated
-            # codec rate). Feature extractors and model wrappers handle
-            # resampling to their expected rates internally.
             features = extract_features(clip, sample_rate=FAS_SAMPLE_RATE)
             window_seconds = clip.size / float(FAS_SAMPLE_RATE)
             is_silent = (
                 features.silence_score >= SILENCE_GATE_SCORE
                 and features.rms_db <= SILENCE_GATE_RMS_DB
             )
-            if features.silence_score >= 0.85:
-                if state.last_score_at > 0:
-                    elapsed_since_last_score = max(0.0, time.monotonic() - state.last_score_at)
-                    state.consecutive_silence_seconds += min(window_seconds, elapsed_since_last_score)
-                else:
-                    state.consecutive_silence_seconds = window_seconds
-            else:
-                state.consecutive_silence_seconds = 0.0
+            now_mono = time.monotonic()
+            is_first_score = state.last_score_at <= 0
+            elapsed_since_last = 0.0 if is_first_score else max(0.0, now_mono - state.last_score_at)
 
-            # Track cumulative VOICED audio (used to gate high verdicts). A
-            # window only counts as voiced when it isn't dominated by silence.
-            if features.silence_score < SILENCE_GATE_SCORE:
-                if state.last_score_at > 0:
-                    elapsed = max(0.0, time.monotonic() - state.last_score_at)
-                    state.voiced_seconds += min(window_seconds, elapsed)
-                else:
-                    state.voiced_seconds += window_seconds
-
-            # ONNX models -- each returns None if unavailable; rules
-            # engine tolerates None for every signal independently.
+            # ONNX models -- each returns None if unavailable; rules engine
+            # tolerates None for every signal independently.
             silero_p = silero_vad().score(clip, sample_rate=FAS_SAMPLE_RATE)
             # Silence-gate AASIST: no voice to judge -> no spoof read.
             aasist_raw = (
                 None if is_silent
                 else aasist_detector().score(clip, sample_rate=FAS_SAMPLE_RATE)
             )
-            # PANNs is trained on ~10s clips and reads noisy on 4s; feed it the
-            # full rolling window (already buffered) instead of the 4s clip.
+            # PANNs reads noisy on 4s; feed it the full 10s rolling window.
             panns_clip = router.snapshot(call_id, seconds=10.0)
             panns_out = panns_classifier().score(
                 panns_clip if panns_clip.size else clip, sample_rate=FAS_SAMPLE_RATE
             )
-
-            # k-of-n temporal voting on AASIST. A lone high read must not set
-            # machine_signal and latch the call; require AASIST_VOTE_MIN_AGREE
-            # of the last AASIST_VOTE_WINDOW reads above threshold, and pass
-            # the MEDIAN downstream (robust to a single outlier).
-            from noc_beam.audio.fas_rules import AASIST_SPOOF_THRESHOLD
-
-            if aasist_raw is not None:
-                state.aasist_history.append(float(aasist_raw))
-                if len(state.aasist_history) > AASIST_VOTE_WINDOW:
-                    del state.aasist_history[:-AASIST_VOTE_WINDOW]
-            recent = state.aasist_history
-            if not recent:
-                aasist_p = None
-            elif len(recent) >= AASIST_VOTE_MIN_AGREE:
-                above = sum(1 for p in recent if p >= AASIST_SPOOF_THRESHOLD)
-                if above >= AASIST_VOTE_MIN_AGREE:
-                    aasist_p = float(median(recent))          # corroborated -> may fire
-                else:
-                    aasist_p = float(min(recent))             # below threshold -> won't fire
-            else:
-                # Only one read so far: never enough to lock on its own. Pass it
-                # through but clamped below the firing bar.
-                aasist_p = min(recent[-1], AASIST_SPOOF_THRESHOLD - 0.01)
+            aasist_p = vote_aasist(state, aasist_raw)
 
             # Fingerprint matching scoped by account_id when available.
             meta = router.meta(call_id)
@@ -323,127 +460,28 @@ class FasInferenceWorker(QThread):
                 fingerprint_memory().add(
                     fp, call_id=call_id, account_id=account_id, supplier=supplier,
                 )
-
             # Carry only the non-PII signal that a prior match existed.
-            # Earlier versions passed matched_call_id / matched_account_id /
-            # matched_supplier through into FasEvidence.metadata, which is
-            # persisted and exported in CSV -- a cross-call PII leak.
             fingerprint_match = {"prior_match": True} if entry is not None else None
 
-            verdict_obj = synthesise(
+            verdict, confidence, reasons = evaluate_snapshot(
+                state,
                 features=features,
-                silero_speech_prob=silero_p,
-                aasist_spoof_prob=aasist_p,
-                panns=panns_out,
-                fingerprint_sim=fp_sim,
+                silero_p=silero_p,
+                aasist_p=aasist_p,
+                panns_out=panns_out,
+                fp_sim=fp_sim,
                 fingerprint_match=fingerprint_match,
-                sensitivity=self._sensitivity(),
                 analyzed_seconds=total_samples / float(FAS_SAMPLE_RATE),
-                sustained_silence_seconds=state.consecutive_silence_seconds,
+                sensitivity=self._sensitivity(),
+                window_seconds=window_seconds,
+                elapsed_since_last=elapsed_since_last,
+                is_first_score=is_first_score,
             )
-            state.evidence_accumulator.add_many(verdict_obj.evidence)
-            verdict = verdict_obj.verdict
-            confidence = verdict_obj.confidence
-            accumulated_reasons = state.evidence_accumulator.reasons_text()
-            reasons = accumulated_reasons or verdict_obj.reasons_text()
 
-            # Lock in deterministic positives so the next score interval
-            # doesn't downgrade past a fingerprint / ringback trigger.
-            if state.evidence_accumulator.has_sticky_positive():
-                state.deterministic_positive = True
-
-            # Minimum-voiced-budget gate: don't let a starved/silent early
-            # tick commit a verdict above SUSPICIOUS before we've actually
-            # heard enough voice. Deterministic positives (ringback /
-            # fingerprint) are certain on their own and bypass this.
-            if (
-                not state.deterministic_positive
-                and _SEVERITY.get(verdict, 0) > _SEVERITY["SUSPICIOUS"]
-                and state.voiced_seconds < MIN_VOICED_SECONDS_FOR_HIGH
-            ):
-                verdict = "SUSPICIOUS"
-                confidence = min(confidence, 0.45)
-                hold_reason = "awaiting more voice before a firm verdict"
-                reasons = f"{reasons}; {hold_reason}" if reasons else hold_reason
-
-        # ----- Confidence gate ---------------------------------------
-        # If the raw verdict doesn't clear its confidence floor, fall
-        # back to whatever we last committed. New calls with no prior
-        # commit show "ANALYZING" until something clears.
-        min_conf = _MIN_CONFIDENCE_TO_SURFACE.get(verdict, 0.0)
-        if confidence < min_conf and state.committed_severity == 0:
-            verdict, confidence, reasons = "ANALYZING", 0.0, "gathering evidence"
-        elif confidence < min_conf:
-            # Stay with previously committed verdict, don't expose
-            # the low-confidence reading.
-            verdict = state.last_verdict
-            confidence = state.last_confidence
-            reasons = state.last_reasons
-
-        # ----- Severity lock with hysteresis -------------------------
-        # Escalations to a higher severity must be CONFIRMED across
-        # ESCALATION_CONFIRM_TICKS consecutive scores so a single noisy
-        # frame can't latch the call; deterministic positives (ringback /
-        # fingerprint / CONFIRMED) escalate immediately. Downgrades are
-        # blocked by default (monotonic), but may be accepted after a
-        # sustained low-score streak when de-escalation is enabled.
-        new_sev = _SEVERITY.get(verdict, 0)
-        is_det = state.deterministic_positive or new_sev >= _SEVERITY["CONFIRMED_FAS"]
-
-        if new_sev > state.committed_severity:
-            state.low_score_streak = 0
-            if is_det:
-                state.committed_severity = new_sev
-                state.pending_severity = 0
-                state.pending_count = 0
-            else:
-                if state.pending_severity == new_sev:
-                    state.pending_count += 1
-                else:
-                    state.pending_severity = new_sev
-                    state.pending_count = 1
-                if state.pending_count >= ESCALATION_CONFIRM_TICKS:
-                    state.committed_severity = new_sev
-                    state.pending_severity = 0
-                    state.pending_count = 0
-                else:
-                    # Escalation not yet confirmed: hold the prior surface.
-                    verdict = state.last_verdict or "ANALYZING"
-                    confidence = state.last_confidence
-                    reasons = state.last_reasons
-        elif new_sev < state.committed_severity:
-            state.pending_severity = 0
-            state.pending_count = 0
-            state.low_score_streak += 1
-            if (
-                self._allow_deescalation()
-                and not state.deterministic_positive
-                and state.low_score_streak >= DEESCALATION_PATIENCE
-            ):
-                # Sustained low score: accept the downgrade and surface it.
-                state.committed_severity = new_sev
-                state.low_score_streak = 0
-            else:
-                # Default monotonic behaviour: keep the committed verdict.
-                verdict = state.last_verdict
-                confidence = max(confidence, state.last_confidence)
-                reasons = state.last_reasons
-        else:
-            # Steady state at the committed severity.
-            state.pending_severity = 0
-            state.pending_count = 0
-            state.low_score_streak = 0
-
-        if state.deterministic_positive and _SEVERITY.get(verdict, 0) < _SEVERITY["SUSPICIOUS"]:
-            # Belt-and-suspenders: deterministic-positive signals
-            # (ringback, fingerprint reuse) lock in at SUSPICIOUS minimum.
-            verdict = state.last_verdict
-            confidence = state.last_confidence
-            reasons = state.last_reasons
-
-        state.last_verdict = verdict
-        state.last_confidence = confidence
-        state.last_reasons = reasons
+        verdict, confidence, reasons = apply_surface_policy(
+            state, verdict, confidence, reasons,
+            allow_deescalation=self._allow_deescalation(),
+        )
 
         log.info(
             "FAS verdict call=%s final=%s conf=%.2f committed_sev=%d reasons=%s",
