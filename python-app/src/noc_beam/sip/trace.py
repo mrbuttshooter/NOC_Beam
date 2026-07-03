@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 import time
 
 from noc_beam.sip._pjsua2_loader import PJSUA2_AVAILABLE, pj
@@ -169,17 +170,34 @@ class TraceLogWriter(_LogWriterBase):
         self._capturing = False
         self._direction = "?"
         self._peer = "?"
+        # PJSIP invokes write() inline on WHICHEVER thread happens to log
+        # (transport worker, timer heap, main). Two threads interleaving
+        # _consume/_flush corrupt the line-reassembly state machine
+        # (_buf/_capturing/_direction/_peer) and produce chimera trace
+        # messages -- half of a TX INVITE glued onto half of an RX 200.
+        # Serialize the whole state machine under one lock.
+        self._lock = threading.Lock()
 
     # pjsua2 expects an object with a `write(self, entry)` method where
     # entry has .msg, .level, .threadName attributes.
     def write(self, entry) -> None:  # noqa: D401, ANN001
-        msg = getattr(entry, "msg", str(entry))
-        level = getattr(entry, "level", 4)
+        # SWIG director callback: this runs inside native PJSIP logging
+        # code. A Python exception escaping back into C++ here can hard-
+        # crash the whole process (every other native callback in the
+        # codebase is guarded the same way). Best-effort: swallow. We do
+        # NOT log() from here -- logging can re-enter the PJSIP log writer
+        # and recurse -- a plain swallow is the safe choice.
+        try:
+            msg = getattr(entry, "msg", str(entry))
+            level = getattr(entry, "level", 4)
 
-        for raw_line in msg.splitlines():
-            line = raw_line.rstrip()
-            sip_events().log_line.emit(level, line)
-            self._consume(line)
+            for raw_line in msg.splitlines():
+                line = raw_line.rstrip()
+                sip_events().log_line.emit(level, line)
+                with self._lock:
+                    self._consume(line)
+        except Exception:
+            pass
 
     def _consume(self, line: str) -> None:
         # Detect direction headers emitted by pjsip just before the SIP body.

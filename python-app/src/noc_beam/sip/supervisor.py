@@ -47,6 +47,12 @@ class EndpointSupervisor(QObject):
         self._error_times: deque[float] = deque(maxlen=_ERROR_THRESHOLD)
         self._last_restart_at: float = 0.0
         self._deferred_pending: bool = False
+        # Guards against double-scheduling a restart: two hangups inside
+        # the 500ms defer window would otherwise each queue their own
+        # QTimer.singleShot(500, self._do_restart), firing the restart
+        # twice back-to-back (the second one tearing down the endpoint the
+        # first one just rebuilt).
+        self._restart_scheduled: bool = False
         sip_events().endpoint_error.connect(self._on_endpoint_error)
         # On call_ended, see if a deferred restart is queued.
         sip_events().call_ended.connect(self._on_call_ended)
@@ -82,8 +88,13 @@ class EndpointSupervisor(QObject):
         self._attempt_restart()
 
     def _on_call_ended(self, *_args) -> None:
-        if self._deferred_pending:
+        # Only schedule if a restart is deferred AND we haven't already
+        # queued one. Without the _restart_scheduled guard, two hangups
+        # inside the 500ms window each queue a singleShot(500, _do_restart)
+        # and the endpoint gets torn down twice in a row.
+        if self._deferred_pending and not self._restart_scheduled:
             log.info("Call ended; performing deferred endpoint restart")
+            self._restart_scheduled = True
             QTimer.singleShot(500, self._do_restart)
 
     # ------------------------------------------------------------------
@@ -107,6 +118,30 @@ class EndpointSupervisor(QObject):
     def _do_restart(self) -> None:
         """Controlled SIP-only restart. UI / CallManager are left alone."""
         from noc_beam.sip.endpoint import SipEndpoint
+
+        # This singleShot has now fired; allow the next call-ended to
+        # re-arm a fresh defer if we bail out below.
+        self._restart_scheduled = False
+        # Re-check for live calls BEFORE stopping the endpoint. The
+        # confirmed/held check in _attempt_restart ran when the storm was
+        # detected, but a call ending is not the same as ALL calls ending:
+        # _on_call_ended fires per-call, so the call that just ended may
+        # have left OTHER lines still CONFIRMED/HELD. stop()ing here would
+        # kill those live calls. If any remain, stay deferred and wait for
+        # the next call-ended.
+        try:
+            from noc_beam.sip.call_manager import call_manager, CallState
+            mgr = call_manager()
+            if any(r.state in (CallState.CONFIRMED, CallState.HELD)
+                   for r in mgr.all()):
+                log.info(
+                    "Deferred restart fired but a call is still live; "
+                    "re-deferring until the last call ends."
+                )
+                # Keep _deferred_pending set so the next call-ended re-arms.
+                return
+        except Exception:
+            log.exception("call_manager state check failed in _do_restart")
 
         self._deferred_pending = False
         self._error_times.clear()

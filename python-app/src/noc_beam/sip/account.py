@@ -85,20 +85,34 @@ if PJSUA2_AVAILABLE:
                 log.exception("onRegState error")
 
         def onIncomingCall(self, prm) -> None:  # noqa: N802, ANN001
-            # Append to self.calls ONLY after construction + getInfo() +
-            # signal emit all succeed. Previously, the append happened
-            # eagerly and a later exception left a half-initialised SipCall
-            # in self.calls -- PJSIP couldn't clean up its native side and
-            # the next find_call() iteration could deref a broken wrapper.
+            # Append to self.calls BEFORE emitting call_incoming. The emit
+            # is queued to the Qt main thread, whose handler immediately
+            # calls find_call(info.id) to look the call up. If we emitted
+            # first, that lookup could race ahead of the append and get
+            # None -- silently dropping the incoming call from the UI.
+            #
+            # Construction + getInfo() still happen first so a broken
+            # wrapper never lands in self.calls; and if the emit itself
+            # raises, we roll the append back so a failed notification
+            # doesn't leave a dangling call in the list (which PJSIP could
+            # not clean up its native side for, breaking later find_call).
             try:
                 call = SipCall(self, prm.callId, self.cfg.id)
                 info = call.getInfo()
+            except Exception:
+                log.exception("onIncomingCall error")
+                return
+            self.calls.append(call)
+            try:
                 sip_events().call_incoming.emit(
                     self.cfg.id, info.id, info.remoteUri, True
                 )
-                self.calls.append(call)
             except Exception:
-                log.exception("onIncomingCall error")
+                log.exception("onIncomingCall emit error")
+                try:
+                    self.calls.remove(call)
+                except Exception:
+                    pass
 
         # ------------------------------------------------------------------
         # Public helpers

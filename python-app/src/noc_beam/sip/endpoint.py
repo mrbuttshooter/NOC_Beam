@@ -34,6 +34,28 @@ log = logging.getLogger(__name__)
 _SIP_STATUS_RE = re.compile(r"^SIP/2\.0\s+(\d{3})(?:\s+(.*))?$", re.IGNORECASE)
 
 
+def _emit_endpoint_error_deferred(msg: str) -> None:
+    """Emit endpoint_error on the NEXT event-loop turn, never inline.
+
+    EndpointSupervisor listens on endpoint_error and, on the same thread,
+    can call SipEndpoint.stop()/start() re-entrantly (the endpoint lock is
+    an RLock, so it re-enters happily). Emitting synchronously from inside
+    start()/stop() -- while _lock is held and, worse, BEFORE the except
+    block finishes tearing the half-built endpoint down -- let the
+    supervisor rebuild the endpoint and then the outer except handler
+    destroyed the freshly-restarted one. Deferring the emit via
+    QTimer.singleShot(0, ...) breaks the re-entrancy: the supervisor runs
+    only after start()/stop() has fully returned and released the lock.
+    Falls back to a direct emit in headless / no-Qt-loop contexts (tests),
+    where there is no re-entrant supervisor stack to worry about.
+    """
+    try:
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, lambda m=msg: sip_events().endpoint_error.emit(m))
+    except Exception:
+        sip_events().endpoint_error.emit(msg)
+
+
 def _system_nameservers() -> list[str]:
     """Return the system's DNS resolvers in IP form for PJSIP.
 
@@ -126,6 +148,13 @@ class SipEndpoint:
         # operator explicitly muted (the focus re-wire used to clobber the
         # mute -> silent mic leakage).
         self._muted_call_ids: set[int] = set()
+        # Reap a call's mute flag when it disconnects. pjsua2 RE-USES
+        # call-id slots, so a stale "muted" entry left behind by a hung-up
+        # call would make the NEXT call that inherits that slot start with a
+        # dead mic (set_call_audio_focus honors _muted_call_ids). call_ended
+        # carries the pjsua2 call-id; discard on that transition. stop()
+        # also clears the whole set for the endpoint-restart case.
+        sip_events().call_ended.connect(self._on_call_ended_cleanup)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -139,6 +168,19 @@ class SipEndpoint:
     def is_started(self) -> bool:
         return self._started
 
+    def _on_call_ended_cleanup(self, call_id: int) -> None:
+        """Drop a disconnected call's mic-mute flag.
+
+        Wired to sip_events().call_ended in __init__. pjsua2 recycles
+        call-id slots, so leaving a muted call-id behind poisons the next
+        call that reuses the slot with a dead mic. Best-effort: a missing
+        id is a no-op.
+        """
+        try:
+            self._muted_call_ids.discard(int(call_id))
+        except Exception:
+            log.debug("mute-flag cleanup skipped for call %r", call_id)
+
     def start(
         self,
         settings: GlobalSettings,
@@ -148,7 +190,10 @@ class SipEndpoint:
             if self._started:
                 return
             if not PJSUA2_AVAILABLE:
-                sip_events().endpoint_error.emit(
+                # Deferred emit: see _emit_endpoint_error_deferred. Firing
+                # inline here (under _lock) lets a supervisor re-enter
+                # start()/stop() on this same stack.
+                _emit_endpoint_error_deferred(
                     "pjsua2 not available — install the wheel or run a custom build"
                 )
                 return
@@ -208,7 +253,13 @@ class SipEndpoint:
                 log.info("PJSIP endpoint started: %s", self._ep.libVersion().full)
             except Exception as e:
                 log.exception("Failed to start PJSIP endpoint")
-                sip_events().endpoint_error.emit(str(e))
+                # DEFER the error emit until AFTER we finish tearing the
+                # half-built endpoint down. If we emitted synchronously
+                # here, EndpointSupervisor -- on this same thread, under the
+                # re-entrant RLock -- would run _do_restart(), rebuild a
+                # fresh endpoint, return, and then the cleanup below would
+                # destroy that brand-new endpoint. Queue it instead so the
+                # supervisor only reacts once start() has fully unwound.
                 # CRITICAL ordering: shutdown + drop SipAccount
                 # objects BEFORE libDestroy. SipAccount inherits
                 # from pj.Account whose __del__ calls back into
@@ -228,6 +279,7 @@ class SipEndpoint:
                 self._transports.clear()
                 self._started = False
                 self._safe_destroy()
+                _emit_endpoint_error_deferred(str(e))
 
     def stop(self) -> None:
         with self._lock:
@@ -281,6 +333,11 @@ class SipEndpoint:
                 self._accounts.clear()
                 self._safe_destroy()
             finally:
+                # Clear stale per-call mute flags: after a stop (or a
+                # supervised restart), pjsua2 re-numbers call-ids from
+                # scratch, so any lingering id here would false-mute a
+                # brand-new call that happens to reuse the number.
+                self._muted_call_ids.clear()
                 self._started = False
                 sip_events().endpoint_stopped.emit()
 
@@ -1174,7 +1231,15 @@ class SipEndpoint:
         if self._ep is None:
             return
         self._ensure_thread_registered()
-        info = call.getInfo()
+        # getInfo() raises pjsua2.Error when the far end has already torn
+        # the call down -- e.g. the operator clicks mute at the exact moment
+        # the remote hangs up. Unguarded, that exception propagates into the
+        # Qt slot that called us. Log and bail instead.
+        try:
+            info = call.getInfo()
+        except Exception:
+            log.warning("set_call_mute(%s): getInfo() failed (call gone?)", muted)
+            return
         # Record the intent so set_call_audio_focus won't re-arm the mic on
         # a muted call during a later focus re-wire.
         try:

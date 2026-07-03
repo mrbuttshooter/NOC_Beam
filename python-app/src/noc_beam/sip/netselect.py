@@ -127,15 +127,34 @@ def local_address_for_sip_target(value: str, default_transport: str = "udp") -> 
             return []
 
     addrs: list = []
+    # Do NOT use the executor as a context manager here. `Executor.__exit__`
+    # calls shutdown(wait=True), which JOINS the worker thread -- and that
+    # worker is still blocked inside socket.getaddrinfo() (which ignores
+    # socket.settimeout()). That join silently defeats the hard 500ms cap:
+    # the `return ""` below would run only AFTER __exit__ waited out the
+    # stuck resolver, re-freezing the Qt main thread for the full DNS
+    # timeout (5+ s) -- exactly the hang this function exists to prevent.
+    # Instead shutdown(wait=False): we get our 500ms deadline back, and the
+    # leaked worker thread finishes (or dies with the process) on its own.
+    # cancel_futures=True (Python 3.9+) drops any not-yet-started work so we
+    # don't leave queued callables hanging around either.
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_resolve)
-            try:
-                addrs = future.result(timeout=0.5)
-            except concurrent.futures.TimeoutError:
-                return ""  # DNS too slow; skip publicAddress entirely
-    except Exception:
-        return ""
+        future = pool.submit(_resolve)
+        try:
+            addrs = future.result(timeout=0.5)
+        except concurrent.futures.TimeoutError:
+            # DNS too slow; skip publicAddress entirely (the `finally`
+            # below tears the pool down without joining the stuck worker).
+            return ""
+        except Exception:
+            return ""
+    finally:
+        # Non-blocking on EVERY path: never join a resolver thread that may
+        # still be stuck in getaddrinfo(). The leaked worker finishes in the
+        # background (or dies with the process); that's the accepted
+        # tradeoff for keeping the hard 500ms cap on the Qt main thread.
+        pool.shutdown(wait=False, cancel_futures=True)
 
     for family, _socktype, _proto, _canon, sockaddr in addrs:
         try:
