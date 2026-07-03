@@ -136,6 +136,44 @@ def _format_duration(seconds: Optional[float]) -> str:
     return f"{m}:{s:02d}"
 
 
+# Custom data role carrying each row's stable index into ``_all_rows``.
+# Stored on the column-0 item so selection/play/export resolve to the
+# right CallRow even after the user clicks a header to sort (which
+# physically reorders the QTableWidget rows out from under the frozen
+# populate order). Mirrors supplier_dropdown.py's setData(UserRole,...)
+# identity pattern.
+ROW_KEY_ROLE = Qt.ItemDataRole.UserRole
+# Private role carrying the numeric sort key for Try/Dur/Score. Kept
+# SEPARATE from EditRole on purpose: Qt's item.text() falls back to
+# EditRole whenever DisplayRole is empty, so storing the key in EditRole
+# made an empty-score cell render its key ("-inf") instead of "". A
+# dedicated UserRole slot keeps the displayed text and the sort key
+# fully decoupled.
+NUM_SORT_ROLE = Qt.ItemDataRole.UserRole + 1
+
+
+class _NumericItem(QTableWidgetItem):
+    """QTableWidgetItem that sorts by a numeric key rather than by its
+    displayed text. Try/Dur/Score are rendered as strings ("10", "1:05",
+    "7"); the default lexicographic ``__lt__`` sorts "10" < "2", which
+    misranks the very columns an operator sorts on to find the worst
+    offenders. We keep the human formatting for display (DisplayRole) and
+    stash the real number in a private role so Qt's sort compares numbers.
+    """
+
+    def __init__(self, text: str, sort_key: float) -> None:
+        super().__init__(text)
+        self.setData(NUM_SORT_ROLE, float(sort_key))
+
+    def __lt__(self, other: QTableWidgetItem) -> bool:
+        try:
+            return float(self.data(NUM_SORT_ROLE)) < float(
+                other.data(NUM_SORT_ROLE)
+            )
+        except (TypeError, ValueError):
+            return super().__lt__(other)
+
+
 def _row_csv_record(row: CallRow) -> tuple[str, ...]:
     return (
         row.started_at,
@@ -197,10 +235,32 @@ class FasResultsView(QWidget):
         """
         out: list[CallRow] = []
         for idx in self.table.selectionModel().selectedRows():
-            r = idx.row()
-            if 0 <= r < len(self._visible_rows):
-                out.append(self._visible_rows[r])
+            # Resolve through the stable key stored on the column-0 item
+            # rather than positional indexing into _visible_rows: sorting
+            # physically reorders the view rows, so idx.row() no longer
+            # lines up with the frozen populate order. Indexing positionally
+            # here is exactly what shipped the wrong supplier's audio/CSV.
+            row = self._row_for_view_index(idx.row())
+            if row is not None:
+                out.append(row)
         return out or list(self._visible_rows)
+
+    def _row_for_view_index(self, view_row: int) -> Optional[CallRow]:
+        """Map a physical (possibly post-sort) table row back to its
+        CallRow via the stable index stored on the column-0 item."""
+        item = self.table.item(view_row, COL_VERDICT)
+        if item is None:
+            return None
+        key = item.data(ROW_KEY_ROLE)
+        if key is None:
+            return None
+        try:
+            idx = int(key)
+        except (TypeError, ValueError):
+            return None
+        if 0 <= idx < len(self._visible_rows):
+            return self._visible_rows[idx]
+        return None
 
     # ------------------------------------------------------------------
     # UI construction
@@ -341,13 +401,24 @@ class FasResultsView(QWidget):
         self.table.setRowCount(0)
         self.table.setRowCount(len(self._visible_rows))
         for row_idx, row in enumerate(self._visible_rows):
-            self._set_cell(row_idx, COL_VERDICT, _verdict_text(row.fas_verdict))
+            # Stamp the stable index into _visible_rows onto the column-0
+            # item so post-sort selection/play/export resolve to the right
+            # CallRow (see selected_rows / _row_for_view_index).
+            self._set_cell(row_idx, COL_VERDICT, _verdict_text(row.fas_verdict),
+                           row_key=row_idx)
             self._set_cell(row_idx, COL_SUPPLIER, row.supplier_id)
             self._set_cell(row_idx, COL_DEST, row.destination_e164)
-            self._set_cell(row_idx, COL_TRY, str(row.try_idx))
-            self._set_cell(row_idx, COL_DUR, _format_duration(row.duration_s))
+            # Try/Dur/Score use numeric sort keys so header-click sorting
+            # ranks "10" after "2" instead of lexicographically before it.
+            self._set_cell(row_idx, COL_TRY, str(row.try_idx),
+                           sort_key=float(row.try_idx))
+            self._set_cell(row_idx, COL_DUR, _format_duration(row.duration_s),
+                           sort_key=(row.duration_s if row.duration_s is not None else -1.0))
             score_text = "" if row.fas_score is None else str(row.fas_score)
-            self._set_cell(row_idx, COL_SCORE, score_text)
+            # Missing scores sort below any real score (float('-inf')).
+            self._set_cell(row_idx, COL_SCORE, score_text,
+                           sort_key=(float(row.fas_score) if row.fas_score is not None
+                                     else float("-inf")))
             self._set_cell(row_idx, COL_REASONS, row.fas_reasons or "")
         self.table.setSortingEnabled(True)
 
@@ -355,11 +426,27 @@ class FasResultsView(QWidget):
         self.detail_text.clear()
         self.play_btn.setEnabled(False)
 
-    def _set_cell(self, row: int, col: int, text: str) -> None:
-        item = QTableWidgetItem(text)
+    def _set_cell(
+        self,
+        row: int,
+        col: int,
+        text: str,
+        sort_key: float | None = None,
+        row_key: int | None = None,
+    ) -> None:
+        # Numeric columns get a _NumericItem so sorting compares numbers,
+        # not the formatted display text (see _NumericItem docstring).
+        if sort_key is not None:
+            item: QTableWidgetItem = _NumericItem(text, sort_key)
+        else:
+            item = QTableWidgetItem(text)
         # Centre numeric columns; left-align text columns.
         if col in (COL_TRY, COL_DUR, COL_SCORE):
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Stash the stable row identity on the column-0 item so a sorted
+        # view resolves back to the correct CallRow.
+        if row_key is not None:
+            item.setData(ROW_KEY_ROLE, int(row_key))
         self.table.setItem(row, col, item)
 
     # ------------------------------------------------------------------
@@ -381,8 +468,8 @@ class FasResultsView(QWidget):
         # explicitly selected. The play button only makes sense for
         # exactly one row, so gate it on the model selection size.
         explicit = self.table.selectionModel().selectedRows()
-        if len(explicit) == 1 and 0 <= explicit[0].row() < len(self._visible_rows):
-            row = self._visible_rows[explicit[0].row()]
+        row = self._row_for_view_index(explicit[0].row()) if len(explicit) == 1 else None
+        if row is not None:
             self._render_detail(row)
             self.play_btn.setEnabled(bool(row.wav_path))
         else:
@@ -447,8 +534,11 @@ class FasResultsView(QWidget):
         explicit = self.table.selectionModel().selectedRows()
         if not explicit:
             return
-        row = self._visible_rows[explicit[0].row()]
-        if not row.wav_path:
+        # Resolve through the stable key, not the physical row index --
+        # after a header-click sort the two diverge, and playing by
+        # position would hand the accused supplier the wrong call's WAV.
+        row = self._row_for_view_index(explicit[0].row())
+        if row is None or not row.wav_path:
             return
         wav = Path(row.wav_path)
         if not wav.exists():

@@ -1214,10 +1214,12 @@ class SettingsDialog(QDialog):
             _pill.style().unpolish(_pill); _pill.style().polish(_pill)
         self._pill_slot = _update_pill
         _sev().registration_changed.connect(_update_pill)
-        # Disconnect is wired via closeEvent (see SettingsDialog.closeEvent
-        # at the bottom of the class) — NOT via destroyed.connect, which
-        # PySide6 doesn't reliably fire for QDialog accept/reject. Old
-        # pattern silently leaked one subscriber per Settings open.
+        # Disconnect is wired via the done() override (see
+        # SettingsDialog.done / _teardown_subscriptions at the bottom of
+        # the class), NOT closeEvent — QDialog.accept()/done() only hides
+        # the dialog and fires NO QCloseEvent, so a closeEvent-only teardown
+        # leaked this subscriber on every OK. done() covers OK, Cancel,
+        # Esc AND the window-close (X) path.
         reg.addRow("Status",     status_pill)
         # Live Expires-In: reads the registrar's granted Expires from
         # SipEndpoint and refreshes on every registration_changed
@@ -1272,11 +1274,21 @@ class SettingsDialog(QDialog):
         outer.addStretch(1)
         return w
 
-    def _safe_disconnect_pill(self) -> None:
+    def _teardown_subscriptions(self) -> None:
         """Drop the registration_changed subscribers installed in
-        _build_account_pane (pill + expires-in). Called by closeEvent
-        and by reject() — replaces the older destroyed.connect hook
-        which PySide6 didn't reliably fire."""
+        _build_account_pane (pill + expires-in). Idempotent: guarded so a
+        double-call (e.g. done() then a later closeEvent) is a no-op.
+
+        Every open+OK cycle used to leak TWO live slots. The dialog is
+        parented to PhoneShell and never deleted, and each leaked slot
+        runs a PJSIP getInfo() on every registration refresh, forever.
+        Centralising teardown here and driving it from done() — which
+        covers accept (OK), reject (Cancel/Esc) AND close (X) — plugs the
+        leak that closeEvent alone missed (QDialog.accept()/done() only
+        hides the dialog and fires NO QCloseEvent)."""
+        if getattr(self, "_subscriptions_torn_down", False):
+            return
+        self._subscriptions_torn_down = True
         from noc_beam.sip.events import sip_events as _sev
         for slot_attr in ("_pill_slot", "_expires_slot"):
             slot = getattr(self, slot_attr, None)
@@ -1287,19 +1299,22 @@ class SettingsDialog(QDialog):
             except Exception:
                 pass
 
-    def closeEvent(self, ev):  # noqa: N802 (Qt naming)
-        # Settings is a QDialog — closeEvent fires reliably whether
-        # the user clicks OK / Cancel / X / Esc. Run subscriber teardown
-        # here instead of via destroyed.connect (unreliable in PySide6).
-        self._safe_disconnect_pill()
-        super().closeEvent(ev)
+    def done(self, result):  # noqa: N802 (Qt naming)
+        # QDialog.done() is the chokepoint the button paths route through:
+        # accept() -> done(Accepted) and reject() -> done(Rejected).
+        # closeEvent, by contrast, does NOT fire for accept()/reject() on
+        # PySide6 — which is exactly why teardown-in-closeEvent leaked a
+        # subscriber pair on every OK. Tear down here, then hand off to Qt.
+        self._teardown_subscriptions()
+        super().done(result)
 
-    def reject(self):  # noqa: D401 (Qt slot)
-        # accept() goes through closeEvent normally, but reject() (Cancel,
-        # Esc) on some PySide6 builds skips closeEvent. Belt-and-braces
-        # disconnect here too — _safe_disconnect_pill is idempotent.
-        self._safe_disconnect_pill()
-        super().reject()
+    def closeEvent(self, ev):  # noqa: N802 (Qt naming)
+        # Belt-and-braces for the window-close (X) path: a raw close() on a
+        # dialog that was never shown can hide without routing through
+        # done(). _teardown_subscriptions is guarded, so pairing this with
+        # done() tears down exactly once regardless of path.
+        self._teardown_subscriptions()
+        super().closeEvent(ev)
 
     def _build_advanced_pane(self) -> QWidget:
         w = QWidget()

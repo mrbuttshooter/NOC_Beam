@@ -275,6 +275,11 @@ class PhoneShell(QMainWindow):
             cur_out = getattr(self.settings.audio, "output_device", -1)
             set_active_devices(int(dev_id), int(cur_out) if cur_out is not None else -1)
             self.settings.audio.input_device = int(dev_id)
+            # Persist so the right-click device pick survives a relaunch.
+            # Without this the in-memory setting was mutated but never
+            # written, so the next launch reverted to the old device --
+            # the Settings dialog saves via this same path.
+            save_settings(self.settings)
         except Exception:
             log.exception("input device pick failed")
 
@@ -284,6 +289,9 @@ class PhoneShell(QMainWindow):
             cur_in = getattr(self.settings.audio, "input_device", -1)
             set_active_devices(int(cur_in) if cur_in is not None else -1, int(dev_id))
             self.settings.audio.output_device = int(dev_id)
+            # Persist so the right-click device pick survives a relaunch
+            # (same rationale/path as _on_input_device_picked).
+            save_settings(self.settings)
         except Exception:
             log.exception("output device pick failed")
 
@@ -832,6 +840,25 @@ class PhoneShell(QMainWindow):
             if not ep.is_started():
                 self._set_status("Starting SIP endpoint…", "muted")
                 return
+            # Don't erase a persistent registration-FAILURE banner when a
+            # transient toast reverts. The old code recomputed a flat
+            # "Ready" whenever the endpoint was started, wiping the auth-
+            # failure banner + its retry link that _on_registration_changed
+            # had set -- so after any "Settings applied" toast the operator
+            # lost the "auth failed -- click here to retry" cue. Re-check
+            # _reg_state and restore the same banner an auth-class failure
+            # originally rendered.
+            for acc in self.accounts:
+                if not acc.enabled:
+                    continue
+                code = self._reg_state.get(acc.id, 0)
+                if code in (401, 403, 407, 423):
+                    label = self._account_label(acc.id)
+                    self._set_status(
+                        f"Account: {label} -- auth failed ({code})", "warn",
+                        "Click here to retry", "retry-register",
+                    )
+                    return
             self._set_status("Ready", "ok")
         except Exception:
             self._set_status("Ready", "ok")
@@ -841,12 +868,28 @@ class PhoneShell(QMainWindow):
             self._on_add_account()
             return
         if action == "retry-register":
+            # remove_account + re-add tears the PJSIP account down; doing
+            # that to an account with a live call drops the call's audio
+            # without sending BYE (peer waits for timeout). Skip accounts
+            # with active calls -- same guard the remove/edit/supplier-swap
+            # paths use -- and retry only the rest.
+            skipped = 0
             for acc in self.accounts:
-                if acc.enabled:
-                    try: SipEndpoint.instance().remove_account(acc.id)
-                    except Exception: pass
-                    self._add_account_to_endpoint(acc)
-            self._set_status("Retrying registration...", "muted")
+                if not acc.enabled:
+                    continue
+                if self._active_calls_on_account(acc.id):
+                    skipped += 1
+                    continue
+                try: SipEndpoint.instance().remove_account(acc.id)
+                except Exception: pass
+                self._add_account_to_endpoint(acc)
+            if skipped:
+                self._set_status(
+                    f"Retrying registration… ({skipped} account(s) with live "
+                    "calls skipped)", "muted",
+                )
+            else:
+                self._set_status("Retrying registration...", "muted")
 
     def _refresh_accounts(self):
         self.accounts_view.populate(self.accounts)
@@ -899,7 +942,15 @@ class PhoneShell(QMainWindow):
             if not self._active_account_id or not any(a.id == self._active_account_id for a in enabled):
                 first = enabled[0]
                 self._set_active_account(first.id, _chip_text(first))
+        # Swap in the new menu and schedule the OLD one for deletion.
+        # setMenu() does NOT reparent/free the previous menu -- it stays
+        # parented to account_chip forever, so every account refresh (and
+        # there are many: each registration_changed, each edit/add/remove)
+        # leaked a whole QMenu + its QActions for the app's lifetime.
+        old_menu = self.account_chip.menu()
         self.account_chip.setMenu(menu)
+        if old_menu is not None:
+            old_menu.deleteLater()
 
     def _set_active_account(self, account_id, label):
         self._active_account_id = account_id
@@ -1135,16 +1186,28 @@ class PhoneShell(QMainWindow):
             return
         if getattr(self, "_supplier_filtering_text", False):
             return
-        sid = self.supplier_combo.itemData(index) or ""
-        self._active_supplier_id = str(sid)
-        log.info("Active supplier changed -> id=%s", self._active_supplier_id)
+        sid = str(self.supplier_combo.itemData(index) or "")
+        # Remember the supplier that was active BEFORE this change so a
+        # refused mid-call swap can roll the combo back to it. Do NOT
+        # overwrite self._active_supplier_id yet: the live-call guard
+        # below may refuse the swap, and if we'd already clobbered the
+        # active id the identity would desync -- the next dial would then
+        # trigger _ensure_teles_supplier_identity -> update_account (a
+        # remove+re-add) mid-call, killing the call. Only commit the new
+        # id once we've decided the swap is actually allowed.
+        prev_supplier_id = str(getattr(self, "_active_supplier_id", "") or "")
+        log.info("Active supplier change requested -> id=%s (was %s)",
+                 sid, prev_supplier_id)
         # For Teles, swap auth username on the active account and re-register.
         # For Genband, no re-register; the prefix is applied at dial time.
         acc = self._selected_account()
         if acc is None:
+            self._active_supplier_id = sid
             return
         kind = (getattr(acc, "switch_type", "other") or "other").lower()
         if kind != "teles":
+            # Genband/other: no re-register, just record the selection.
+            self._active_supplier_id = sid
             return
         # Early-return gate: the supplier combo's QTimer.singleShot(0, ...)
         # in _refresh_supplier_picker can fire this slot during PhoneShell
@@ -1170,6 +1233,10 @@ class PhoneShell(QMainWindow):
             else:
                 is_started = bool(getattr(endpoint, "_started", False))
         if not is_started:
+            # Endpoint not up yet: the swap re-fires after startup and the
+            # add path materialises the identity. Record the selection so
+            # the combo and _active_supplier_id agree meanwhile.
+            self._active_supplier_id = sid
             log.info(
                 "Skipping supplier swap -- endpoint not started yet "
                 "(will fire after startup)"
@@ -1179,8 +1246,11 @@ class PhoneShell(QMainWindow):
             from noc_beam.config.suppliers import load_suppliers
 
             suppliers = {s.id: s for s in load_suppliers()}
-            s = suppliers.get(self._active_supplier_id)
+            s = suppliers.get(sid)
             if s is None:
+                # Unknown supplier id: record it but don't attempt a
+                # re-register we can't render credentials for.
+                self._active_supplier_id = sid
                 return
             routing_fmt = getattr(acc, "routing_format", "") or ""
             # Guard: if routing_format has no `{id}` placeholder, treat the
@@ -1195,14 +1265,19 @@ class PhoneShell(QMainWindow):
                     "placeholder, leaving username=%r untouched",
                     routing_fmt, acc.username,
                 )
+                self._active_supplier_id = sid
                 return
             new_uid = self._render_teles_supplier_uid(acc, s, routing_fmt)
             if not new_uid or (new_uid == acc.username and new_uid == acc.auth_user):
+                self._active_supplier_id = sid
                 return
             # Guard: supplier swap calls update_account which does
             # remove+re-add internally. Tearing down the PJSIP account
             # mid-call kills the call's audio without sending BYE.
-            # Refuse the swap; user must end live calls first.
+            # Refuse the swap; user must end live calls first. Note we
+            # have NOT yet committed self._active_supplier_id to the new
+            # id, so on refusal the active identity stays the OLD supplier
+            # and the next dial won't trigger a mid-call re-add.
             active_on = self._active_calls_on_account(acc.id)
             if active_on:
                 QMessageBox.warning(
@@ -1211,12 +1286,15 @@ class PhoneShell(QMainWindow):
                     "call(s). End them before switching supplier — the swap "
                     "re-registers and would drop the call mid-conversation."
                 )
-                # Roll the combo back to whatever was selected before so
-                # the UI matches the un-applied state.
+                # Roll the combo back to the PREVIOUS supplier. The combo's
+                # itemData holds supplier ids (e.g. "080"), NOT account
+                # UIDs -- the old code searched findData(auth_user) (e.g.
+                # "U080") which never matched, so findData returned -1 and
+                # the combo stayed stuck on the new supplier while the
+                # identity said old (the desync this fix prevents). Use the
+                # saved previous supplier id so the row actually matches.
                 try:
-                    prev_idx = self.supplier_combo.findData(
-                        getattr(acc, "auth_user", "") or acc.username
-                    )
+                    prev_idx = self.supplier_combo.findData(prev_supplier_id)
                     if prev_idx >= 0:
                         self.supplier_combo.blockSignals(True)
                         self.supplier_combo.setCurrentIndex(prev_idx)
@@ -1224,6 +1302,8 @@ class PhoneShell(QMainWindow):
                 except Exception:
                     pass
                 return
+            # Guard passed -- now it's safe to commit the new active id.
+            self._active_supplier_id = sid
             # Swap BOTH username and auth_user so the on-wire From: URI
             # and Authorization header agree (e.g. From: sip:U138@... +
             # Authorization: username="U138"). Operator workflow puts
@@ -1367,12 +1447,22 @@ class PhoneShell(QMainWindow):
             pass
         return supplier_id, f"C{supplier_id}"
 
-    def _add_account_to_endpoint(self, cfg):
+    def _add_account_to_endpoint(self, cfg) -> bool:
+        """Add cfg to the live PJSIP endpoint. Returns True on success,
+        False if add_account raised. Callers that mutate self.accounts
+        BEFORE calling this (e.g. the edit path) rely on the bool to know
+        whether to roll back -- we swallow the exception here so a failed
+        add doesn't crash the UI, which means an exception can't propagate
+        to a caller's try/except; the bool is the only failure signal.
+        """
         self._ensure_teles_supplier_identity(cfg)
-        try: SipEndpoint.instance().add_account(cfg)
+        try:
+            SipEndpoint.instance().add_account(cfg)
+            return True
         except Exception as e:
             log.exception("Failed to add account %s", cfg.id)
             QMessageBox.warning(self, "Account error", str(e))
+            return False
 
     def _save_accounts_or_warn(self, accounts):
         try:
@@ -1484,13 +1574,17 @@ class PhoneShell(QMainWindow):
         self.reg_retry.reset(acc.id)
         SipEndpoint.instance().remove_account(acc.id)
         if new_cfg.enabled:
-            try:
-                self._add_account_to_endpoint(new_cfg)
+            # _add_account_to_endpoint swallows add_account exceptions
+            # internally (so it never raises) and returns False on
+            # failure. The old `try/except Exception` around it was dead
+            # code -- the rollback never ran, leaving the UI showing an
+            # account with no live PJSIP backing. Check the bool instead.
+            if self._add_account_to_endpoint(new_cfg):
                 self._set_status(
                     f"Registering {new_cfg.username}@{new_cfg.domain}…", "muted"
                 )
-            except Exception:
-                log.exception("Edit-account re-register failed; rolling back UI state")
+            else:
+                log.error("Edit-account re-register failed; rolling back UI state")
                 # Roll back self.accounts so the UI doesn't show an
                 # account that has no live PJSIP backing.
                 self.accounts = prior_accounts
@@ -1601,8 +1695,22 @@ class PhoneShell(QMainWindow):
         log.error("Endpoint error: %s", msg)
         self._set_status(f"Endpoint error: {msg}", "danger",
                          "Click here to retry", "retry-register")
-        if self.accounts:
+        # Debounce the modal. An endpoint_error STORM (transport flapping,
+        # DNS failure looping) used to stack one QMessageBox per event;
+        # each modal spins its own nested event loop, so N stacked modals
+        # meant N-deep reentrancy and an operator clicking OK N times. The
+        # status banner above already surfaces every error non-modally;
+        # only ever show ONE dialog at a time. While it's open, subsequent
+        # errors just update the banner + log (above).
+        if not self.accounts:
+            return
+        if getattr(self, "_endpoint_error_dialog_open", False):
+            return
+        self._endpoint_error_dialog_open = True
+        try:
             QMessageBox.warning(self, "SIP endpoint error", msg)
+        finally:
+            self._endpoint_error_dialog_open = False
 
     def _on_registration_changed(self, account_id, code, reason):
         acc = next((a for a in self.accounts if a.id == account_id), None)
@@ -1682,7 +1790,19 @@ class PhoneShell(QMainWindow):
         rec = CallRecord(call_id=call_id, account_id=account_id, account_label=label,
                          remote_uri=remote, direction="in", state=CallState.NULL)
         self.calls.register(rec); self.calls.update_state(call_id, CallState.INCOMING)
-        self._select_call(call_id)
+        # Only move selection/audio focus to the incoming call when the
+        # operator ISN'T already in a confirmed conversation. _select_call
+        # -> set_call_audio_focus soft-holds every OTHER call both ways,
+        # so blindly selecting a second, still-RINGING call would silence
+        # the live call the operator is talking on while the new one is
+        # merely ringing. When there's already a confirmed call, show the
+        # incoming card WITHOUT stealing audio focus; answering it (via
+        # _on_answer) is what moves focus to the new call.
+        has_confirmed = any(
+            r.state == CallState.CONFIRMED for r in self.calls.active()
+        )
+        if not has_confirmed:
+            self._select_call(call_id)
         self.call_widget.show_incoming(call_id, remote)
         self.bottom_tabs.select(int(Tab.DIALPAD))
         if not self.isVisible() and self.tray.available:
@@ -1978,12 +2098,23 @@ class PhoneShell(QMainWindow):
         self.call_widget.update_state(rec.state.value, rec.last_code, rec.last_reason)
         if rec.codec:
             self.call_widget.update_media(rec.codec, rec.clock_rate, rec.channels)
-        # Sync the top-strip mic icon to THIS call's mute state -- the
-        # mute is per-call and switching calls switches whose mic mute
-        # is shown.
+        # Sync BOTH the top-strip mic icon AND the CallWidget's in-card
+        # Mute button to THIS call's mute state. The mute is per-call
+        # (lives on the CallRecord, the source of truth) and switching
+        # calls switches whose mic mute is shown. Previously only the
+        # top-strip icon was synced, so the card's Mute button could show
+        # "muted" while the mic was actually hot on the newly-selected
+        # call (or vice-versa) -- a dangerous desync where the operator
+        # believed they were muted but weren't. blockSignals prevents the
+        # setChecked from re-firing mute_toggled -> _on_mute_toggled,
+        # which would flip the actual mic state and fight this sync.
         try:
             muted = bool(getattr(rec, "muted", False))
             self.audio.set_mic_muted(muted)
+            mb = self.call_widget.mute_btn
+            mb.blockSignals(True)
+            mb.setChecked(muted)
+            mb.blockSignals(False)
         except Exception:
             pass
         # Multi-call strip refresh now that the selected call changed
@@ -2280,6 +2411,34 @@ class PhoneShell(QMainWindow):
         if self._selected_call_id is None: return None
         return SipEndpoint.instance().find_call(self._selected_call_id)
 
+    def _pjsua_call_for(self, call_id):
+        """Resolve the live SipCall for the call_id a CallWidget signal
+        carried, falling back to the selected call only when the signal
+        genuinely delivered no id (None / negative sentinel).
+
+        The CallWidget action signals (answer/reject/hold/resume/mute)
+        DO carry the real pjsua2 call-id (emitted as self.call_id). The
+        handlers used to ignore it and act on _selected_pjsua_call(),
+        which races teardown: if selection moved to a different call
+        between the click and the queued slot, the operator's Answer/
+        Hold/Mute landed on the WRONG call. Honour the passed id.
+        """
+        cid = call_id
+        if cid is None or (isinstance(cid, int) and cid < 0):
+            cid = self._selected_call_id
+        if cid is None:
+            return None
+        return SipEndpoint.instance().find_call(cid)
+
+    @staticmethod
+    def _resolve_signal_call_id(call_id, fallback):
+        """Return call_id unless it's a None/negative sentinel, in which
+        case fall back to the selected call id. Keeps the widget-signal
+        id authoritative over selection (teardown-race safety)."""
+        if call_id is None or (isinstance(call_id, int) and call_id < 0):
+            return fallback
+        return call_id
+
     def _finish_call_locally(self, call_id: int, code: int, reason: str) -> None:
         rec = self.calls.get(call_id)
         if rec is None:
@@ -2289,8 +2448,19 @@ class PhoneShell(QMainWindow):
             bool(rec.connected_at is not None),
         )
         self._locally_finished_call_ids.add(call_id)
+        # Expire the local-hangup marker well after the SIP transaction
+        # timeout, not at 10 s. PJSIP can deliver the terminal
+        # DISCONNECTED up to ~32 s after we CANCEL a call to an
+        # unresponsive peer (Timer B/F territory); at 10 s the marker was
+        # already gone, so that late event was treated as a real remote
+        # failure -> ghost CDR + spurious failure tone ~30 s after the
+        # operator hung up. 40 s comfortably covers the transaction
+        # timeout. The expiry itself is still needed (not permanent):
+        # pjsua2 reuses integer call-id slots, so a stale marker must
+        # eventually clear or it would suppress a REAL later call's
+        # events on the reused id.
         QTimer.singleShot(
-            10000,
+            40000,
             lambda cid=call_id: self._locally_finished_call_ids.discard(cid),
         )
         if self.calls.update_state(call_id, CallState.DISCONNECTED, code, reason):
@@ -2304,9 +2474,11 @@ class PhoneShell(QMainWindow):
 
     def _on_hangup_by_id(self, call_id): self._hangup_one(call_id)
 
-    def _on_answer(self, _call_id):
-        call = self._selected_pjsua_call()
+    def _on_answer(self, call_id):
+        call = self._pjsua_call_for(call_id)
         if call is None: return
+        # Act on the id the signal carried, not the selected call.
+        answered_id = self._resolve_signal_call_id(call_id, self._selected_call_id)
         # Call-waiting: if there's another CONFIRMED call live, put it
         # on hold BEFORE we answer the new one. Without this both
         # parties end up mixed in the conference bridge audibly --
@@ -2314,7 +2486,7 @@ class PhoneShell(QMainWindow):
         ep = SipEndpoint.instance()
         try:
             for rec in self.calls.active():
-                if rec.call_id != _call_id and rec.state == CallState.CONFIRMED:
+                if rec.call_id != answered_id and rec.state == CallState.CONFIRMED:
                     other = ep.find_call(rec.call_id)
                     if other is not None:
                         try:
@@ -2327,31 +2499,42 @@ class PhoneShell(QMainWindow):
                             log.exception("auto-hold of call %s failed", rec.call_id)
         except Exception:
             log.exception("call-waiting auto-hold scan failed")
-        try: ep.answer_call(call); self.ringer.stop()
+        try:
+            ep.answer_call(call); self.ringer.stop()
+            # Answering is what moves audio focus to the new call.
+            # _on_call_incoming deliberately did NOT steal focus for a
+            # merely-RINGING second call, so without this the just-
+            # answered call would stay soft-held (silent both ways)
+            # behind the previously-selected call. Select it now so
+            # set_call_audio_focus routes audio to it.
+            if answered_id is not None:
+                self._select_call(answered_id)
         except Exception: log.exception("answer failed")
 
-    def _on_reject(self, _call_id):
-        call = self._selected_pjsua_call()
+    def _on_reject(self, call_id):
+        call = self._pjsua_call_for(call_id)
         if call is None: return
         try: SipEndpoint.instance().hangup_call(call, code=603); self.ringer.stop()
         except Exception: log.exception("reject failed")
 
-    def _on_hold(self, _call_id):
-        call = self._selected_pjsua_call()
+    def _on_hold(self, call_id):
+        call = self._pjsua_call_for(call_id)
         if call is None: return
+        target_id = self._resolve_signal_call_id(call_id, self._selected_call_id)
         try:
             SipEndpoint.instance().hold_call(call)
-            if self._selected_call_id is not None:
-                self.calls.update_state(self._selected_call_id, CallState.HELD)
+            if target_id is not None:
+                self.calls.update_state(target_id, CallState.HELD)
         except Exception: log.exception("hold failed")
 
-    def _on_resume(self, _call_id):
-        call = self._selected_pjsua_call()
+    def _on_resume(self, call_id):
+        call = self._pjsua_call_for(call_id)
         if call is None: return
+        target_id = self._resolve_signal_call_id(call_id, self._selected_call_id)
         try:
             SipEndpoint.instance().resume_call(call)
-            if self._selected_call_id is not None:
-                self.calls.update_state(self._selected_call_id, CallState.CONFIRMED)
+            if target_id is not None:
+                self.calls.update_state(target_id, CallState.CONFIRMED)
         except Exception: log.exception("resume failed")
 
     def _on_transfer(self, call_id):
@@ -2391,10 +2574,15 @@ class PhoneShell(QMainWindow):
             (capture device adjustTxLevel; re-INVITE-proof)
           - the MIC icon (not the speaker icon) reflects the state
         """
-        # Track on the call record for History.
-        if self._selected_call_id is not None:
+        # Track on the call record for History. Use the id the widget
+        # signal carried (not the selected call) so a teardown-race
+        # selection change can't record the mute against the wrong
+        # CallRecord -- the record is the source of truth _select_call
+        # syncs the mute button back from.
+        target_id = self._resolve_signal_call_id(_call_id, self._selected_call_id)
+        if target_id is not None:
             try:
-                self.calls.set_mute(self._selected_call_id, muted)
+                self.calls.set_mute(target_id, muted)
             except Exception:
                 pass
         # Drive the top-strip MIC icon, which has the device-level
@@ -3133,9 +3321,20 @@ class PhoneShell(QMainWindow):
         )
 
     def _install_shortcuts(self):
+        # NOTE: Return/Esc are deliberately NOT registered as
+        # WindowShortcuts here. A WindowShortcut consumes the key BEFORE
+        # the focused widget sees it, and on this project's PySide6 6.8.3
+        # a QLineEdit does NOT accept ShortcutOverride for Return/Escape
+        # -- so a window-level QShortcut("Return") would dial while the
+        # operator was still typing in the supplier combo, and
+        # QShortcut("Esc") would HANG UP the selected live call the moment
+        # Esc was pressed to clear a search field. Instead Return/Esc are
+        # handled in keyPressEvent(), which only receives keys the focused
+        # widget didn't consume: a QLineEdit eats Return/Esc first (so
+        # dial_input.returnPressed still fires exactly once, and search
+        # fields clear on Esc as normal), and the global fallback only
+        # kicks in when nothing editable has focus.
         for seq, slot in (
-            ("Return",        self._on_dial_input_enter),
-            ("Esc",           self._on_hangup_requested),
             ("Ctrl+1",        lambda: self.bottom_tabs.select(int(Tab.DIALPAD))),
             ("Ctrl+2",        lambda: self.bottom_tabs.select(int(Tab.CONTACTS))),
             ("Ctrl+3",        lambda: self.bottom_tabs.select(int(Tab.FAVORITES))),
@@ -3150,6 +3349,26 @@ class PhoneShell(QMainWindow):
             sc = QShortcut(QKeySequence(seq), self)
             sc.setContext(Qt.ShortcutContext.WindowShortcut)
             sc.activated.connect(slot)
+
+    def keyPressEvent(self, event):
+        # Global fallback for Return/Esc. keyPressEvent only fires for
+        # keys the focused widget did NOT consume -- a focused QLineEdit /
+        # QComboBox / QTextEdit eats Return and Escape itself first, so
+        # this never steals a key out from under an editable widget the
+        # way a WindowShortcut("Return"/"Esc") did (see _install_shortcuts
+        # for the failure mode). The dial input's own returnPressed still
+        # dials exactly once; this only handles the "nothing editable has
+        # focus" case (e.g. focus on a dialpad button or the window).
+        key = event.key()
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self._on_dial_input_enter()
+            event.accept()
+            return
+        if key == Qt.Key.Key_Escape:
+            self._on_hangup_requested()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def _restore_from_tray(self):
         self.showNormal(); self.raise_(); self.activateWindow()

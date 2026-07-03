@@ -267,7 +267,13 @@ class AudioStrip(QFrame):
                 act.triggered.connect(
                     lambda _checked=False, d=dev_id: self.input_device_picked.emit(d)
                 )
+        # setMenu() doesn't free the previous menu; without deleting it the
+        # old QMenu stays parented to the button forever. Device lists get
+        # rebuilt on every hot-plug / device-refresh, so this leaked.
+        old_menu = self.mic_dev_btn.menu()
         self.mic_dev_btn.setMenu(menu)
+        if old_menu is not None:
+            old_menu.deleteLater()
 
     def set_output_devices(self, devices: list[tuple[object, str]]) -> None:
         self._outputs = list(devices)
@@ -281,7 +287,12 @@ class AudioStrip(QFrame):
                 act.triggered.connect(
                     lambda _checked=False, d=dev_id: self.output_device_picked.emit(d)
                 )
+        # Same leak fix as set_input_devices: free the previous menu that
+        # setMenu() would otherwise leave parented to the button forever.
+        old_menu = self.spk_dev_btn.menu()
         self.spk_dev_btn.setMenu(menu)
+        if old_menu is not None:
+            old_menu.deleteLater()
 
     # ------------------------------------------------------------------
     def set_volume(self, value: int) -> None:

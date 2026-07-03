@@ -144,7 +144,7 @@ def test_add_edit_delete_persist_and_emit_contact_saved(
     dialogs: list[object] = []
 
     class FakeDialog:
-        def __init__(self, contact=None, group="Work", parent=None) -> None:  # noqa: ANN001
+        def __init__(self, contact=None, group="Work", parent=None, seed=None, error="") -> None:  # noqa: ANN001
             self.contact = contact
             self.group = group
             self.error = QLabel("")
@@ -210,7 +210,7 @@ def test_add_group_prefills_contact_dialog_group(
     captured_groups: list[str] = []
 
     class FakeDialog:
-        def __init__(self, contact=None, group="Work", parent=None) -> None:  # noqa: ANN001
+        def __init__(self, contact=None, group="Work", parent=None, seed=None, error="") -> None:  # noqa: ANN001
             captured_groups.append(group)
             self.error = QLabel("")
 
@@ -245,7 +245,7 @@ def test_add_save_failure_warns_and_keeps_dialog_for_retry(
     modal_results = iter([True, False])
 
     class FakeDialog:
-        def __init__(self, contact=None, group="Work", parent=None) -> None:  # noqa: ANN001
+        def __init__(self, contact=None, group="Work", parent=None, seed=None, error="") -> None:  # noqa: ANN001
             self.error = QLabel("")
             self.values_data = {
                 "name": "Alice",
@@ -297,7 +297,7 @@ def test_edit_save_failure_warns_and_keeps_existing_contact(
     modal_results = iter([True, False])
 
     class FakeDialog:
-        def __init__(self, contact=None, group="Work", parent=None) -> None:  # noqa: ANN001
+        def __init__(self, contact=None, group="Work", parent=None, seed=None, error="") -> None:  # noqa: ANN001
             self.error = QLabel("")
             self.values_data = {
                 "name": "Changed",

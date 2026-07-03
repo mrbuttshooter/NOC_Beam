@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QListWidget, QListWidgetItem, QVBoxLayout, QLabel, QWidget
 
 from noc_beam.sip.call_manager import CallManager, CallState
+from noc_beam.ui._signal_registry import SignalRegistry
 
 
 _STATE_PRETTY = {
@@ -41,9 +42,18 @@ class CallListWidget(QWidget):
         layout.addWidget(QLabel("Active calls"))
         layout.addWidget(self._list, 1)
 
-        manager.call_added.connect(self._refresh)
-        manager.call_updated.connect(self._refresh)
-        manager.call_removed.connect(self._refresh)
+        # Bind through a SignalRegistry so the three CallManager-singleton
+        # subscriptions are torn down when this widget dies. The singleton
+        # outlives the widget; without an explicit disconnect it would keep
+        # firing _refresh into a deleted C++ object (RuntimeError), and
+        # every recreated CallListWidget would stack another live
+        # subscription on the singleton. destroyed fires before the C++
+        # side is gone, so unbind_all() there disconnects cleanly.
+        self._signals = SignalRegistry()
+        self._signals.bind(manager.call_added, self._refresh)
+        self._signals.bind(manager.call_updated, self._refresh)
+        self._signals.bind(manager.call_removed, self._refresh)
+        self.destroyed.connect(lambda *_a: self._signals.unbind_all())
         self._refresh()
 
     def _row_text(self, call_id: int) -> str:

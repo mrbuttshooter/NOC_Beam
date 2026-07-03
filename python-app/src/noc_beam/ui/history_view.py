@@ -96,9 +96,28 @@ def _show_export_toast(parent: QWidget, path: Path, count: int, failed: bool = F
         toast.hide()
         toast.deleteLater()
     toast.mousePressEvent = _open_in_explorer  # type: ignore[assignment]
-    # Auto-dismiss after 3.5s if user doesn't click.
+    # Auto-dismiss after 3.5s if user doesn't click. If the user already
+    # clicked the toast, _open_in_explorer ran deleteLater() and the C++
+    # QLabel is gone; calling deleteLater() again on the dead wrapper
+    # raises RuntimeError inside the event loop. Guard the delayed call
+    # with shiboken6.isValid so it fires only while the object still lives.
     from PySide6.QtCore import QTimer as _QT
-    _QT.singleShot(3500, toast.deleteLater)
+
+    def _dismiss_if_alive() -> None:
+        try:
+            import shiboken6
+            if not shiboken6.isValid(toast):
+                return
+        except Exception:
+            # If shiboken6 is somehow unavailable, fall back to attempting
+            # the deletion but swallow the double-delete RuntimeError.
+            pass
+        try:
+            toast.deleteLater()
+        except RuntimeError:
+            pass
+
+    _QT.singleShot(3500, _dismiss_if_alive)
 
 
 def default_export_dir() -> Path:

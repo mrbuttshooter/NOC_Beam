@@ -175,7 +175,13 @@ class TitleBar(QFrame):
         menu.addSeparator()
         manage = menu.addAction("Manage accounts…")
         manage.triggered.connect(self.active_account_clicked.emit)
+        # setMenu() doesn't free the previous menu -- it stays parented to
+        # the chip forever. Every set_accounts() call (fired on account
+        # add/edit/remove) leaked a QMenu + actions. Delete the old one.
+        old_menu = self.chip.menu()
         self.chip.setMenu(menu)
+        if old_menu is not None:
+            old_menu.deleteLater()
         # Re-select the active account if it still exists, else first
         ids = [a for a, _ in accounts]
         if self._active_id in ids:

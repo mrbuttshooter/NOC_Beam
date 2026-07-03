@@ -414,13 +414,23 @@ class TraceDialogRow(QFrame):
         prev_ts = self.dialog.msgs[-1].ts if self.dialog.msgs else None
         self.dialog.msgs.append(msg)
         self._refresh_state_property()
-        # Insert a new chip + arrow into the chips holder
-        if self._chips_layout.count() > 0:
+        # Insert a new chip + arrow into the chips holder. _render_chips
+        # ends the layout with addStretch(1), so the LAST item is always
+        # the stretch. Using addWidget() here would drop the chip AFTER
+        # the stretch (rendered shoved to the far right with a gap) and,
+        # worse, wedge the stretch into the middle of the chip run where
+        # the front-trim loop below would eventually delete it -- after
+        # which chips and messages desync permanently. Insert at
+        # count()-1 so new chips land immediately BEFORE the stretch.
+        stretch_pos = max(0, self._chips_layout.count() - 1)
+        if stretch_pos > 0:
+            # There is at least one chip already -> prepend an arrow.
             arrow = QLabel("→", self._chips_holder)
             arrow.setObjectName("TraceChipArrow")
-            self._chips_layout.addWidget(arrow)
+            self._chips_layout.insertWidget(stretch_pos, arrow)
+            stretch_pos += 1
         chip = _Chip(msg.chip, msg.chip_level, self._chips_holder)
-        self._chips_layout.addWidget(chip)
+        self._chips_layout.insertWidget(stretch_pos, chip)
         # Append a sub-row
         sub = TraceMsgRow(msg, prev_ts, self._body)
         self._msg_rows.append(sub)
@@ -434,20 +444,25 @@ class TraceDialogRow(QFrame):
             old_row = self._msg_rows.pop(0)
             old_row.hide()
             old_row.deleteLater()
-            # Drop the matching head chip + arrow pair.
-            if self._chips_layout.count() >= 2:
-                first = self._chips_layout.takeAt(0)
-                w = first.widget()
-                if w is not None:
-                    w.hide()
-                    w.deleteLater()
+            # Drop the matching head chip + arrow pair from the FRONT.
+            # Item 0 is always the oldest chip (the trailing stretch lives
+            # at the end, so front-trimming never touches it). Guard on the
+            # front item actually being a widget so a stray layout item
+            # can't be mistaken for a chip.
+            first = self._chips_layout.itemAt(0)
+            fw = first.widget() if first is not None else None
+            if fw is not None:
+                self._chips_layout.takeAt(0)
+                fw.hide()
+                fw.deleteLater()
+                # If the next front item is the connecting arrow, drop it
+                # too so we don't leave a leading "→".
                 second = self._chips_layout.itemAt(0)
-                if second is not None:
-                    sw = second.widget()
-                    if sw is not None and sw.objectName() == "TraceChipArrow":
-                        self._chips_layout.takeAt(0)
-                        sw.hide()
-                        sw.deleteLater()
+                sw = second.widget() if second is not None else None
+                if sw is not None and sw.objectName() == "TraceChipArrow":
+                    self._chips_layout.takeAt(0)
+                    sw.hide()
+                    sw.deleteLater()
 
     def _show_menu(self, pos) -> None:
         menu = QMenu(self)

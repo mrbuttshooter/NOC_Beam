@@ -288,6 +288,18 @@ class CallWidget(QWidget):
     # ------------------------------------------------------------------
     # State transitions
     # ------------------------------------------------------------------
+    def _reset_mute_btn(self) -> None:
+        """Force the Mute button to unchecked without emitting toggled.
+
+        The CallWidget is recycled across calls, so a stale checked
+        state would carry a previous call's mute into a fresh one. The
+        CallRecord is the source of truth; PhoneShell._select_call syncs
+        the button back to checked when the record is actually muted.
+        """
+        self.mute_btn.blockSignals(True)
+        self.mute_btn.setChecked(False)
+        self.mute_btn.blockSignals(False)
+
     def show_idle(self) -> None:
         self.call_id = -1
         self._set_peer("", "")
@@ -301,6 +313,12 @@ class CallWidget(QWidget):
             pass
         self._set_state("idle")
         self._set_active_row(True)
+        # Reset the Mute button to unchecked -- otherwise a card recycled
+        # from a previously-muted call would show "muted" for the next
+        # call while the CallRecord (the source of truth) says unmuted,
+        # desyncing the whole mute graph. blockSignals so this reset
+        # doesn't emit mute_toggled and flip the real mic state.
+        self._reset_mute_btn()
         for b in (self.answer_btn, self.reject_btn, self.hangup_btn,
                   self.hold_btn, self.mute_btn, self.transfer_btn):
             b.setEnabled(False)
@@ -338,6 +356,9 @@ class CallWidget(QWidget):
         self.state_label.setProperty("level", "progress")
         self.duration_label.setText("")
         self._set_active_row(False)
+        # Fresh incoming call -> start from an unmuted button (record is
+        # the source of truth; _select_call re-syncs if actually muted).
+        self._reset_mute_btn()
         self.answer_btn.setEnabled(True)
         self.reject_btn.setEnabled(True)
         self.hangup_btn.setEnabled(False)

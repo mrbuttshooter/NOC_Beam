@@ -66,18 +66,42 @@ class ContactDialog(QDialog):
         contact: Contact | None = None,
         group: str = "Work",
         parent: QWidget | None = None,
+        seed: dict[str, str | bool] | None = None,
+        error: str = "",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Contact")
         self.setMinimumWidth(320)
 
+        # On a retry after a save failure, `seed` carries the values the
+        # user just typed so the reconstructed dialog reopens with their
+        # edits intact instead of reverting to the original contact (or
+        # blank). `seed` wins over `contact`/`group` field-by-field.
+        def _seeded(key: str, fallback: str) -> str:
+            if seed is not None and key in seed:
+                return str(seed[key])
+            return fallback
+
         group_value = contact.group if contact is not None else group
-        self.name_edit = QLineEdit(contact.name if contact is not None else "", self)
-        self.number_edit = QLineEdit(contact.number if contact is not None else "", self)
-        self.group_edit = QLineEdit(group_value, self)
+        self.name_edit = QLineEdit(
+            _seeded("name", contact.name if contact is not None else ""), self
+        )
+        self.number_edit = QLineEdit(
+            _seeded("number", contact.number if contact is not None else ""), self
+        )
+        self.group_edit = QLineEdit(_seeded("group", group_value), self)
         self.favorite_check = QCheckBox("Favorite", self)
-        self.favorite_check.setChecked(contact.favorite if contact is not None else False)
-        self.error = QLabel("", self)
+        if seed is not None and "favorite" in seed:
+            self.favorite_check.setChecked(bool(seed["favorite"]))
+        else:
+            self.favorite_check.setChecked(
+                contact.favorite if contact is not None else False
+            )
+        # Show the save error INSIDE this (live) dialog up front. The old
+        # code set error on the previous dialog after it had already
+        # returned from its modal loop -- i.e. on a hidden dialog, so the
+        # message was never seen.
+        self.error = QLabel(error, self)
         self.error.setObjectName("DialogError")
         self.error.setWordWrap(True)
 
@@ -459,30 +483,41 @@ class ContactsView(QWidget):
         # failure, which under PySide6 6.x on Windows can replay the
         # previous accept() result on re-open and skip the user's
         # second input ("doesn't save" UX bug).
-        last_group = group
+        seed: dict[str, str | bool] | None = None
+        error = ""
         while True:
-            dlg = ContactDialog(group=last_group, parent=self)
+            dlg = ContactDialog(group=group, parent=self, seed=seed, error=error)
             if not _open_modal(dlg):
                 return
-            if self._save_new_contact(dlg):
+            err = self._save_new_contact(dlg)
+            if err is None:
                 self.add_contact_requested.emit()
                 return
-            # Preserve the user's last-typed group on retry.
-            try:
-                last_group = str(dlg.values().get("group", last_group)) or last_group
-            except Exception:
-                pass
+            # Save failed validation: reopen seeded with everything the
+            # user just typed (name/number/group/favorite) and surface the
+            # error inside the fresh dialog. Reconstructing blank here is
+            # what silently threw away their edits.
+            seed = dlg.values()
+            error = err
 
     def _on_edit_contact(self, contact_id: str) -> None:
         contact = next((item for item in self._contacts if item.id == contact_id), None)
         if contact is None:
             return
+        seed: dict[str, str | bool] | None = None
+        error = ""
         while True:
-            dlg = ContactDialog(contact=contact, parent=self)
+            dlg = ContactDialog(contact=contact, parent=self, seed=seed, error=error)
             if not _open_modal(dlg):
                 return
-            if self._save_existing_contact(dlg, contact_id):
+            err = self._save_existing_contact(dlg, contact_id)
+            if err is None:
                 return
+            # Reopen with the user's just-typed edits (seed) + the error.
+            # The old loop rebuilt from the original `contact`, discarding
+            # everything they changed on the failed attempt.
+            seed = dlg.values()
+            error = err
 
     def _on_delete_contact(self, contact_id: str) -> None:
         from PySide6.QtWidgets import QMessageBox
@@ -509,33 +544,39 @@ class ContactsView(QWidget):
                 return
             self._after_contacts_saved()
 
-    def _save_new_contact(self, dlg: ContactDialog) -> bool:
+    def _save_new_contact(self, dlg: ContactDialog) -> str | None:
+        # Returns None on success, else the validation error string for
+        # the caller to re-seed into a FRESH dialog. Setting dlg.error
+        # here is useless: by the time this runs the dialog's modal loop
+        # has already returned and the widget is hidden, so the message
+        # would never be seen.
         try:
             contacts = load_contacts()
             add_contact(contacts, **dlg.values())
             save_contacts(contacts)
         except ValueError as exc:
-            dlg.error.setText(str(exc))
-            return False
+            return str(exc)
         except OSError as exc:
             self._warn_save_failed("save contact", exc)
-            return False
+            # OS error already surfaced via the modal warning; return ""
+            # so the retry loop reopens with the user's edits but no
+            # duplicate inline error banner.
+            return ""
         self._after_contacts_saved()
-        return True
+        return None
 
-    def _save_existing_contact(self, dlg: ContactDialog, contact_id: str) -> bool:
+    def _save_existing_contact(self, dlg: ContactDialog, contact_id: str) -> str | None:
         try:
             contacts = load_contacts()
             update_contact(contacts, contact_id, **dlg.values())
             save_contacts(contacts)
         except ValueError as exc:
-            dlg.error.setText(str(exc))
-            return False
+            return str(exc)
         except (KeyError, OSError) as exc:
             self._warn_save_failed("save contact", exc)
-            return False
+            return ""
         self._after_contacts_saved()
-        return True
+        return None
 
     def _after_contacts_saved(self) -> None:
         self.contact_saved.emit()

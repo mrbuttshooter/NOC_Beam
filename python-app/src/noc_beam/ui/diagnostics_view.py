@@ -365,7 +365,15 @@ class _RtcpXrPanel(QWidget):
 
     def _on_quality(self, call_id: int, mos: float, loss: float,
                     jitter_ms: float, rtt_ms: float) -> None:
-        if self._selected_call_id is not None and call_id != self._selected_call_id:
+        # No call selected -> drop the sample. set_selected_call(None) is
+        # the panel's "clear + idle" state (it blanks the labels and empties
+        # the buffer), so this panel is only ever meant to show ONE call's
+        # metrics. Previously `None` was treated as "accept everything",
+        # which interleaved samples from every concurrent call into a single
+        # panel -- garbling the MOS/loss/jitter/RTT the operator reads. The
+        # panel stays idle until DiagnosticsView.set_selected_call() locks
+        # it onto a specific call_id.
+        if self._selected_call_id is None or call_id != self._selected_call_id:
             return
         self.call_id_lbl.setText(str(call_id))
         self.mos_lbl.setText(f"{mos:.2f}")
