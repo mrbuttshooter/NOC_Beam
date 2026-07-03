@@ -81,9 +81,15 @@ class _CallRingBuffer:
             if available == 0:
                 return np.zeros(0, dtype=np.int16)
             n = min(n, available)
-            if self._total_samples <= RING_SAMPLES:
+            if self._total_samples < RING_SAMPLES:
                 # Ring not yet wrapped; data is [0 : write_pos).
                 return self._buf[self._write_pos - n: self._write_pos].copy()
+            # Exactly-full (_total_samples == RING_SAMPLES) belongs on the
+            # wrapped path, NOT the not-yet-wrapped one: write_pos has just
+            # wrapped to 0, so self._buf[write_pos - n : write_pos] would be
+            # self._buf[-n:0] -- an EMPTY slice, returning nothing from a
+            # completely full buffer. The modular arithmetic below handles
+            # write_pos == 0 correctly (start = (0 - n) % RING_SAMPLES).
             # Wrapped. Data is conceptually (write_pos .. write_pos + RING)
             # mod RING. We want the most recent n samples ending at write_pos.
             start = (self._write_pos - n) % RING_SAMPLES

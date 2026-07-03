@@ -1,4 +1,0 @@
-*.onnx
-*.onnx.data
-!.gitignore
-!__init__.py

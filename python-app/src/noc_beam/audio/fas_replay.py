@@ -82,12 +82,33 @@ class ReplayResult:
 
 def load_wav_16k_mono(path: str | Path) -> np.ndarray:
     """Load a WAV as int16 mono at FAS_SAMPLE_RATE (16 kHz), matching the
-    live tap. Stereo is downmixed to channel 0; other rates are resampled."""
+    live tap. Stereo is downmixed to channel 0; other rates are resampled.
+
+    Only 16-bit PCM is natively supported. The old code hard-assumed 16-bit
+    (dtype=int16) and ignored getsampwidth(): a 24-bit WAV was reinterpreted
+    as int16, decoding to GARBAGE that still produced a confident (wrong)
+    verdict in the evidence JSON -- the worst failure mode for a forensic
+    tool. And the stereo de-interleave x[::ch] only works once samples are
+    truly int16, so a non-16-bit stereo file was doubly wrong. We raise a
+    loud, file-named ValueError for unsupported widths: a hard skip is
+    acceptable for a forensic replay tool; silent misdecoding is not.
+    """
     with wave.open(str(path), "rb") as w:
         ch = w.getnchannels()
         sr = w.getframerate()
+        sampwidth = w.getsampwidth()
         n = w.getnframes()
         raw = w.readframes(n)
+    if sampwidth != 2:
+        # 1-byte (8-bit unsigned), 3-byte (24-bit), 4-byte (32-bit) etc. are
+        # rare for our telephony captures and each needs a distinct decode.
+        # Rather than guess and misdecode, refuse loudly and name the file.
+        msg = (
+            f"unsupported WAV sample width {sampwidth * 8}-bit in {path!s}: "
+            f"only 16-bit PCM is supported by the FAS replay loader"
+        )
+        log.error(msg)
+        raise ValueError(msg)
     x = np.frombuffer(raw, dtype=np.int16)
     if ch > 1:
         x = x[::ch]  # take first channel

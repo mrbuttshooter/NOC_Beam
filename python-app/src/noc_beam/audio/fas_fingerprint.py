@@ -14,7 +14,9 @@ detected as FINGERPRINT_REUSE.
 """
 from __future__ import annotations
 
+import glob
 import logging
+import os
 import subprocess
 import tempfile
 import time
@@ -40,10 +42,49 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
+_TMP_PREFIX = "fas-fp-"
+_stale_swept = False
+
+
+def _sweep_stale_temp_wavs() -> None:
+    """Best-effort, once-per-process cleanup of orphaned fas-fp-*.wav files.
+
+    Released builds shipped with the fd-leak bug below stranded a ~128 KB
+    WAV in %TEMP% on every scoring tick (the open OS handle made the unlink
+    fail on Windows). Those orphans are already out there on operator boxes,
+    so on first fingerprint use we sweep the temp dir once. Guarded broadly:
+    a cleanup failure must never break fingerprinting -- at worst a stale
+    file survives, which is exactly today's status quo.
+    """
+    global _stale_swept
+    if _stale_swept:
+        return
+    _stale_swept = True
+    try:
+        pattern = os.path.join(tempfile.gettempdir(), f"{_TMP_PREFIX}*.wav")
+        for path in glob.glob(pattern):
+            try:
+                os.unlink(path)
+            except OSError:
+                # Still-open handle from a live sibling process, or a
+                # permission quirk -- skip it, don't abort the sweep.
+                pass
+    except Exception:
+        log.debug("stale fas-fp temp sweep skipped", exc_info=True)
+
 
 def _write_wav_temp(samples: np.ndarray, sample_rate: int) -> Path:
     """Write a 16-bit mono WAV to a temp file. Caller deletes."""
-    tmp = Path(tempfile.mkstemp(suffix=".wav", prefix="fas-fp-")[1])
+    # mkstemp returns (fd, path). The old code took only [1] (the path) and
+    # dropped the fd on the floor, leaking one OS-level file handle per
+    # fingerprint pass. On Windows that open handle also makes the caller's
+    # finally-unlink fail with a sharing violation (silently swallowed), so
+    # every scoring tick both leaked an fd AND stranded a ~128 KB WAV --
+    # long calls eventually exhausted the fd limit. wave.open() reopens the
+    # file by path, so close the mkstemp fd immediately.
+    fd, name = tempfile.mkstemp(suffix=".wav", prefix=_TMP_PREFIX)
+    os.close(fd)
+    tmp = Path(name)
     if samples.dtype != np.int16:
         samples = samples.astype(np.int16, copy=False)
     with wave.open(str(tmp), "wb") as w:
@@ -66,6 +107,7 @@ def fingerprint_clip(samples: np.ndarray, sample_rate: int = 16000) -> str | Non
     fp_bin = fpcalc_path()
     if not fp_bin.exists():
         return None
+    _sweep_stale_temp_wavs()  # one-shot cleanup of orphans from buggy builds
     wav_path = _write_wav_temp(samples, sample_rate)
     try:
         # CREATE_NO_WINDOW (Windows only; falls through to 0 elsewhere)

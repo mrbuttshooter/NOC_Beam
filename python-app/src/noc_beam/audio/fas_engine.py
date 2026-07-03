@@ -152,8 +152,23 @@ def attach_fas_to_call(call_id: int, call_audio: Any, **meta: Any) -> None:
         already_attached = call_id in _per_call
     if already_attached:
         # Re-attach with the new media handle. Don't return early.
+        #
+        # preserve_state=True: onCallMediaState re-fires mid-call on
+        # hold/unhold and codec re-INVITE. Those events break RAW AUDIO
+        # continuity (the old AudioMedia proxy dies), so the media plumbing
+        # (tap + router ring buffer) genuinely must be rebuilt. But they do
+        # NOT end the call, so the per-call SCORING state -- the worker's
+        # _CallScoreState holding the committed verdict, sticky evidence,
+        # AASIST vote history, voiced budget, and tick schedule -- must
+        # SURVIVE. Tearing it down (the old behaviour) reset a minutes-old
+        # call's badge to "ANALYZING, warming up" and defeated the monotonic
+        # verdict lock (a committed PROBABLE_FAS could silently vanish on a
+        # hold). Only a true call-end (detach_fas_from_call) untracks the
+        # worker state. Because _CallScoreState.started_at survives, the
+        # 4/8/13s schedule stays anchored to the ORIGINAL call start and does
+        # not restart from zero.
         log.info("FAS re-attach call=%s (onCallMediaState fired again)", call_id)
-        _detach_internal(call_id, quiet=True)
+        _detach_internal(call_id, quiet=True, preserve_state=True)
     try:
         # Use AudioMediaRecorder + WAV tail-read instead of an
         # AudioMediaPort subclass. The recorder is the battle-tested
@@ -193,11 +208,21 @@ def detach_fas_from_call(call_id: int) -> None:
     _detach_internal(call_id, quiet=False)
 
 
-def _detach_internal(call_id: int, *, quiet: bool) -> None:
+def _detach_internal(call_id: int, *, quiet: bool, preserve_state: bool = False) -> None:
     """Internal detach. When quiet=True (re-attach path), tap-stop
     failures are logged at debug level since the stale handle is
-    expected to be partially broken."""
-    fas_worker().untrack(call_id)
+    expected to be partially broken.
+
+    preserve_state=True splits "media plumbing teardown" from "scoring state
+    teardown": the tap and router ring buffer are dropped (raw audio
+    continuity is already broken by the re-INVITE / hold), but the worker's
+    per-call _CallScoreState is LEFT INTACT so the committed verdict, sticky
+    evidence, AASIST history, voiced budget, and tick schedule survive the
+    re-attach. Only a true call-end (preserve_state=False) untracks the
+    worker. See attach_fas_to_call's re-attach branch for the why.
+    """
+    if not preserve_state:
+        fas_worker().untrack(call_id)
     with _per_call_lock:
         entry = _per_call.pop(call_id, None)
     if entry:

@@ -444,7 +444,21 @@ class FasInferenceWorker(QThread):
             panns_out = panns_classifier().score(
                 panns_clip if panns_clip.size else clip, sample_rate=FAS_SAMPLE_RATE
             )
-            aasist_p = vote_aasist(state, aasist_raw)
+            # AASIST recency: vote_aasist() returns the MEDIAN of the rolling
+            # history, so on a silence-gated tick (aasist_raw is None -> nothing
+            # appended) it would keep re-firing an OLD spoof read on minutes of
+            # dead air -- feeding +2 recorded_or_synthetic_audio and
+            # aasist_available=True into synthesise() on a window the model
+            # never scored. Combined with sustained_silence (+2) the aggressive
+            # preset could reach PROBABLE_FAS from stale reads alone, exactly
+            # what the SILENCE_GATE comment forbids. So when this tick is
+            # silence-gated, do NOT feed AASIST downstream: aasist_p=None makes
+            # synthesise treat the model as UNAVAILABLE for this window (the
+            # model genuinely didn't see it), which caps non-deterministic
+            # escalation at SUSPICIOUS. The vote history is still advanced above
+            # only when there IS a read; an already-committed verdict is never
+            # recomputed downward (apply_surface_policy's monotonic lock).
+            aasist_p = None if is_silent else vote_aasist(state, aasist_raw)
 
             # Fingerprint matching scoped by account_id when available.
             meta = router.meta(call_id)

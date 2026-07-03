@@ -84,6 +84,32 @@ def test_wrap_around_preserves_chronological_order():
     assert contiguous.all()
 
 
+def test_exactly_full_buffer_returns_full_snapshot():
+    """Regression: when _total_samples == RING_SAMPLES exactly, write_pos has
+    just wrapped to 0. The old not-yet-wrapped slice [-n:0] returned EMPTY
+    from a completely full buffer. Snapshot must return all RING_SAMPLES."""
+    ring = _CallRingBuffer()
+    chunk = 320
+    pushed = 0
+    counter = 0
+    while pushed < RING_SAMPLES:
+        n = min(chunk, RING_SAMPLES - pushed)
+        ring.push_bytes(_frame(counter, n))
+        counter += n
+        pushed += n
+    assert ring.total_samples_written == RING_SAMPLES
+    snap = ring.snapshot()
+    assert snap.shape == (RING_SAMPLES,), "full buffer must not return empty"
+    expected_last = np.array([RING_SAMPLES - 1], dtype=np.int32).astype(np.int16)[0]
+    assert snap[-1] == expected_last
+    # A partial (seconds-scoped) snapshot from the exactly-full buffer must
+    # also return the most-recent tail, not empty.
+    partial = ring.snapshot(seconds=1.0)
+    assert partial.shape == (FAS_SAMPLE_RATE,)
+    part_last = np.array([RING_SAMPLES - 1], dtype=np.int32).astype(np.int16)[0]
+    assert partial[-1] == part_last
+
+
 def test_oversize_frame_keeps_only_tail():
     ring = _CallRingBuffer()
     # Push a frame larger than the ring; only the last RING_SAMPLES should land.

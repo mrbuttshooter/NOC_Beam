@@ -64,7 +64,17 @@ def goertzel_magnitude(samples: np.ndarray, sample_rate: int, target_hz: float) 
         return 0.0
     x = samples.astype(np.float64) / 32768.0
     n = x.size
-    k = 0.5 + (n * target_hz) / sample_rate
+    # Standard Goertzel: the bin index k must be an INTEGER (the algorithm
+    # only evaluates the DFT at integer bins). The old code omitted the
+    # int(), so k landed half a bin high -- at a 100 ms / 16 kHz frame that
+    # is +5 Hz of detuning, evaluating every "on-frequency" tone off-target
+    # and attenuating a true match by up to ~36%. int(0.5 + ...) rounds the
+    # target frequency to the nearest bin, as intended.
+    # NOTE: tone thresholds elsewhere (fas_rules.py's 0.35 tone_score gate;
+    # "clean tones normalise near 0.20") were empirically tuned with the
+    # off-by-half-bin attenuation baked in, so post-fix tone/ringback scores
+    # read slightly HIGHER for on-frequency tones. See the FAS corpus gate.
+    k = int(0.5 + (n * target_hz) / sample_rate)
     omega = 2.0 * math.pi * k / n
     coeff = 2.0 * math.cos(omega)
     s_prev = 0.0
