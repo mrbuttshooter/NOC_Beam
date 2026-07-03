@@ -298,10 +298,32 @@ def test_detail_panel_renders_for_selected_row(
     db, run_id, _ = populated_db
     view = FasResultsView(db)
     view.load_run(run_id)
+    # The table is sortable and is sorted on column 0 at populate time, so
+    # the row PHYSICALLY at view-index 0 is not necessarily populate-order
+    # row 0. The old assertion (`"S001" in text`) encoded the pre-fix BUG:
+    # detail lookup was positional into _visible_rows (populate order), so
+    # selecting the S002 row at view-position 0 wrongly rendered S001's
+    # detail. Post-fix the panel resolves through the stable row key, so it
+    # must match the supplier actually shown in the selected view row.
     view.table.selectRow(0)
     qt_app.processEvents()
+    shown_supplier = view.table.item(0, COL_SUPPLIER).text()
     text = view.detail_text.toPlainText()
-    assert "S001" in text
-    assert "+15551234567" in text
-    # Reasons include the audio_reuse tag.
-    assert "audio_reuse" in text
+    assert shown_supplier in text
+    assert f"Supplier: {shown_supplier}" in text
+
+    # And a targeted check: find the view row displaying S001 (a
+    # CONFIRMED_FAS row carrying the audio_reuse reason) and confirm its
+    # detail renders that supplier's reasons -- proving play/export/detail
+    # now follow the sorted view, not the frozen populate order.
+    s001_view_row = next(
+        r for r in range(view.table.rowCount())
+        if view.table.item(r, COL_SUPPLIER).text() == "S001"
+        and view.table.item(r, COL_SCORE).text() == "8"
+    )
+    view.table.selectRow(s001_view_row)
+    qt_app.processEvents()
+    detail = view.detail_text.toPlainText()
+    assert "S001" in detail
+    assert "+15551234567" in detail
+    assert "audio_reuse" in detail
