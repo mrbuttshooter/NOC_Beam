@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -148,7 +149,12 @@ def save_destinations(items: list[Destination]) -> None:
         for d in items
     ]
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    # fsync before replace so a power loss can't leave a zero-length
+    # destinations.json: the rename may be journaled ahead of the data.
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(payload, indent=2, ensure_ascii=False))
+        f.flush()
+        os.fsync(f.fileno())
     # Windows: retry the atomic replace under transient AV/file-watcher locks.
     # Previously fell back to a naked path.write_text which is NOT atomic and
     # could leave the file half-written on a crash mid-write.

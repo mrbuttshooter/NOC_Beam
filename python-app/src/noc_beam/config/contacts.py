@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import asdict, dataclass, fields
@@ -95,7 +96,12 @@ def save_contacts(contacts: list[Contact]) -> None:
     path = contacts_file()
     payload = [asdict(contact) for contact in contacts]
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    # fsync before replace so a power loss can't leave a zero-length
+    # contacts.json: the rename may be journaled ahead of the data blocks.
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(payload, indent=2))
+        f.flush()
+        os.fsync(f.fileno())
     # Windows: tmp.replace can fail if the target is held open by an
     # antivirus / file watcher. Retry a couple of times before giving up.
     last_err: BaseException | None = None

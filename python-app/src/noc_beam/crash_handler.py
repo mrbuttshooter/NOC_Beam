@@ -25,7 +25,9 @@ than the zero-telemetry baseline we had.
 from __future__ import annotations
 
 import faulthandler
+import itertools
 import logging
+import os
 import sys
 import threading
 import time
@@ -37,6 +39,12 @@ log = logging.getLogger(__name__)
 _INSTALLED = False
 _FH_FILE = None  # keep the faulthandler file alive for the process lifetime
 _SENTRY_INITIALIZED = False
+
+# Monotonic counter so two crash records written within the same wall-clock
+# second get distinct filenames. Without it, an exception loop (or two
+# threads faulting back-to-back) formatted the same "%Y%m%d-%H%M%S" name and
+# each write clobbered the previous crash record -- losing all but the last.
+_crash_seq = itertools.count()
 
 
 def _crash_dir() -> Path:
@@ -52,11 +60,31 @@ def _write_crash_record(kind: str, header: str, body: str) -> Path:
     """Persist a structured crash to crashes/<kind>-<ts>.log. Returns
     the path so the host can offer it via "Send diagnostics"."""
     ts = time.strftime("%Y%m%d-%H%M%S", time.localtime())
-    path = _crash_dir() / f"{kind}-{ts}.log"
-    try:
-        path.write_text(f"{header}\n\n{body}\n", encoding="utf-8")
-    except Exception:
-        log.exception("Failed to write crash record (%s)", path)
+    # Base name carries pid + a monotonic sequence so records written in
+    # the same second never share a name. Then use exclusive-create ("x")
+    # and bump a suffix if the (astronomically unlikely) collision still
+    # happens -- guarantees we never truncate a prior crash record.
+    pid = os.getpid()
+    seq = next(_crash_seq)
+    body_text = f"{header}\n\n{body}\n"
+    path = _crash_dir() / f"{kind}-{ts}-{pid}-{seq}.log"
+    for attempt in range(100):
+        candidate = (
+            path
+            if attempt == 0
+            else _crash_dir() / f"{kind}-{ts}-{pid}-{seq}-{attempt}.log"
+        )
+        try:
+            # "x" fails if the file already exists instead of truncating it.
+            with open(candidate, "x", encoding="utf-8") as f:
+                f.write(body_text)
+            return candidate
+        except FileExistsError:
+            continue
+        except Exception:
+            log.exception("Failed to write crash record (%s)", candidate)
+            return candidate
+    log.error("Could not find a free crash-record filename for %s", path)
     return path
 
 
@@ -124,9 +152,15 @@ def _python_excepthook(exc_type, exc, tb) -> None:
                 pass
     except Exception:
         # Last-ditch: never let the crash hook itself crash silently.
+        # Chain to the original here and RETURN so we don't fall through
+        # to the unconditional call below -- otherwise a failure in the
+        # hook body printed the traceback twice (once from this except
+        # path, once from the tail call).
         sys.__excepthook__(exc_type, exc, tb)
+        return
     # Chain to the original so the process exit / IDE notification path
-    # still runs.
+    # still runs. Reached only when the hook body above succeeded, so
+    # __excepthook__ runs exactly once on every path.
     sys.__excepthook__(exc_type, exc, tb)
 
 
@@ -159,14 +193,25 @@ def install() -> None:
         # `w` truncates per run -- prior native crash files are
         # rotated via rename below so we don't lose them.
         prior = _crash_dir() / "native-previous.log"
+        rotated = True
         if fh_path.exists():
             try:
                 if prior.exists():
                     prior.unlink()
                 fh_path.rename(prior)
             except Exception:
-                pass
-        _FH_FILE = open(fh_path, "w", encoding="utf-8")  # noqa: SIM115
+                # Rotation failed (AV lock, permissions). Do NOT fall
+                # through to open(..., "w") -- that would truncate the ONLY
+                # record of the previous run's native crash. Append instead
+                # so the prior evidence is preserved (faulthandler just
+                # writes its next traceback after the old one).
+                rotated = False
+                log.warning(
+                    "Could not rotate %s; appending to preserve prior native crash",
+                    fh_path.name,
+                    exc_info=True,
+                )
+        _FH_FILE = open(fh_path, "w" if rotated else "a", encoding="utf-8")  # noqa: SIM115
         faulthandler.enable(_FH_FILE)
         log.info("faulthandler enabled -> %s", fh_path)
     except Exception:

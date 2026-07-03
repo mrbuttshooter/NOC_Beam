@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import time
 from dataclasses import asdict, dataclass
@@ -136,7 +137,12 @@ def save_suppliers(suppliers: list[Supplier]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = [asdict(s) for s in suppliers]
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    # fsync before replace so a power loss can't leave a zero-length
+    # suppliers.json: the rename may be journaled ahead of the data blocks.
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(payload, indent=2, ensure_ascii=False))
+        f.flush()
+        os.fsync(f.fileno())
     # Windows: retry under transient AV/file-watcher locks. Previously
     # fell back to a non-atomic path.write_text which could corrupt the
     # file on a crash mid-write.

@@ -56,7 +56,24 @@ def _acquire_single_instance_or_exit(argv: list[str]) -> int | None:
         return None
     try:
         import ctypes
-        kernel32 = ctypes.windll.kernel32
+        import ctypes.wintypes
+
+        # use_last_error=True gives us a thread-local snapshot of the Win32
+        # last-error captured by the FFI thunk immediately after the call.
+        # The old code read ctypes.windll.kernel32 + kernel32.GetLastError()
+        # as two separate calls: any ctypes-internal Win32 call between
+        # CreateMutexW returning and our GetLastError() (allocation,
+        # marshalling, etc.) can clobber the thread's last-error, so the
+        # 183 check was documented-unreliable and could let a second
+        # instance through. Declaring restype/argtypes also stops ctypes
+        # from truncating the returned HANDLE on 64-bit.
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.restype = ctypes.wintypes.HANDLE
+        kernel32.CreateMutexW.argtypes = (
+            ctypes.wintypes.LPVOID,   # lpMutexAttributes (NULL)
+            ctypes.wintypes.BOOL,     # bInitialOwner
+            ctypes.wintypes.LPCWSTR,  # lpName
+        )
         # bInitialOwner=True so the first instance immediately owns it.
         # The handle is intentionally leaked to module scope; process
         # exit releases it. Name is in the Global\ namespace so it works
@@ -64,7 +81,7 @@ def _acquire_single_instance_or_exit(argv: list[str]) -> int | None:
         # fast user switching) -- last-writer-wins on accounts.json is a
         # machine-wide concern, not a per-user one.
         _SINGLE_INSTANCE_MUTEX = kernel32.CreateMutexW(None, True, _SINGLE_INSTANCE_NAME)
-        err = kernel32.GetLastError()
+        err = ctypes.get_last_error()
     except Exception:
         log.exception("Single-instance check failed; allowing startup")
         return None
@@ -92,15 +109,23 @@ def _acquire_single_instance_or_exit(argv: list[str]) -> int | None:
 
 
 def run(argv: list[str]) -> int:
-    # Single-instance guard FIRST -- before logging setup, crash handler,
-    # or any PJSIP/Qt construction. Two NOC_Beam processes both writing
-    # accounts.json + call_history.json silently lose CDRs (last-writer-
-    # wins), and PJSIP itself wants a singleton process.
+    # Logging setup FIRST so the single-instance refusal below is actually
+    # recorded. Previously the mutex check ran before setup_logging(), so
+    # in the frozen console=False build the "already running; aborting
+    # second instance" log line went to a not-yet-configured root logger
+    # and vanished -- the refusal left no trace to diagnose. setup_logging
+    # only wires handlers (no PJSIP/Qt side effects), so it's safe to run
+    # ahead of the mutex acquire.
+    setup_logging()
+
+    # Single-instance guard -- before crash handler or any PJSIP/Qt
+    # construction. Two NOC_Beam processes both writing accounts.json +
+    # call_history.json silently lose CDRs (last-writer-wins), and PJSIP
+    # itself wants a singleton process.
     _existing = _acquire_single_instance_or_exit(argv)
     if _existing is not None:
         return _existing
 
-    setup_logging()
     # Install crash handlers BEFORE we touch PJSIP -- a startup-time
     # native fault in libCreate is exactly the class of bug we most
     # need traces for. faulthandler + sys.excepthook + threading

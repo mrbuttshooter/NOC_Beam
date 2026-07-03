@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
@@ -153,7 +154,12 @@ def _atomic_write_json(path: Path, payload: list[dict]) -> None:
     """Mirror save_history's tempfile + replace + 3-retry-backoff pattern.
     Raises the last exception if all retries fail."""
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    # fsync before replace so a power loss can't leave a zero-length
+    # archive file: the rename may be journaled ahead of the data blocks.
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(payload, indent=2))
+        f.flush()
+        os.fsync(f.fileno())
     last_err: Exception | None = None
     for _ in range(3):
         try:
@@ -209,6 +215,7 @@ def _append_to_archive(overflow: list[CdrEntry]) -> None:
 
 
 def save_history(entries: list[CdrEntry]) -> None:
+    global _cache, _cache_path
     path = history_file()
     # Normalise to chronological order (oldest first) before capping so
     # the trailing slice consistently keeps the NEWEST entries regardless
@@ -229,13 +236,35 @@ def save_history(entries: list[CdrEntry]) -> None:
         trimmed = entries
     payload = [asdict(e) for e in trimmed]
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    # fsync before replace so a power loss can't leave a zero-length
+    # call_history.json (the rename may be journaled ahead of the data).
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(payload, indent=2))
+        f.flush()
+        os.fsync(f.fileno())
     # Windows: tmp.replace can fail if the target is held open by an
     # antivirus / file watcher. Retry a couple of times before giving up.
     last_err = None
     for _ in range(3):
         try:
             tmp.replace(path)
+            # The module cache is the source of truth between calls, so it
+            # MUST equal exactly what's now on disk. Two failure modes this
+            # fixes together:
+            #   (2) Previously save_history trimmed only `trimmed` (a local)
+            #       and left _cache holding the full untrimmed list. Once
+            #       the cache exceeded MAX_ENTRIES, EVERY subsequent
+            #       append_entry re-computed the same overflow slice and
+            #       re-archived it -- duplicate archive rows, O(n^2) archive
+            #       growth, unbounded RAM. Rebinding _cache to `trimmed`
+            #       caps it so the overflow is archived exactly once.
+            #   (3) HistoryView's delete path builds a NEW list (minus the
+            #       deleted CDR) and calls save_history on it; _cache still
+            #       held the stale list, so the next append_entry wrote the
+            #       deleted CDR back to disk (resurrection). Rebinding
+            #       _cache here makes cache == disk after every save.
+            _cache = list(trimmed)
+            _cache_path = path
             return
         except Exception as exc:
             last_err = exc
@@ -330,9 +359,35 @@ def load_last_seen_ended_at() -> float:
 def save_last_seen_ended_at(ts: float) -> None:
     path = history_meta_file()
     try:
-        path.write_text(
-            json.dumps({"last_seen_ended_at": float(ts)}),
-            encoding="utf-8",
-        )
+        # Use the same tmp + fsync + replace pattern as the rest of the
+        # module. A direct write_text here is non-atomic: a crash mid-write
+        # leaves a truncated/zero-length meta file, and on next launch
+        # load_last_seen_ended_at() swallows the parse error and returns
+        # 0.0 -- re-lighting every prior missed-call badge.
+        _atomic_write_json_obj(path, {"last_seen_ended_at": float(ts)})
     except Exception:
         log.exception("Failed to save history meta (last_seen_ended_at)")
+
+
+def _atomic_write_json_obj(path: Path, payload: dict) -> None:
+    """Atomic write for the tiny JSON meta side-file (a dict, not a list).
+    Mirrors _atomic_write_json's fsync-before-replace + retry pattern."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(payload))
+        f.flush()
+        os.fsync(f.fileno())
+    last_err: Exception | None = None
+    for _ in range(3):
+        try:
+            tmp.replace(path)
+            return
+        except Exception as exc:
+            last_err = exc
+            time.sleep(0.05)
+    try:
+        tmp.unlink(missing_ok=True)
+    except Exception:
+        pass
+    assert last_err is not None
+    raise last_err

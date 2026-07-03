@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import sys
 import time
 from dataclasses import asdict, dataclass, field, fields
@@ -60,7 +61,17 @@ def _protect(plaintext: str) -> str:
 def _unprotect(stored: str) -> str:
     if not stored:
         return ""
-    if stored.startswith("dpapi:") and sys.platform == "win32":
+    if stored.startswith("dpapi:"):
+        # A DPAPI blob can only be decrypted on the Windows host (same
+        # user) that produced it. On non-Windows -- or when win32crypt is
+        # unavailable -- there is no key, so we MUST NOT fall through to
+        # the legacy-plaintext return at the bottom: that would surface
+        # the raw "dpapi:..." ciphertext as the account password and try
+        # to REGISTER with it. Return "" for runtime use; the caller
+        # preserves the original blob so a save re-emits it unchanged
+        # (see AccountConfig._stored_password / to_storable).
+        if sys.platform != "win32":
+            return ""
         try:
             import win32crypt  # type: ignore
 
@@ -68,6 +79,10 @@ def _unprotect(stored: str) -> str:
             _desc, plaintext = win32crypt.CryptUnprotectData(blob, None, None, None, 0)
             return plaintext.decode("utf-8")
         except Exception:  # pragma: no cover
+            # Transient DPAPI failure (roaming-profile glitch, revoked
+            # master key). Return "" for runtime use only -- the raw blob
+            # is preserved on the AccountConfig so a round-trip save
+            # re-writes the ORIGINAL recoverable blob rather than "".
             log.warning("DPAPI unprotect failed", exc_info=True)
             return ""
     if stored.startswith("b64:"):
@@ -152,7 +167,23 @@ class AccountConfig:
 
     def to_storable(self) -> dict[str, Any]:
         d = asdict(self)
-        d["password"] = _protect(self.password)
+        # Non-destructive password persistence. `_stored_password` (a
+        # plain instance attribute, NOT a dataclass field, so asdict()
+        # never emits it) holds the exact protected blob we loaded from
+        # disk. If the in-memory plaintext password is still exactly what
+        # we decrypted from that blob (unchanged this session), re-emit
+        # the ORIGINAL blob verbatim. This is what saves the day when
+        # _unprotect() failed transiently and returned "": without this,
+        # to_storable would _protect("") -> "" and the next save_accounts
+        # would permanently overwrite a still-recoverable DPAPI blob with
+        # an empty password. Only when the user actually changed the
+        # password (plaintext differs from what we loaded) do we re-protect.
+        stored = getattr(self, "_stored_password", None)
+        loaded_plain = getattr(self, "_loaded_plaintext", None)
+        if stored is not None and self.password == loaded_plain:
+            d["password"] = stored
+        else:
+            d["password"] = _protect(self.password)
         return d
 
     @classmethod
@@ -163,12 +194,21 @@ class AccountConfig:
         from dataclasses import fields as _fields
         known = {f.name for f in _fields(cls)}
         clean = {k: v for k, v in d.items() if k in known}
-        clean["password"] = _unprotect(d.get("password", ""))
+        raw_stored = d.get("password", "")
+        clean["password"] = _unprotect(raw_stored)
         # Backfill required `id` if missing (corrupted file recovery).
         if "id" not in clean or not clean["id"]:
             import uuid as _uuid
             clean["id"] = str(_uuid.uuid4())
-        return cls(**clean)
+        obj = cls(**clean)
+        # Stash the raw protected blob + the plaintext we derived from it
+        # so to_storable() can re-emit the ORIGINAL blob when the password
+        # is left unchanged -- a transient DPAPI unprotect failure (which
+        # returns "") then round-trips losslessly instead of nuking the
+        # recoverable credential. Plain attributes: excluded from asdict().
+        obj._stored_password = raw_stored
+        obj._loaded_plaintext = clean["password"]
+        return obj
 
 
 @dataclass
@@ -400,7 +440,27 @@ def load_accounts() -> list[AccountConfig]:
         raw = json.loads(path.read_text(encoding="utf-8-sig"))
         return [AccountConfig.from_storable(item) for item in raw]
     except Exception:
-        log.exception("Failed to load accounts")
+        # Quarantine the corrupt file rather than silently returning []
+        # (the same protection load_settings uses above). Without this,
+        # the very next save_accounts overwrites accounts.json with an
+        # empty list -- PERMANENTLY destroying every SIP account AND its
+        # DPAPI-protected password. Rename it aside (timestamped so
+        # repeated corruptions don't collide) so a human can recover it.
+        try:
+            backup = path.with_name(
+                f"{path.stem}.corrupted-{int(time.time())}{path.suffix}"
+            )
+            path.rename(backup)
+            log.error(
+                "accounts.json was unreadable; quarantined to %s; "
+                "starting with no accounts",
+                backup.name,
+            )
+        except Exception:
+            log.exception(
+                "Failed to read accounts AND failed to quarantine; "
+                "leaving file in place to prevent overwrite"
+            )
         return []
 
 
@@ -412,7 +472,16 @@ def save_accounts(accounts: list[AccountConfig]) -> None:
 
 def _atomic_write(path: Path, content: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(content, encoding="utf-8")
+    # fsync BEFORE replace: tmp.write_text() only pushes bytes into the OS
+    # page cache. On Windows/NTFS the metadata rename (tmp.replace) can be
+    # journaled and become visible before the data blocks are actually
+    # flushed to the platter, so a power loss right after the replace can
+    # leave a zero-length accounts.json -- wiping every SIP account. Force
+    # the data to durable storage first via an explicit handle + fsync.
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(content)
+        f.flush()
+        os.fsync(f.fileno())
     # Windows: tmp.replace can transiently fail with PermissionError when
     # an antivirus scanner or file watcher holds the destination open.
     # Retry the atomic replace a few times rather than falling back to a
