@@ -476,7 +476,15 @@ class TestRunner(QObject):
         # report on the first attempt before the retry could land.
         # Same for 100 Trying and other 1xx informational that aren't
         # already handled below.
-        if code in (401, 407):
+        #
+        # BUT only swallow the challenge while the call is still live. A
+        # FINAL auth failure arrives as DISCONNECTED with last-status 401/
+        # 407 (PJSIP retried the digest, got a second 401, and gave up).
+        # If we early-returned on that too, the call would sit until the
+        # setup timeout and misreport 408 instead of the real 401. So let
+        # a DISCONNECTED with 401/407 fall through to the normal disconnect
+        # handling below, which records the actual code.
+        if code in (401, 407) and state != "DISCONNECTED":
             return
         # Transport / local PJSIP failure (e.g. "End of file (PJ_EEOF)" when
         # the shared TCP connection to the SBC is closed). pjsua2 surfaces
@@ -539,6 +547,15 @@ class TestRunner(QObject):
         if self.spec.pass_criterion == "full-call" and state == "CONFIRMED":
             if active.hold_timer is not None:
                 return
+            # The call is answered: the SETUP-timeout timer has done its
+            # job (it guards INVITE -> answer, not the hold). Stop it now
+            # and hand the call's lifecycle to the hold timer. Without
+            # this, an answered call held for >= timeout_seconds would fire
+            # the setup timeout mid-hold, get force-hung-up, and misreport
+            # FAIL/408 -- even though it connected fine. Per-call bookkeeping
+            # is isolated on `active`, so stopping this timer only affects
+            # THIS call, leaving parallel calls' timers untouched.
+            active.timeout_timer.stop()
             hold_timer = self._make_timer(self.spec.hold_seconds)
             active.hold_timer = hold_timer
             hold_timer.timeout.connect(

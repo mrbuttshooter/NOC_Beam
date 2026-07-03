@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Literal
+
+log = logging.getLogger(__name__)
 
 TestMode = Literal["matrix", "paired", "fan-out", "fan-in", "fas-sweep"]
 PassCriterion = Literal["reachability", "full-call"]
@@ -116,6 +119,25 @@ def expand(spec: TestSpec) -> list[TestCall]:
         elif len(spec.targets) == 1 and len(callers) > 1:
             pairs = [(caller, spec.targets[0]) for caller in callers]
         else:
+            # Strict 1:1 zip. When the two lists differ in length the extra
+            # entries on the longer side are silently dropped (e.g. 100
+            # callers x 98 targets => 2 callers never dial). Warn with the
+            # dropped count so an operator can spot a mismatched paste
+            # instead of wondering why N calls vanished. We keep the zip
+            # (don't raise): paired runs already flow through the UI's
+            # normal dispatch path with no validation-error surface, and
+            # raising here would break existing "close enough" batches.
+            if len(callers) != len(spec.targets):
+                dropped = abs(len(callers) - len(spec.targets))
+                longer = "callers" if len(callers) > len(spec.targets) else "targets"
+                log.warning(
+                    "Paired mode: %d caller(s) vs %d target(s) -- dropping "
+                    "%d excess %s (1:1 zip keeps only the paired prefix)",
+                    len(callers),
+                    len(spec.targets),
+                    dropped,
+                    longer,
+                )
             pairs = list(zip(callers, spec.targets, strict=False))
     elif spec.mode == "fan-out":
         pairs = [(callers[0], target) for target in spec.targets]
