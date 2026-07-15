@@ -122,6 +122,27 @@ def serialize_call(rec: CallRecord | None) -> dict[str, Any] | None:
     }
 
 
+def serialize_calls(
+    records: list[CallRecord],
+    selected_id: int | None = None,
+) -> list[dict[str, Any]]:
+    """All ACTIVE calls as card payloads, oldest call first (stable stack
+    order), each flagged with `selected` (the call holding audio focus --
+    mirrors PhoneShell._selected_call_id / the Qt calls_strip).
+
+    Phase-2 multi-call: the web UI renders ONE card per entry; terminal
+    records (NULL/DISCONNECTED) are dropped by serialize_call.
+    """
+    out: list[dict[str, Any]] = []
+    for rec in sorted(records, key=lambda r: r.call_id):
+        d = serialize_call(rec)
+        if d is None:
+            continue
+        d["selected"] = rec.call_id == selected_id
+        out.append(d)
+    return out
+
+
 # ----------------------------------------------------------------------
 # Recents (mirror ui/quick_dial.py:_arrow/_chip + _collect_targets dedupe)
 # ----------------------------------------------------------------------

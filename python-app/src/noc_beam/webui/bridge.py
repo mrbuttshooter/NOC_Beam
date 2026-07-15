@@ -63,33 +63,68 @@ class WebBridge(QObject):
     def redial(self, number: str) -> None:
         self.place_call(number)
 
-    @Slot()
-    def hangup(self) -> None:
+    def _record_for(self, call_id: int):
+        """Resolve the CallRecord a per-call control targets. Negative /
+        missing ids fall back to the selected call (single-call JS paths)."""
+        cid = int(call_id)
+        if cid < 0:
+            cid = self._selected_id()
+        if cid is None:
+            return None
         try:
-            self._phone._on_hangup_requested()
+            return self._phone.calls.get(cid)
+        except Exception:
+            return None
+
+    @Slot(int)
+    def hangup(self, call_id: int = -1) -> None:
+        """End ONE call. Phase-2 multi-call: every card passes its own
+        call_id so End never lands on the wrong leg (same teardown-race
+        rationale as PhoneShell._pjsua_call_for)."""
+        rec = self._record_for(call_id)
+        if rec is None:
+            return
+        try:
+            self._phone._on_hangup_by_id(rec.call_id)
         except Exception:
             log.exception("bridge.hangup failed")
 
-    @Slot()
-    def answer(self) -> None:
+    @Slot(int)
+    def answer(self, call_id: int = -1) -> None:
+        rec = self._record_for(call_id)
+        if rec is None:
+            return
         try:
-            self._phone._on_answer(self._selected_id())
+            self._phone._on_answer(rec.call_id)
         except Exception:
             log.exception("bridge.answer failed")
 
-    @Slot()
-    def reject(self) -> None:
+    @Slot(int)
+    def reject(self, call_id: int = -1) -> None:
+        rec = self._record_for(call_id)
+        if rec is None:
+            return
         try:
-            self._phone._on_reject(self._selected_id())
+            self._phone._on_reject(rec.call_id)
         except Exception:
             log.exception("bridge.reject failed")
 
+    @Slot(int)
+    def select_call(self, call_id: int) -> None:
+        """Clicking a card promotes that call to selected (audio focus) --
+        the exact semantic of the Qt calls_strip row click."""
+        try:
+            if self._phone.calls.get(int(call_id)) is not None:
+                self._phone._select_call(int(call_id))
+        except Exception:
+            log.exception("bridge.select_call failed")
+
     # ------------------------------------------------------------------
-    # In-call controls
+    # In-call controls (per-call)
     # ------------------------------------------------------------------
-    @Slot()
-    def toggle_mute(self) -> None:
-        rec = self._selected_record()
+    @Slot(int)
+    def toggle_mute(self, call_id: int = -1) -> None:
+        rec = self._record_for(call_id)
         if rec is None:
             return
         try:
@@ -97,9 +132,9 @@ class WebBridge(QObject):
         except Exception:
             log.exception("bridge.toggle_mute failed")
 
-    @Slot()
-    def toggle_hold(self) -> None:
-        rec = self._selected_record()
+    @Slot(int)
+    def toggle_hold(self, call_id: int = -1) -> None:
+        rec = self._record_for(call_id)
         if rec is None:
             return
         try:
@@ -112,20 +147,22 @@ class WebBridge(QObject):
         except Exception:
             log.exception("bridge.toggle_hold failed")
 
-    @Slot(str)
-    def transfer(self, target: str) -> None:
-        """Blind-transfer the selected call. The web UI collects the target
-        (the Qt path used a QInputDialog); everything else mirrors
-        PhoneShell._on_transfer."""
+    @Slot(int, str)
+    def transfer(self, call_id: int, target: str) -> None:
+        """Blind-transfer ONE call. The web UI collects the target (the Qt
+        path used a QInputDialog); everything else mirrors
+        PhoneShell._on_transfer, but per-card so multi-call transfer is
+        unambiguous."""
         target = (target or "").strip()
-        if not target:
+        rec = self._record_for(call_id)
+        if not target or rec is None:
             return
         try:
-            call = self._phone._selected_pjsua_call()
-            if call is None:
-                return
             from noc_beam.sip.endpoint import SipEndpoint
 
+            call = SipEndpoint.instance().find_call(rec.call_id)
+            if call is None:
+                return
             SipEndpoint.instance().blind_transfer(
                 call, target, account_id=self._phone._active_account_id
             )
@@ -133,25 +170,33 @@ class WebBridge(QObject):
         except Exception:
             log.exception("bridge.transfer failed")
 
-    @Slot(str)
-    def send_dtmf(self, digit: str) -> None:
-        """In-call DTMF only. When idle the web UI builds the dial string
-        itself (mirrors ui/phone_shell.py:_on_digit_pressed's in-call branch;
-        the idle-append branch lives in the page)."""
+    @Slot(int, str)
+    def send_dtmf(self, call_id: int, digit: str) -> None:
+        """Per-call in-call DTMF (phase-2 multi-call: every card's compact
+        pad passes its own call_id, so tones unambiguously target that
+        card's call). When idle the web UI builds the dial string itself
+        (mirrors ui/phone_shell.py:_on_digit_pressed's split)."""
         digit = (digit or "").strip()
-        if not digit:
+        rec = self._record_for(call_id)
+        if not digit or rec is None:
             return
         try:
-            call = self._phone._selected_pjsua_call()
-            if call is None:
-                return
-            rec = self._selected_record()
-            acc_id = rec.account_id if rec else self._phone._active_account_id
-            acc_cfg = next((a for a in self._phone.accounts if a.id == acc_id), None)
-            if acc_cfg is None:
-                return
             from noc_beam.sip.endpoint import SipEndpoint
 
+            call = SipEndpoint.instance().find_call(rec.call_id)
+            if call is None:
+                return
+            acc_cfg = next(
+                (a for a in self._phone.accounts if a.id == rec.account_id), None
+            )
+            if acc_cfg is None:
+                acc_cfg = next(
+                    (a for a in self._phone.accounts
+                     if a.id == self._phone._active_account_id),
+                    None,
+                )
+            if acc_cfg is None:
+                return
             SipEndpoint.instance().send_dtmf(call, digit, acc_cfg)
         except Exception:
             log.exception("bridge.send_dtmf failed")

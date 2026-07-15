@@ -28,7 +28,7 @@ from noc_beam.sip.events import sip_events
 from noc_beam.webui.bridge import WebBridge
 from noc_beam.webui.serializers import (
     serialize_accounts,
-    serialize_call,
+    serialize_calls,
     serialize_recents,
     serialize_suppliers,
 )
@@ -60,10 +60,11 @@ class WebShell(QMainWindow):
         self._page_ready = False
 
         self.setWindowTitle(__app_name__)
-        # Owner-locked compact footprint (brief §"the shipping bar").
-        self.resize(384, 640)
+        # Owner-locked compact footprint. Phase-2 owner feedback: tighter
+        # 360x560 default (keypad shrunk to ~31px keys to fit).
+        self.resize(360, 560)
         self.setMinimumWidth(360)
-        self.setMinimumHeight(480)
+        self.setMinimumHeight(460)
         self.setWindowFlags(
             Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint
@@ -115,7 +116,7 @@ class WebShell(QMainWindow):
     def push_all(self) -> None:
         self._apply(
             {
-                "call": self._call_payload(),
+                "calls": self._calls_payload(),
                 "accounts": self._accounts_payload(),
                 "suppliers": self._suppliers_payload(),
                 "recents": self._recents_payload(),
@@ -123,7 +124,7 @@ class WebShell(QMainWindow):
         )
 
     def push_call(self, *_args) -> None:
-        self._apply({"call": self._call_payload()})
+        self._apply({"calls": self._calls_payload()})
 
     def push_accounts(self, *_args) -> None:
         self._apply({"accounts": self._accounts_payload()})
@@ -139,28 +140,23 @@ class WebShell(QMainWindow):
             {
                 "accounts": self._accounts_payload(),
                 "suppliers": self._suppliers_payload(),
-                "call": self._call_payload(),
+                "calls": self._calls_payload(),
             }
         )
 
     # ------------------------------------------------------------------
     # Payload builders (read hidden PhoneShell state)
     # ------------------------------------------------------------------
-    def _selected_record(self):
+    def _calls_payload(self):
+        """ALL active calls (phase-2 multi-call stack), selected-flagged."""
         p = self._phone
-        cid = getattr(p, "_selected_call_id", None)
-        if cid is not None:
-            rec = p.calls.get(cid)
-            if rec is not None:
-                return rec
-        return p.calls.first_active()
-
-    def _call_payload(self):
         try:
-            return serialize_call(self._selected_record())
+            return serialize_calls(
+                p.calls.active(), getattr(p, "_selected_call_id", None)
+            )
         except Exception:
-            log.exception("_call_payload failed")
-            return None
+            log.exception("_calls_payload failed")
+            return []
 
     def _accounts_payload(self):
         p = self._phone

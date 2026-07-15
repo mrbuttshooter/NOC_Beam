@@ -114,6 +114,8 @@
                        white-space: nowrap; color: var(--text-2);
                        font-family: var(--mono); }
 
+  /* Live-call stack: one card per active call (phase-2 multi-call). */
+  .calls { display: flex; flex-direction: column; gap: 8px; }
   .live {
     background: linear-gradient(160deg, rgba(102,115,232,.10), rgba(139,92,246,.05)),
                 var(--panel);
@@ -121,6 +123,12 @@
     border-radius: 14px; padding: 14px 16px;
     animation: rise .25s ease-out;
   }
+  /* Stacked (2+) cards compact themselves; the selected (audio-focus) card
+     carries a stronger border, mirroring the Qt calls_strip selection. */
+  .live.compact { padding: 10px 12px; border-radius: 12px; }
+  .live.compact .num { font-size: 15px; }
+  .live.compact .controls { margin-top: 8px; }
+  .live.sel { border-color: rgba(102,115,232,.6); }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
   .live .top { display: flex; align-items: center; gap: 10px; }
   .live .num { font-family: var(--mono); font-size: 19px; font-weight: 600;
@@ -169,19 +177,37 @@
   .btn-reject { background: var(--bad); }
   .btn-answer:hover, .btn-reject:hover { filter: brightness(1.12); }
 
-  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  /* Compact per-call DTMF pad (phase-2 multi-call): toggled by the ⌗
+     button on each card; 6x2 grid keeps two open cards inside 560px. */
+  .minipad {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px;
+    margin-top: 8px;
+  }
+  .minipad .mkey {
+    background: var(--raised); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 0; text-align: center; cursor: pointer;
+    font-family: var(--mono); font-size: 12px; color: var(--text-2);
+    transition: all .12s;
+  }
+  .minipad .mkey:hover { color: var(--text); border-color: var(--border-strong); }
+  .minipad .mkey:active { transform: scale(.94); background: rgba(102,115,232,.2);
+                          border-color: var(--accent); }
+
+  /* Phase-2 owner feedback: tighter keypad (~31px keys) so the default
+     window drops to 360x560 and recents gain the freed space. */
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .key {
     background: var(--panel); border: 1px solid var(--border);
-    border-radius: 10px; padding: 8px 0 6px; text-align: center; cursor: pointer;
+    border-radius: 9px; padding: 4px 0 3px; text-align: center; cursor: pointer;
     transition: all .12s;
   }
   .key:hover { background: var(--raised); border-color: var(--border-strong);
                transform: translateY(-1px); }
   .key:active { transform: scale(.96); background: rgba(102,115,232,.15);
                 border-color: var(--accent); }
-  .key .d { font-size: 16px; font-weight: 500; }
-  .key .c { font-size: 8.5px; letter-spacing: 1.5px; color: var(--text-3);
-            height: 11px; }
+  .key .d { font-size: 14px; font-weight: 500; line-height: 1.15; }
+  .key .c { font-size: 7.5px; letter-spacing: 1.2px; color: var(--text-3);
+            height: 8px; line-height: 8px; }
 
   .sect { display: flex; align-items: baseline; margin-top: 2px; }
   .sect h2 { font-size: 11px; font-weight: 600; letter-spacing: 1.2px;
@@ -210,12 +236,16 @@
             border: 0; color: var(--accent); cursor: pointer; font-size: 13px; flex: 0 0 auto; }
   .empty { color: var(--text-3); font-size: 12px; text-align: center; padding: 20px 0; }
 
-  /* Pop-over menus (account switcher, hamburger, supplier). */
+  /* Pop-over menus (account switcher, hamburger, supplier).
+     Phase-2 fix: long lists (supplier catalogs) must SCROLL, not clip
+     below the window edge -- max-height set per-open by positionMenu(),
+     overflow-y here; wheel + ArrowUp/Down/Enter/Escape handled in JS. */
   .menu {
     position: fixed; z-index: 40; min-width: 168px;
     background: var(--raised); border: 1px solid var(--border-strong);
     border-radius: 10px; padding: 5px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
     animation: pop .12s ease-out;
+    overflow-y: auto; overscroll-behavior: contain; outline: none;
   }
   @keyframes pop { from { opacity: 0; transform: translateY(-4px); } }
   .menu[hidden] { display: none; }
@@ -224,7 +254,7 @@
     padding: 8px 10px; border-radius: 7px; font-size: 12.5px;
     cursor: pointer; color: var(--text); white-space: nowrap;
   }
-  .menu .item:hover { background: var(--panel); }
+  .menu .item:hover, .menu .item.kbd { background: var(--panel); }
   .menu .item .lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; }
   .menu .item.active { color: var(--accent); }
   .menu .sep { height: 1px; background: var(--border); margin: 4px 6px; }
@@ -263,23 +293,8 @@
       </div>
     </div>
 
-    <div class="live" id="live" hidden>
-      <div class="top">
-        <div class="num" id="live-num"></div>
-        <div class="chip" id="live-chip"></div>
-      </div>
-      <div class="via" id="live-via"></div>
-      <div class="controls" id="controls-active">
-        <button class="ctl" id="btn-mute" title="Mute">🎙</button>
-        <button class="ctl" id="btn-hold" title="Hold">⏸</button>
-        <button class="ctl" id="btn-transfer" title="Transfer">⇄</button>
-        <button class="end" id="btn-end">End call</button>
-      </div>
-      <div class="controls incoming" id="controls-incoming" hidden>
-        <button class="btn-reject" id="btn-reject">Reject</button>
-        <button class="btn-answer" id="btn-answer">Answer</button>
-      </div>
-    </div>
+    <!-- Live-call stack: one card per active call, built by app.js. -->
+    <div class="calls" id="calls"></div>
 
     <div class="pad" id="pad"></div>
 

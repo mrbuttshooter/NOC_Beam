@@ -2,8 +2,8 @@
 // NOC_Beam web softphone -- client logic.
 //
 // Security (brief rule): NEVER assign dynamic data via innerHTML. Every row /
-// menu item is built with createElement + textContent so a hostile peer URI
-// or account label can't inject markup.
+// menu item / call card is built with createElement + textContent so a
+// hostile peer URI or account label can't inject markup.
 
 // ---- tiny DOM helper (from the prototype) ---------------------------------
 function el(tag, cls, text) {
@@ -19,14 +19,15 @@ let bridge = null;
 
 // ---- app state (last pushed snapshot) -------------------------------------
 const state = {
-  call: null,
+  calls: [],
   accounts: { accounts: [], activeId: "", activeLabel: "No account", activeHealth: "muted" },
   suppliers: { visible: false, activeId: "", suppliers: [] },
   recents: [],
 };
 
 // ==========================================================================
-// Keypad
+// Keypad (main dialpad -- hidden while 2+ calls are active; per-call DTMF
+// then lives on each card's compact pad)
 // ==========================================================================
 const KEYS = [["1", ""], ["2", "ABC"], ["3", "DEF"], ["4", "GHI"], ["5", "JKL"],
   ["6", "MNO"], ["7", "PQRS"], ["8", "TUV"], ["9", "WXYZ"], ["*", ""], ["0", "+"], ["#", ""]];
@@ -39,10 +40,11 @@ function buildPad() {
     k.appendChild(el("div", "d", d));
     k.appendChild(el("div", "c", c));
     k.addEventListener("click", () => {
-      // Mirror ui/phone_shell.py:_on_digit_pressed -- in-call digits are DTMF,
-      // idle digits build the dial string.
-      if (state.call) {
-        if (bridge) bridge.send_dtmf(d);
+      // Mirror ui/phone_shell.py:_on_digit_pressed -- with exactly one live
+      // call, digits are DTMF to it; idle digits build the dial string.
+      // (With 2+ calls this pad is hidden; per-card pads take over.)
+      if (state.calls.length === 1) {
+        if (bridge) bridge.send_dtmf(state.calls[0].id, d);
       } else {
         num.value += d;
         num.focus();
@@ -64,60 +66,119 @@ function placeCall() {
 }
 
 // ==========================================================================
-// Live call card
+// Live call stack (one card per active call)
 // ==========================================================================
-let timerHandle = null;
+const openPads = new Set(); // call ids whose compact DTMF pad is expanded
 
 function fmtElapsed(anchorMs) {
   if (!anchorMs) return "";
   let s = Math.max(0, Math.floor((Date.now() - anchorMs) / 1000));
   const h = Math.floor(s / 3600); s -= h * 3600;
   const m = Math.floor(s / 60); s -= m * 60;
-  const pad = (n) => String(n).padStart(2, "0");
-  return h ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  const pad2 = (n) => String(n).padStart(2, "0");
+  return h ? `${pad2(h)}:${pad2(m)}:${pad2(s)}` : `${pad2(m)}:${pad2(s)}`;
 }
 
-function renderCall(c) {
-  const live = $("live");
-  if (timerHandle) { clearInterval(timerHandle); timerHandle = null; }
-  if (!c) {
-    live.hidden = true;
-    return;
+// One global ticker updates every card's timer (no per-card intervals).
+setInterval(() => {
+  for (const t of document.querySelectorAll(".chip .t[data-anchor]")) {
+    t.textContent = fmtElapsed(Number(t.dataset.anchor));
   }
-  live.hidden = false;
-  $("live-num").textContent = c.peer || "";
-  $("live-via").textContent = c.via ? ("via " + c.via) : "";
-  $("live-via").style.display = c.via ? "" : "none";
+}, 1000);
 
-  // Chip: label + optional live timer span.
-  const chip = $("live-chip");
-  chip.className = "chip " + (c.level || "prog");
-  chip.textContent = "";
+function ctlBtn(cls, title, glyph, handler) {
+  const b = el("button", cls, glyph);
+  b.title = title;
+  b.addEventListener("click", (e) => { e.stopPropagation(); handler(); });
+  return b;
+}
+
+function buildMiniPad(callId) {
+  const padWrap = el("div", "minipad");
+  for (const d of ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"]) {
+    const k = el("div", "mkey", d);
+    k.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (bridge) bridge.send_dtmf(callId, d);
+    });
+    padWrap.appendChild(k);
+  }
+  return padWrap;
+}
+
+function buildCard(c, multi) {
+  const card = el("div", "live" + (multi ? " compact" : "") + (multi && c.selected ? " sel" : ""));
+
+  const top = el("div", "top");
+  top.appendChild(el("div", "num", c.peer || ""));
+  const chip = el("div", "chip " + (c.level || "prog"));
   chip.appendChild(document.createTextNode(c.chip || ""));
   if (c.showTimer && c.anchorMs) {
     const t = el("span", "t", fmtElapsed(c.anchorMs));
+    t.dataset.anchor = String(c.anchorMs);
     chip.appendChild(t);
-    timerHandle = setInterval(() => { t.textContent = fmtElapsed(c.anchorMs); }, 1000);
+  }
+  top.appendChild(chip);
+  card.appendChild(top);
+
+  if (c.via) card.appendChild(el("div", "via", "via " + c.via));
+
+  if (c.incoming) {
+    const row = el("div", "controls incoming");
+    row.appendChild(ctlBtn("btn-reject", "Reject", "Reject", () => bridge && bridge.reject(c.id)));
+    row.appendChild(ctlBtn("btn-answer", "Answer", "Answer", () => bridge && bridge.answer(c.id)));
+    card.appendChild(row);
+  } else {
+    const row = el("div", "controls");
+    const mute = ctlBtn("ctl" + (c.muted ? " on" : ""), c.muted ? "Unmute" : "Mute", "🎙",
+      () => bridge && bridge.toggle_mute(c.id));
+    const hold = ctlBtn("ctl" + (c.held ? " on" : ""), c.held ? "Resume" : "Hold", "⏸",
+      () => bridge && bridge.toggle_hold(c.id));
+    const xfer = ctlBtn("ctl", "Transfer", "⇄", () => {
+      const t = window.prompt("Transfer to (number or SIP URI):");
+      if (t && t.trim() && bridge) bridge.transfer(c.id, t.trim());
+    });
+    for (const b of [mute, hold, xfer]) {
+      b.disabled = !c.canControl;
+      if (!c.canControl) b.style.opacity = ".4";
+    }
+    // Compact DTMF-pad toggle -- per-card so tones unambiguously target
+    // THIS call (owner design decision, phase 2).
+    const dtmf = ctlBtn("ctl" + (openPads.has(c.id) ? " on" : ""), "DTMF keypad", "⌗", () => {
+      if (openPads.has(c.id)) openPads.delete(c.id); else openPads.add(c.id);
+      renderCalls(state.calls);
+    });
+    row.appendChild(mute);
+    row.appendChild(hold);
+    row.appendChild(xfer);
+    row.appendChild(dtmf);
+    row.appendChild(ctlBtn("end", "End call", "End call", () => bridge && bridge.hangup(c.id)));
+    card.appendChild(row);
+    if (openPads.has(c.id)) card.appendChild(buildMiniPad(c.id));
   }
 
-  // Controls: incoming shows Answer/Reject, otherwise the active row.
-  const active = $("controls-active");
-  const incoming = $("controls-incoming");
-  if (c.incoming) {
-    active.hidden = true;
-    incoming.hidden = false;
-  } else {
-    active.hidden = false;
-    incoming.hidden = true;
-    $("btn-mute").classList.toggle("on", !!c.muted);
-    $("btn-hold").classList.toggle("on", !!c.held);
-    $("btn-hold").title = c.held ? "Resume" : "Hold";
-    // Mute/hold/transfer are only meaningful once media can exist.
-    for (const id of ["btn-mute", "btn-hold", "btn-transfer"]) {
-      $(id).disabled = !c.canControl;
-      $(id).style.opacity = c.canControl ? "" : ".4";
-    }
+  // Click anywhere on a stacked card (not a button) promotes it to the
+  // selected call (audio focus) -- Qt calls_strip parity.
+  if (multi && !c.selected) {
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("button, .mkey")) return;
+      if (bridge) bridge.select_call(c.id);
+    });
+    card.style.cursor = "pointer";
   }
+  return card;
+}
+
+function renderCalls(calls) {
+  const box = $("calls");
+  box.textContent = "";
+  const live = new Set(calls.map((c) => c.id));
+  for (const id of [...openPads]) if (!live.has(id)) openPads.delete(id);
+  const multi = calls.length > 1;
+  // Owner design decision: 2+ active calls hide the MAIN dialpad entirely
+  // to make room for the stack; each card carries its own compact pad.
+  $("pad").hidden = multi;
+  for (const c of calls) box.appendChild(buildCard(c, multi));
 }
 
 // ==========================================================================
@@ -147,7 +208,7 @@ function openAccountMenu() {
       menu.appendChild(item);
     }
   }
-  const sep = el("div", "sep"); menu.appendChild(sep);
+  menu.appendChild(el("div", "sep"));
   const settings = el("div", "item");
   settings.appendChild(el("span", "lbl", "Account settings…"));
   settings.addEventListener("click", () => { if (bridge) bridge.open_window("accounts"); closeMenus(); });
@@ -218,25 +279,73 @@ function openAppMenu() {
 // ==========================================================================
 // Menu positioning + dismissal (one open at a time)
 // ==========================================================================
+const MENU_IDS = ["account-menu", "app-menu", "supplier-menu"];
+
 function closeMenus() {
-  for (const id of ["account-menu", "app-menu", "supplier-menu"]) $(id).hidden = true;
+  for (const id of MENU_IDS) $(id).hidden = true;
+}
+function closeMenusExcept(keep) {
+  for (const id of MENU_IDS) {
+    const m = $(id);
+    if (m !== keep) m.hidden = true;
+  }
 }
 
+// Phase-2 fix: long menus (supplier catalogs) must scroll instead of
+// clipping below the window edge. Strategy: cap max-height to the free
+// space below the anchor; if the list wants more room than exists below
+// AND there is more space above, flip the menu upward. overflow-y on
+// .menu makes the wheel work; keyboard nav below.
 function positionMenu(menu, anchor, alignRight) {
   closeMenusExcept(menu);
   menu.hidden = false;
+  menu.style.maxHeight = "";
   const r = anchor.getBoundingClientRect();
   const mw = menu.offsetWidth;
   let left = alignRight ? (r.right - mw) : r.left;
   left = Math.max(6, Math.min(left, window.innerWidth - mw - 6));
-  menu.style.left = left + "px";
-  menu.style.top = (r.bottom + 4) + "px";
-}
-function closeMenusExcept(keep) {
-  for (const id of ["account-menu", "app-menu", "supplier-menu"]) {
-    const m = $(id);
-    if (m !== keep) m.hidden = true;
+
+  const below = window.innerHeight - r.bottom - 10;
+  const above = r.top - 10;
+  const want = menu.scrollHeight + 2;
+  let top;
+  if (want <= below || below >= above) {
+    menu.style.maxHeight = Math.max(90, below) + "px";
+    top = r.bottom + 4;
+  } else {
+    menu.style.maxHeight = Math.max(90, above) + "px";
+    top = Math.max(6, r.top - 4 - Math.min(want, above));
   }
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+  menu.focus();
+}
+
+// Keyboard navigation: ArrowUp/Down move the highlight (scrolling it into
+// view), Enter activates, Escape closes. Attached once per menu element.
+function wireMenuKeys(menu) {
+  menu.tabIndex = -1;
+  menu.addEventListener("keydown", (e) => {
+    const items = [...menu.querySelectorAll(".item")];
+    if (!items.length) return;
+    let idx = items.findIndex((i) => i.classList.contains("kbd"));
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      e.stopPropagation();
+      idx = e.key === "ArrowDown"
+        ? Math.min(items.length - 1, idx + 1)
+        : Math.max(0, idx < 0 ? items.length - 1 : idx - 1);
+      items.forEach((i) => i.classList.remove("kbd"));
+      items[idx].classList.add("kbd");
+      items[idx].scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter" && idx >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      items[idx].click();
+    } else if (e.key === "Escape") {
+      closeMenus();
+    }
+  });
 }
 
 // ==========================================================================
@@ -271,7 +380,7 @@ function renderRecents(rows) {
 window.nb = {
   apply(patch) {
     if (!patch) return;
-    if ("call" in patch) { state.call = patch.call; renderCall(state.call); }
+    if ("calls" in patch) { state.calls = patch.calls || []; renderCalls(state.calls); }
     if ("accounts" in patch) { state.accounts = patch.accounts; renderAccounts(state.accounts); }
     if ("suppliers" in patch) { state.suppliers = patch.suppliers; renderSuppliers(state.suppliers); }
     if ("recents" in patch) { state.recents = patch.recents; renderRecents(state.recents); }
@@ -289,16 +398,6 @@ function wireControls() {
     if (e.key === "Enter") { e.preventDefault(); placeCall(); }
   });
 
-  $("btn-end").addEventListener("click", () => bridge && bridge.hangup());
-  $("btn-mute").addEventListener("click", () => bridge && bridge.toggle_mute());
-  $("btn-hold").addEventListener("click", () => bridge && bridge.toggle_hold());
-  $("btn-transfer").addEventListener("click", () => {
-    const t = window.prompt("Transfer to (number or SIP URI):");
-    if (t && t.trim() && bridge) bridge.transfer(t.trim());
-  });
-  $("btn-answer").addEventListener("click", () => bridge && bridge.answer());
-  $("btn-reject").addEventListener("click", () => bridge && bridge.reject());
-
   $("view-all").addEventListener("click", () => bridge && bridge.open_window("history"));
 
   // Chrome buttons
@@ -307,6 +406,7 @@ function wireControls() {
   $("btn-menu").addEventListener("click", (e) => { e.stopPropagation(); toggleMenu("app-menu", openAppMenu); });
   $("account-pill").addEventListener("click", (e) => { e.stopPropagation(); toggleMenu("account-menu", openAccountMenu); });
   $("supplier-sel").addEventListener("click", (e) => { e.stopPropagation(); toggleMenu("supplier-menu", openSupplierMenu); });
+  for (const id of MENU_IDS) wireMenuKeys($(id));
 
   // Title-bar drag: mousedown on the chrome (but not on a button) hands the
   // move to the OS via bridge.start_move() (brief §web_shell).
@@ -321,12 +421,14 @@ function wireControls() {
     if (bridge) bridge.toggle_max_restore();
   });
 
-  // Dismiss menus on any outside click / Escape.
+  // Dismiss menus on any outside click / Escape; type-to-dial only while
+  // no call is live (in-call digits belong to the DTMF pads).
   document.addEventListener("click", closeMenus);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { closeMenus(); return; }
     if (e.key === "/") { e.preventDefault(); $("num").focus(); }
-    else if (/^[0-9*#+]$/.test(e.key) && document.activeElement !== $("num") && !state.call) {
+    else if (/^[0-9*#+]$/.test(e.key) && document.activeElement !== $("num")
+             && state.calls.length === 0) {
       $("num").focus(); $("num").value += e.key;
     }
   });

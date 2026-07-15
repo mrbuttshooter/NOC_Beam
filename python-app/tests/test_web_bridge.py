@@ -74,6 +74,21 @@ def test_serialize_call_incoming_and_controls() -> None:
     assert S.serialize_call(_rec(state=CallState.CALLING))["canControl"] is False
 
 
+def test_serialize_calls_multi_sorted_selected_and_terminal_dropped() -> None:
+    r1 = _rec(call_id=1, state=CallState.CALLING)
+    r2 = _rec(call_id=2, state=CallState.EARLY, remote_uri="sip:222@x")
+    dead = _rec(call_id=3, state=CallState.DISCONNECTED)
+    out = S.serialize_calls([r2, r1, dead], selected_id=2)
+    assert [c["id"] for c in out] == [1, 2]        # call-id order, dead dropped
+    assert out[0]["selected"] is False
+    assert out[1]["selected"] is True
+    assert out[1]["peer"] == "222"
+
+
+def test_serialize_calls_empty() -> None:
+    assert S.serialize_calls([], selected_id=None) == []
+
+
 def test_serialize_call_anchor_and_via() -> None:
     # Ringing -> anchor is started_at.
     ring = S.serialize_call(_rec(state=CallState.EARLY, started_at=1000.0))
@@ -201,25 +216,47 @@ def test_place_call_routes_and_guards_empty() -> None:
     phone._on_call_requested.assert_not_called()
 
 
-def test_redial_hangup_answer_reject_route() -> None:
+def test_redial_hangup_answer_reject_route_per_call() -> None:
     rec = _rec(call_id=9)
     phone = _fake_phone(rec)
     bridge = WebBridge(phone, MagicMock())
     bridge.redial("200")
     phone._on_call_requested.assert_called_once_with("200")
-    bridge.hangup()
-    phone._on_hangup_requested.assert_called_once()
-    bridge.answer()
+    # Explicit per-call ids (phase-2 multi-call).
+    bridge.hangup(9)
+    phone._on_hangup_by_id.assert_called_once_with(9)
+    bridge.answer(9)
     phone._on_answer.assert_called_once_with(9)
-    bridge.reject()
+    bridge.reject(9)
     phone._on_reject.assert_called_once_with(9)
+
+
+def test_hangup_negative_id_falls_back_to_selected() -> None:
+    rec = _rec(call_id=9)
+    phone = _fake_phone(rec)
+    bridge = WebBridge(phone, MagicMock())
+    bridge.hangup(-1)
+    phone._on_hangup_by_id.assert_called_once_with(9)
+
+
+def test_select_call_routes() -> None:
+    rec = _rec(call_id=5)
+    phone = _fake_phone(rec)
+    bridge = WebBridge(phone, MagicMock())
+    bridge.select_call(5)
+    phone._select_call.assert_called_once_with(5)
+    # Unknown call -> no-op.
+    phone._select_call.reset_mock()
+    phone.calls.get.return_value = None
+    bridge.select_call(99)
+    phone._select_call.assert_not_called()
 
 
 def test_toggle_mute_flips_record_state() -> None:
     rec = _rec(call_id=3, muted=False)
     phone = _fake_phone(rec)
     bridge = WebBridge(phone, MagicMock())
-    bridge.toggle_mute()
+    bridge.toggle_mute(3)
     phone._on_mute_toggled.assert_called_once_with(3, True)
 
 
@@ -227,20 +264,59 @@ def test_toggle_hold_and_resume() -> None:
     rec = _rec(call_id=4, state=CallState.CONFIRMED, connected_at=1.0)
     phone = _fake_phone(rec)
     bridge = WebBridge(phone, MagicMock())
-    bridge.toggle_hold()
+    bridge.toggle_hold(4)
     phone._on_hold.assert_called_once_with(4)
     # Now held -> toggling resumes.
     rec.state = CallState.HELD
-    bridge.toggle_hold()
+    bridge.toggle_hold(4)
     phone._on_resume.assert_called_once_with(4)
 
 
 def test_send_dtmf_noop_without_active_call() -> None:
     phone = _fake_phone()
-    phone._selected_pjsua_call.return_value = None
     bridge = WebBridge(phone, MagicMock())
-    bridge.send_dtmf("5")  # must not raise
-    bridge.send_dtmf("")   # empty guard
+    bridge.send_dtmf(-1, "5")  # no call at all -> must not raise
+    bridge.send_dtmf(3, "")    # empty digit guard
+
+
+def test_send_dtmf_routes_per_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Phase-2: DTMF carries the card's call_id and reaches the endpoint
+    with THAT call's live handle + owning account config."""
+    rec = _rec(call_id=6, state=CallState.CONFIRMED, connected_at=1.0)
+    phone = _fake_phone(rec)
+    ep = MagicMock()
+    live = MagicMock()
+    ep.find_call.return_value = live
+    import noc_beam.sip.endpoint as endpoint_mod
+
+    monkeypatch.setattr(endpoint_mod.SipEndpoint, "instance", classmethod(lambda cls: ep))
+    bridge = WebBridge(phone, MagicMock())
+    bridge.send_dtmf(6, "7")
+    ep.find_call.assert_called_once_with(6)
+    args = ep.send_dtmf.call_args[0]
+    assert args[0] is live
+    assert args[1] == "7"
+    assert args[2].id == "a1"  # the record's owning account config
+
+
+def test_transfer_routes_per_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    rec = _rec(call_id=8, state=CallState.CONFIRMED, connected_at=1.0)
+    phone = _fake_phone(rec)
+    phone._active_account_id = "a1"
+    ep = MagicMock()
+    live = MagicMock()
+    ep.find_call.return_value = live
+    import noc_beam.sip.endpoint as endpoint_mod
+
+    monkeypatch.setattr(endpoint_mod.SipEndpoint, "instance", classmethod(lambda cls: ep))
+    bridge = WebBridge(phone, MagicMock())
+    bridge.transfer(8, "sip:target@x")
+    ep.find_call.assert_called_once_with(8)
+    ep.blind_transfer.assert_called_once_with(live, "sip:target@x", account_id="a1")
+    # Empty target guard.
+    ep.blind_transfer.reset_mock()
+    bridge.transfer(8, "   ")
+    ep.blind_transfer.assert_not_called()
 
 
 def test_select_account_routes_and_pushes() -> None:
