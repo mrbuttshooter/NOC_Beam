@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NOC_Beam</title>
+<style>
+  :root {
+    --canvas:#08090c; --panel:#101116; --panel2:#15161c; --raised:#1c1e26;
+    --line:rgba(255,255,255,.06); --line2:rgba(255,255,255,.12);
+    --text:#eceef4; --text2:#9aa0b4; --text3:#5b5f70;
+    --acc:#6673e8; --acc2:#8b5cf6;
+    --ok:#3ddc97; --bad:#f26d76; --warn:#f3b04e;
+    --mono:"Cascadia Mono",Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;user-select:none}
+  html,body{height:100%}
+  body{
+    background:var(--canvas); color:var(--text);
+    font:13px/1.45 "Segoe UI Variable Text","Segoe UI",sans-serif;
+    overflow:hidden; padding:18px 22px;
+  }
+  .hdr{display:flex;align-items:baseline;gap:14px;margin-bottom:14px}
+  .hdr h1{font-size:15px;font-weight:600}
+  .hdr span{color:var(--text3);font-size:12px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;height:calc(100% - 40px)}
+  .col{display:flex;flex-direction:column;gap:10px;min-height:0}
+  .label{display:flex;align-items:baseline;gap:8px}
+  .label b{font-size:13px;letter-spacing:.4px}
+  .label i{font-style:normal;color:var(--text3);font-size:11px}
+  .frame{flex:1;border:1px solid var(--line2);border-radius:14px;overflow:hidden;
+         display:flex;flex-direction:column;min-height:0;
+         box-shadow:0 20px 50px rgba(0,0,0,.45)}
+
+  /* ============ A. STACK ============ */
+  .stack{background:var(--panel);display:flex;flex-direction:column}
+  .stack .bar{display:flex;align-items:center;gap:8px;padding:9px 12px;
+              border-bottom:1px solid var(--line);font-size:12px}
+  .sdot{width:7px;height:7px;border-radius:50%;background:var(--ok);
+        box-shadow:0 0 8px var(--ok)}
+  .stack .bar .sp{flex:1}
+  .stack .bar .ic{color:var(--text3);font-size:13px;cursor:pointer}
+  .flow{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;
+        padding:12px;justify-content:flex-end}
+  .ev{align-self:stretch;border:1px solid var(--line);border-radius:11px;
+      background:var(--panel2);padding:9px 12px}
+  .ev .l1{display:flex;align-items:center;gap:8px}
+  .ev .n{font-family:var(--mono);font-size:13px;flex:1}
+  .tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:12px}
+  .tag.ok{background:rgba(61,220,151,.12);color:var(--ok)}
+  .tag.bad{background:rgba(242,109,118,.12);color:var(--bad)}
+  .tag.warn{background:rgba(243,176,78,.14);color:var(--warn)}
+  .ev .sub{font-family:var(--mono);font-size:10px;color:var(--text3);margin-top:3px}
+  .ev.live{border-color:rgba(102,115,232,.4);
+           background:linear-gradient(160deg,rgba(102,115,232,.12),rgba(139,92,246,.04)),var(--panel2)}
+  .ev.live .n{font-size:15px;font-weight:600}
+  .ev.live .tag.warn{animation:br 1.5s ease-in-out infinite}
+  @keyframes br{50%{opacity:.5}}
+  .ev .acts{display:flex;gap:6px;margin-top:8px}
+  .mini{width:32px;height:26px;border-radius:7px;border:1px solid var(--line);
+        background:var(--raised);color:var(--text2);font-size:12px;cursor:pointer}
+  .endm{margin-left:auto;border:0;border-radius:7px;padding:5px 14px;
+        background:var(--bad);color:#fff;font-size:11px;font-weight:600;cursor:pointer}
+  .stack .input{display:flex;gap:7px;padding:11px 12px;border-top:1px solid var(--line);
+                background:var(--panel2)}
+  .stack .input .keyic{width:36px;height:36px;border-radius:9px;background:var(--raised);
+       border:1px solid var(--line);color:var(--text2);display:grid;place-items:center;
+       cursor:pointer;font-size:13px}
+  .stack .input input{flex:1;background:var(--raised);border:1px solid var(--line);
+      border-radius:9px;color:var(--text);font-family:var(--mono);font-size:14px;
+      padding:0 12px;outline:0}
+  .stack .input input:focus{border-color:var(--acc)}
+  .stack .input .go{width:44px;height:36px;border:0;border-radius:9px;color:#fff;
+      background:linear-gradient(135deg,var(--acc),var(--acc2));font-size:15px;cursor:pointer}
+
+  /* ============ B. DECK ============ */
+  .deckwrap{background:transparent;display:flex;flex-direction:column;gap:14px;
+            padding:16px;border:0;box-shadow:none;overflow-y:auto}
+  .state{color:var(--text3);font-size:10.5px;letter-spacing:1.2px;
+         text-transform:uppercase;margin-bottom:6px}
+  .deck{border:1px solid var(--line2);border-radius:12px;background:var(--panel);
+        box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .deck .row{display:flex;align-items:center;gap:8px;padding:9px 10px}
+  .deck input{flex:1;background:var(--panel2);border:1px solid var(--line);
+      border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;
+      padding:7px 10px;outline:0}
+  .deck .callb{border:0;border-radius:8px;padding:7px 14px;color:#fff;font-weight:600;
+      font-size:12px;background:linear-gradient(135deg,var(--acc),var(--acc2));cursor:pointer}
+  .deck .chev{color:var(--text3);cursor:pointer;padding:0 4px}
+  .deck .ext{border-top:1px solid var(--line);padding:10px}
+  .deck .live-line{display:flex;align-items:center;gap:8px;
+      font-family:var(--mono);font-size:12px;padding:6px 8px;border-radius:8px;
+      background:rgba(243,176,78,.07);border:1px solid rgba(243,176,78,.2);margin-bottom:8px}
+  .deck .live-line .st{color:var(--warn);animation:br 1.5s infinite}
+  .deck .live-line .tm{margin-left:auto;color:var(--text3)}
+  .dpad{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-bottom:8px}
+  .dkey{background:var(--panel2);border:1px solid var(--line);border-radius:7px;
+        text-align:center;padding:6px 0;font-size:12.5px;cursor:pointer;transition:all .1s}
+  .dkey:hover{background:var(--raised)}
+  .drec{display:flex;align-items:center;gap:8px;padding:4px 6px;
+        font-family:var(--mono);font-size:11.5px;border-radius:6px}
+  .drec:hover{background:var(--panel2)}
+  .drec .dn{flex:1}
+  .drec .dt{color:var(--text3);font-size:10px}
+  .hint{color:var(--text3);font-size:11px;line-height:1.6;padding:0 2px}
+
+  /* ============ C. DUO ============ */
+  .duo{background:linear-gradient(180deg,#13151b,#0d0e12);display:flex;
+       flex-direction:column;padding:14px}
+  .lcd{background:#0a0f0c;border:1px solid rgba(61,220,151,.15);border-radius:10px;
+       padding:12px 14px;box-shadow:inset 0 2px 14px rgba(0,0,0,.7)}
+  .lcd .num{font-family:var(--mono);font-size:23px;letter-spacing:2px;
+      color:#54e6a8;text-shadow:0 0 12px rgba(61,220,151,.55)}
+  .lcd .l2{display:flex;gap:12px;margin-top:6px;font-family:var(--mono);
+      font-size:10px;color:rgba(84,230,168,.55)}
+  .leds{display:flex;gap:14px;margin:12px 2px 12px}
+  .led{display:flex;align-items:center;gap:6px;font-size:9.5px;
+       letter-spacing:1.3px;color:var(--text3)}
+  .led i{width:8px;height:8px;border-radius:50%}
+  .led i.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .led i.warn{background:var(--warn);box-shadow:0 0 8px var(--warn);
+              animation:br 1.2s infinite}
+  .led i.off{background:#2a2d38}
+  .dupad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex:1}
+  .dukey{background:linear-gradient(180deg,#1e212b,#171921);
+      border:1px solid rgba(255,255,255,.09);border-bottom-color:rgba(0,0,0,.6);
+      border-radius:10px;text-align:center;display:flex;flex-direction:column;
+      justify-content:center;cursor:pointer;
+      box-shadow:0 3px 0 rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
+      transition:all .08s}
+  .dukey:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.45)}
+  .dukey b{font-size:17px;font-weight:500}
+  .dukey s{font-size:8px;letter-spacing:1.8px;color:var(--text3);text-decoration:none}
+  .dubtns{display:flex;gap:8px;margin-top:12px}
+  .dub{flex:1;border-radius:10px;padding:11px 0;text-align:center;font-weight:700;
+      font-size:12.5px;letter-spacing:1px;cursor:pointer;border:1px solid rgba(255,255,255,.1);
+      box-shadow:0 3px 0 rgba(0,0,0,.5)}
+  .dub.call{background:linear-gradient(180deg,#2fae74,#1f8d5c);color:#eafff4}
+  .dub.end{background:linear-gradient(180deg,#c9464e,#a83239);color:#ffecec}
+  .dub:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.5)}
+  .dusup{display:flex;gap:6px;margin-top:10px}
+  .dus{flex:1;text-align:center;font-size:10px;padding:5px 0;border-radius:7px;
+       background:var(--panel2);border:1px solid var(--line);color:var(--text2);cursor:pointer}
+  .dus.sel{border-color:rgba(61,220,151,.4);color:var(--ok)}
+</style>
+</head>
+<body>
+  <div class="hdr"><h1>Compact phone — three species</h1>
+    <span>same engine, three different animals · pick one</span></div>
+  <div class="grid">
+
+    <div class="col">
+      <div class="label"><b>A · STACK</b><i>conversational dialer — calls are a timeline</i></div>
+      <div class="frame stack">
+        <div class="bar"><span class="sdot"></span>Teles UK · AAA Tel — C207
+          <span class="sp"></span><span class="ic">⌂</span><span class="ic">☰</span></div>
+        <div class="flow">
+          <div class="ev"><div class="l1"><span class="n">96899406599</span>
+            <span class="tag bad">404 Not found</span></div>
+            <div class="sub">11:48 · 2.1s PDD · iBasis C080</div></div>
+          <div class="ev"><div class="l1"><span class="n">96170010600</span>
+            <span class="tag ok">Answered 41s</span></div>
+            <div class="sub">17:06 · G729 · FAS clean · Ibasis</div></div>
+          <div class="ev"><div class="l1"><span class="n">96170010800</span>
+            <span class="tag bad">487 Cancelled</span></div>
+            <div class="sub">17:03 · ring 12s · no answer</div></div>
+          <div class="ev live">
+            <div class="l1"><span class="n">0035796109901</span>
+              <span class="tag warn">Ringing 00:05</span></div>
+            <div class="sub">via Teles UK · AAA Tel C207 · G729 · 180 w/o SDP</div>
+            <div class="acts">
+              <button class="mini">🎙</button><button class="mini">⏸</button>
+              <button class="mini">⇄</button><button class="endm">End</button>
+            </div>
+          </div>
+        </div>
+        <div class="input">
+          <div class="keyic">⣿</div>
+          <input placeholder="dial · paste · /cmd" spellcheck="false">
+          <button class="go">↗</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="label"><b>B · DECK</b><i>dockable strip — collapses to a sliver</i></div>
+      <div class="frame deckwrap">
+        <div>
+          <div class="state">Collapsed · always-on-top · 100% of the day</div>
+          <div class="deck">
+            <div class="row">
+              <span class="sdot"></span>
+              <input placeholder="Number or SIP URI" spellcheck="false">
+              <button class="callb">Call</button>
+              <span class="chev">▾</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="state">Expanded · when you need eyes on it</div>
+          <div class="deck">
+            <div class="row">
+              <span class="sdot"></span>
+              <input value="0035796109901" spellcheck="false">
+              <button class="callb">Call</button>
+              <span class="chev">▴</span>
+            </div>
+            <div class="ext">
+              <div class="live-line"><span class="st">● RINGING</span>
+                <span>0035796109901 · Teles UK</span><span class="tm">00:05</span></div>
+              <div class="dpad">
+                <div class="dkey">1</div><div class="dkey">2</div><div class="dkey">3</div>
+                <div class="dkey">4</div><div class="dkey">5</div><div class="dkey">6</div>
+                <div class="dkey">7</div><div class="dkey">8</div><div class="dkey">9</div>
+                <div class="dkey">*</div><div class="dkey">0</div><div class="dkey">#</div>
+              </div>
+              <div class="drec"><span style="color:var(--ok)">↗</span><span class="dn">96170010600</span><span class="tag ok">Answered</span><span class="dt">17:06</span></div>
+              <div class="drec"><span style="color:var(--bad)">↗</span><span class="dn">35796109901</span><span class="tag bad">Cancelled</span><span class="dt">10:47</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="hint">Docks to a screen corner. Global hotkey summons it.
+          Operators keep their switch dashboards; the phone takes 64px until a
+          call needs attention, then grows.</div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="label"><b>C · DUO</b><i>the instrument — test gear, not an app</i></div>
+      <div class="frame duo">
+        <div class="lcd">
+          <div class="num">0035796109901</div>
+          <div class="l2"><span>RINGING 00:05</span><span>TELES UK · C207</span><span>G729</span></div>
+        </div>
+        <div class="leds">
+          <span class="led"><i class="on"></i>REG</span>
+          <span class="led"><i class="warn"></i>CALL</span>
+          <span class="led"><i class="on"></i>FAS</span>
+          <span class="led"><i class="off"></i>REC</span>
+        </div>
+        <div class="dupad">
+          <div class="dukey"><b>1</b><s>&nbsp;</s></div>
+          <div class="dukey"><b>2</b><s>ABC</s></div>
+          <div class="dukey"><b>3</b><s>DEF</s></div>
+          <div class="dukey"><b>4</b><s>GHI</s></div>
+          <div class="dukey"><b>5</b><s>JKL</s></div>
+          <div class="dukey"><b>6</b><s>MNO</s></div>
+          <div class="dukey"><b>7</b><s>PQRS</s></div>
+          <div class="dukey"><b>8</b><s>TUV</s></div>
+          <div class="dukey"><b>9</b><s>WXYZ</s></div>
+          <div class="dukey"><b>*</b><s>&nbsp;</s></div>
+          <div class="dukey"><b>0</b><s>+</s></div>
+          <div class="dukey"><b>#</b><s>&nbsp;</s></div>
+        </div>
+        <div class="dubtns">
+          <div class="dub call">CALL</div>
+          <div class="dub end">END</div>
+        </div>
+        <div class="dusup">
+          <div class="dus sel">TELES UK</div><div class="dus">TELES NY</div>
+          <div class="dus">GEN NY</div><div class="dus">GEN UK</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

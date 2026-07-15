@@ -32,12 +32,14 @@ class Api:
 
 def main() -> None:
     api = Api()
-    page = Path(__file__).parent / "webui" / "index.html"
+    import sys
+    name = sys.argv[1] if len(sys.argv) > 1 else "index"
+    page = Path(__file__).parent / "webui" / f"{name}.html"
     window = webview.create_window(
         "NOC_Beam",
         url=page.as_uri(),
-        width=420,
-        height=760,
+        width={'console': 980, 'concepts': 1260}.get(name, 420),
+        height={'console': 680, 'concepts': 820}.get(name, 760),
         frameless=True,
         easy_drag=False,   # drag comes from the .pywebview-drag-region class
         js_api=api,
