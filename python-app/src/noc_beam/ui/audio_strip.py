@@ -47,7 +47,14 @@ from PySide6.QtWidgets import (
 from noc_beam.ui.rail_icons import rail_icon
 
 
-def _icon(name: str, color: str = "#57606A", px: int = 18) -> QIcon:
+# Neutral mid-grey glyph colour. Baked into the SVG (icons aren't
+# re-rendered on theme switch), so it's chosen to read on both the light
+# card (#FFFFFF) and the dark card (#2A3346), matching the in-call
+# controls and the bottom-tab icons.
+_AUDIO_ICON = "#8A93A5"
+
+
+def _icon(name: str, color: str = _AUDIO_ICON, px: int = 18) -> QIcon:
     """Reuse the rail-icon SVG renderer for the audio strip glyphs."""
     return rail_icon(name, color=color, px=px)
 

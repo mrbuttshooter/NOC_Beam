@@ -2655,6 +2655,215 @@ QListWidget#CodecDnDList::item:selected {
 
 /* ===== SECTION: CALLS ===== */
 
+/* ------------------------------------------------------------------
+   In-call HERO card (call_widget.py). When a call exists this is the
+   dominant element on the Dial page: a rounded card with a big mono
+   number, a "via <account> · <supplier>" line, a status chip + a
+   distinct ring/talk timer, labeled controls, and a red filled hang-up.
+   Appended after the base CallCard block so these win by later-declaration.
+   ------------------------------------------------------------------ */
+QFrame#CallCard {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E7EE;
+    border-radius: 8px;
+}
+/* An incoming call wants attention -> warn-tinted border (not a red wash). */
+QFrame#CallCard[state="incoming"] {
+    background-color: #FFFFFF;
+    border: 1px solid #B07811;
+}
+QFrame#CallCard[state="active"] {
+    border: 1px solid #E5E7EE;
+}
+
+/* Avatar is 32px in the hero -> 16px radius. State bg tints inherited. */
+QLabel#CallAvatar {
+    border-radius: 16px;
+    font-size: 15px;
+}
+
+/* Big mono headline number (rule 3: phone numbers -> mono). */
+QLabel#CallPeer {
+    color: #20232E;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+/* "via <account> · <supplier>" context line (sans -- it's labels). */
+QLabel#CallContext {
+    color: #6A6A75;
+    font-size: 12px;
+    font-weight: 500;
+}
+QLabel#CallPeerSub {
+    color: #9AA0B0;
+    font-size: 11px;
+    font-weight: 400;
+}
+
+/* Status chip: pill (rule 4). Colour levels come from the base
+   CallStatePill[level="..."] rules; enlarge slightly for the hero. */
+QLabel#CallStatePill {
+    border-radius: 10px;
+    padding: 3px 12px;
+    font-size: 11px;
+}
+
+/* Ring-time vs talk-time made distinct: caption tag + timer colour.
+   RING = amber (warn), TALK = green (ok). */
+QLabel#CallTimerCaption {
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #9AA0B0;
+}
+QLabel#CallTimerCaption[phase="ring"] { color: #B07811; }
+QLabel#CallTimerCaption[phase="talk"] { color: #2BA36B; }
+QLabel#CallTimerCaption[phase="hold"] { color: #B07811; }
+QLabel#CallDuration {
+    color: #20232E;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+QLabel#CallDuration[phase="ring"] { color: #B07811; }
+QLabel#CallDuration[phase="talk"] { color: #2BA36B; }
+QLabel#CallDuration[phase="hold"] { color: #B07811; }
+
+/* Labeled controls (Mute / Hold / Transfer): icon + text under, quiet
+   ghost by default, danger tint when Mute is engaged (checked). */
+QToolButton#CallCtrlBtn {
+    background-color: #FFFFFF;
+    color: #6A6A75;
+    border: 1px solid #D5D9E4;
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 11px;
+    font-weight: 600;
+}
+QToolButton#CallCtrlBtn:hover {
+    background-color: #E9EBF2;
+    border-color: #9AA0B0;
+    color: #20232E;
+}
+QToolButton#CallCtrlBtn:pressed { background-color: #E5E7EE; }
+QToolButton#CallCtrlBtn:checked {
+    background-color: #F9E5E6;
+    border-color: #D84B50;
+    color: #A33A3E;
+}
+QToolButton#CallCtrlBtn:disabled {
+    background-color: #FFFFFF;
+    border-color: #E5E7EE;
+    color: #D5D9E4;
+}
+
+/* Red filled hang-up -- the dominant end action. */
+QPushButton#CallHangupBtn {
+    background-color: #D84B50;
+    color: #FFFFFF;
+    border: 1px solid #D84B50;
+    border-radius: 8px;
+    padding: 0 18px;
+    font-size: 14px;
+    font-weight: 700;
+}
+QPushButton#CallHangupBtn:hover { background-color: #A33A3E; border-color: #A33A3E; }
+QPushButton#CallHangupBtn:pressed { background-color: #A33A3E; border-color: #A33A3E; }
+QPushButton#CallHangupBtn:disabled {
+    background-color: #E9EBF2; color: #D5D9E4; border-color: #E5E7EE;
+}
+
+/* Incoming: Answer = indigo primary; Reject = red filled (decline,
+   mirrors the sanctioned red hang-up). */
+QPushButton#CallAnswerBtn {
+    background-color: #5B6EE0;
+    color: #FFFFFF;
+    border: 1px solid #5B6EE0;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+}
+QPushButton#CallAnswerBtn:hover { background-color: #6C7EE8; border-color: #6C7EE8; }
+QPushButton#CallAnswerBtn:pressed { background-color: #4A5BC9; border-color: #4A5BC9; }
+QPushButton#CallRejectBtn {
+    background-color: #D84B50;
+    color: #FFFFFF;
+    border: 1px solid #D84B50;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+}
+QPushButton#CallRejectBtn:hover { background-color: #A33A3E; border-color: #A33A3E; }
+QPushButton#CallRejectBtn:pressed { background-color: #A33A3E; border-color: #A33A3E; }
+
+/* ------------------------------------------------------------------
+   Calm list rows (history_view.py). The whole row redials; the per-row
+   phone control is now a quiet GHOST icon shown only on hover as the
+   click target (was a filled circle repeated down every row).
+   ------------------------------------------------------------------ */
+QToolButton#HistoryRowCall {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 4px;
+    min-width: 26px;
+    min-height: 26px;
+}
+QToolButton#HistoryRowCall:hover {
+    background-color: #EEF0FC;
+    border-color: #5B6EE0;
+}
+QToolButton#HistoryRowCall:disabled {
+    background-color: transparent;
+    border-color: transparent;
+}
+
+/* Bulk-select toggle: accent tint when active. */
+QToolButton#HistoryIconBtn:checked {
+    background-color: #EEF0FC;
+    border-color: #5B6EE0;
+    color: #4A5BC9;
+}
+
+/* Per-row selection checkbox -- only shown in bulk-select mode. */
+QCheckBox#HistoryRowSelect {
+    background-color: transparent;
+    spacing: 0;
+}
+
+/* ------------------------------------------------------------------
+   CDR detail dialog (cdr_detail_dialog.py) -- textual (non-mono) field
+   values, e.g. the Account NAME (rule 3: only numbers/URIs/codes/times
+   are mono).
+   ------------------------------------------------------------------ */
+QLabel#CdrDetailValueText {
+    color: #20232E;
+    font-size: 12px;
+}
+
+/* ------------------------------------------------------------------
+   Active-calls list (call_list_widget.py).
+   ------------------------------------------------------------------ */
+QListWidget#CallList {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E7EE;
+    border-radius: 8px;
+    padding: 2px;
+}
+QListWidget#CallList::item {
+    padding: 6px 8px;
+    border-radius: 6px;
+}
+QListWidget#CallList::item:selected {
+    background-color: #EEF0FC;
+    color: #20232E;
+}
+
+
 /* ===== SECTION: AUX-WINDOWS ===== */
 
 /* ------------------------------------------------------------------

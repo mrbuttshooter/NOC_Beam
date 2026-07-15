@@ -15,7 +15,7 @@ import csv
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -67,11 +67,12 @@ def _show_export_toast(parent: QWidget, path: Path, count: int, failed: bool = F
     toast.setAlignment(Qt.AlignmentFlag.AlignCenter)
     toast.setWordWrap(True)
     toast.setCursor(Qt.CursorShape.PointingHandCursor)
-    # Inline style so the toast looks reasonable in either theme even
-    # if global QSS hasn't been updated for #ExportToast yet.
+    # Inline style (palette hexes) -- a dark floating toast that reads on
+    # both themes. Inline styles bypass the light->dark QSS substitution,
+    # so this deliberately uses the dark-chrome surface for both modes.
     toast.setStyleSheet(
-        "background-color: rgba(20,28,40,0.95); color: #E5F4FB; "
-        "border: 1px solid #2E4259; border-radius: 8px; padding: 12px 18px; "
+        "background-color: #1B2130; color: #E3E9F2; "
+        "border: 1px solid #3B4557; border-radius: 8px; padding: 12px 18px; "
         "font-size: 12px; font-weight: 500;"
     )
     # Size + position: bottom-centre of parent, fixed width.
@@ -296,20 +297,25 @@ def _arrow(entry: CdrEntry) -> tuple[str, str]:
     """Return (icon_name, hex_color) for the per-row direction marker.
 
     iOS-style convention: keep the direction arrow even on failed/missed
-    so the user still sees in/out at a glance — color carries the
-    success signal (green ok, red bad). Missed-incoming gets the
-    dedicated `call-missed` icon (phone + X) because that's the most
-    semantically loaded state and deserves a distinct glyph.
+    so the user still sees in/out at a glance — color carries the status
+    signal (palette status fg: ok green, danger red, warn amber).
+    Missed-incoming gets the dedicated `call-missed` icon (phone + X)
+    because that's the most semantically loaded state.
     """
-    OK = "#2EBD5C"       # answered
-    BAD = "#D33841"      # failed / missed
+    # Palette status foregrounds (design_tokens). These are baked into the
+    # icon pixmap; the saturated status hues read on both light + dark.
+    from noc_beam.ui.design_tokens import (
+        STATUS_OK_LIGHT as OK,
+        STATUS_DANGER_LIGHT as DANGER,
+        STATUS_WARN_LIGHT as WARN,
+    )
     if entry.direction == "in":
         if entry.was_answered:
             return ("call-incoming", OK)
-        return ("call-missed", BAD)
+        return ("call-missed", DANGER)     # missed incoming
     if entry.was_answered:
         return ("call-outgoing", OK)
-    return ("call-outgoing", BAD)
+    return ("call-outgoing", WARN)         # failed outgoing
 
 
 def _result_class(entry: CdrEntry) -> str:
@@ -323,10 +329,13 @@ def _result_class(entry: CdrEntry) -> str:
 class HistoryRow(QFrame):
     """One CDR row.
 
-    - Double-click redials the peer (Bria parity -- the user explicitly
-      asked for this).
-    - The (i) button opens CdrDetailDialog.
-    - The phone button redials.
+    The WHOLE ROW is the redial affordance: double-click OR Enter redials
+    the peer, and a quiet ghost phone icon appears at the row end on hover
+    as an explicit click target (no more per-row filled circle button).
+
+    - The (i) button opens CdrDetailDialog (quiet, hover-emphasised).
+    - The selection checkbox is hidden unless the parent view is in
+      bulk-select mode (set_select_mode).
     - Right-click opens context menu (Redial / Detail / Copy URI / Delete).
     """
 
@@ -342,6 +351,9 @@ class HistoryRow(QFrame):
         self.setObjectName("HistoryRow")
         self.setProperty("result", _result_class(entry))
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Row is keyboard-focusable so Enter can redial it (whole-row
+        # affordance parity with double-click).
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         # Required so QSS background-color paints the full row
         # (including the layout's contents-margin area). Without
         # WA_StyledBackground, QFrame's stylesheet bg only paints
@@ -349,13 +361,15 @@ class HistoryRow(QFrame):
         # parent's bg through the hover.
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
-        # Selection checkbox: lets the user pick N rows for the bulk
-        # CSV export. When 0 are checked the export button falls back
-        # to "all currently visible" (= what passes the filter chips).
+        # Selection checkbox: lets the user pick N rows for the bulk CSV
+        # export. Hidden by default -- only shown when the parent view
+        # enters bulk-select mode via the toolbar toggle. When 0 are
+        # checked the export falls back to "all currently visible".
         self._select_cb = QCheckBox(self)
         self._select_cb.setObjectName("HistoryRowSelect")
         self._select_cb.setToolTip("Select for CSV export")
         self._select_cb.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._select_cb.setVisible(False)
 
         from noc_beam.ui.rail_icons import rail_icon as _rail_icon
         icon_name, icon_color = _arrow(entry)
@@ -421,15 +435,24 @@ class HistoryRow(QFrame):
         self._info_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._info_btn.clicked.connect(lambda: self.activated.emit(self._index))
 
+        # Redial affordance: the whole row redials (double-click / Enter).
+        # This ghost phone icon is a quiet, explicit click target that only
+        # appears on hover -- replaces the old filled circle button that
+        # repeated down every row. Kept as #HistoryRowCall so the object
+        # name / signal wiring is stable, but styled ghost.
+        from noc_beam.ui.rail_icons import rail_icon as _rail_icon2
         self._call_btn = QToolButton(self)
         self._call_btn.setObjectName("HistoryRowCall")
-        self._call_btn.setText("\U0001F4DE")
+        self._call_btn.setIcon(_rail_icon2("call-outgoing", color="#8A93A5", px=16))
+        self._call_btn.setIconSize(QSize(16, 16))
         self._call_btn.setToolTip(
             f"Call {redial_target}" if redial_target else "No peer URI to call back"
         )
         self._call_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._call_btn.setEnabled(bool(redial_target))
         self._call_btn.clicked.connect(self._emit_redial)
+        # Hidden until hover (the row itself is the primary affordance).
+        self._call_btn.setVisible(False)
 
         code = entry.end_code if entry.end_code else (200 if entry.was_answered else None)
         badge = SipCodeBadge(code, entry.end_reason, self)
@@ -459,6 +482,33 @@ class HistoryRow(QFrame):
     def is_checked(self) -> bool:
         """Whether this row's selection checkbox is ticked."""
         return self._select_cb.isChecked()
+
+    def set_select_mode(self, on: bool) -> None:
+        """Show/hide the bulk-select checkbox. When leaving select mode the
+        row's tick is cleared so a stale selection can't leak into the next
+        export."""
+        self._select_cb.setVisible(bool(on))
+        if not on:
+            self._select_cb.setChecked(False)
+
+    def enterEvent(self, event) -> None:  # noqa: N802, ANN001
+        # Reveal the quiet ghost redial icon while hovering (only when it
+        # actually has a target to dial).
+        if self._call_btn.isEnabled():
+            self._call_btn.setVisible(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802, ANN001
+        self._call_btn.setVisible(False)
+        super().leaveEvent(event)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802, ANN001
+        # Enter / Return on a focused row redials it (whole-row affordance).
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self._emit_redial()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802, ANN001
         # Bria parity: double-click redials. Don't redial if the click
@@ -551,6 +601,18 @@ class HistoryView(QWidget):
         self._range_filter.addItem("Last 30 days", "month")
         self._range_filter.currentIndexChanged.connect(self._refresh_rows)
 
+        # Bulk-select mode toggle. Off by default -> row checkboxes stay
+        # hidden and the list reads calm. Toggling it on reveals the
+        # per-row checkboxes so the operator can pick a subset to export.
+        self._select_mode = False
+        self._bulk_btn = QToolButton()
+        self._bulk_btn.setObjectName("HistoryIconBtn")
+        self._bulk_btn.setText("☑")
+        self._bulk_btn.setCheckable(True)
+        self._bulk_btn.setToolTip("Select rows for export")
+        self._bulk_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._bulk_btn.toggled.connect(self._on_toggle_select_mode)
+
         self._reload_btn = QToolButton()
         self._reload_btn.setObjectName("HistoryIconBtn")
         self._reload_btn.setText("⟳")
@@ -582,6 +644,7 @@ class HistoryView(QWidget):
         controls.addWidget(self._dir_filter)
         controls.addWidget(self._range_filter)
         controls.addStretch(1)
+        controls.addWidget(self._bulk_btn)
         controls.addWidget(self._reload_btn)
         controls.addWidget(self._export_btn)
         controls.addWidget(self._clear_btn)
@@ -686,9 +749,15 @@ class HistoryView(QWidget):
             row.redial.connect(self.redial_requested.emit)
             row.delete_requested.connect(self._on_delete_one)
             row.copy_requested.connect(self._on_copy_uri)
+            row.set_select_mode(self._select_mode)
             self._rows_layout.insertWidget(insert_at, row)
             insert_at += 1
             self._rows.append(row)
+
+    def _on_toggle_select_mode(self, on: bool) -> None:
+        self._select_mode = bool(on)
+        for row in self._rows:
+            row.set_select_mode(self._select_mode)
 
     def _matches_filters(self, entry: CdrEntry) -> bool:
         # Search filter (peer URI substring, case-insensitive).

@@ -126,20 +126,23 @@ class CdrDetailDialog(QDialog):
             account_label = "—"
         account_tooltip = raw_account_id or ""
 
-        for label, value, tooltip in (
-            ("Call ID", str(entry.call_id), ""),
-            ("Account",  account_label, account_tooltip),
-            ("Supplier", _supplier_display(entry), ""),
-            ("Wire target", entry.peer_uri or "—", ""),
-            ("Started",  _fmt_ts(entry.started_at), ""),
-            ("Connected", _fmt_ts(entry.connected_at) if entry.connected_at else "—", ""),
-            ("Ended",    _fmt_ts(entry.ended_at), ""),
-            ("Duration", _fmt_duration(entry.duration_s), ""),
-            ("End code", f"{entry.end_code} {entry.end_reason}".strip() or "—", ""),
-            ("Codec",    entry.codec or "—", ""),
+        # `mono` marks fields that are numbers / URIs / codes / timestamps
+        # (rule 3 -> monospace). The Account field is a human name, so it
+        # renders in the sans "CdrDetailValueText" role instead.
+        for label, value, tooltip, mono in (
+            ("Call ID", str(entry.call_id), "", True),
+            ("Account",  account_label, account_tooltip, False),
+            ("Supplier", _supplier_display(entry), "", True),
+            ("Wire target", entry.peer_uri or "—", "", True),
+            ("Started",  _fmt_ts(entry.started_at), "", True),
+            ("Connected", _fmt_ts(entry.connected_at) if entry.connected_at else "—", "", True),
+            ("Ended",    _fmt_ts(entry.ended_at), "", True),
+            ("Duration", _fmt_duration(entry.duration_s), "", True),
+            ("End code", f"{entry.end_code} {entry.end_reason}".strip() or "—", "", True),
+            ("Codec",    entry.codec or "—", "", True),
         ):
             v = QLabel(value)
-            v.setObjectName("CdrDetailValue")
+            v.setObjectName("CdrDetailValue" if mono else "CdrDetailValueText")
             v.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             v.setWordWrap(True)
             if tooltip:
@@ -185,7 +188,10 @@ class CdrDetailDialog(QDialog):
         self.redial_btn.setEnabled(bool(_redial_target(entry)))
         self.redial_btn.clicked.connect(self._on_redial)
 
+        # Redial is the single indigo primary in this dialog; Export is a
+        # quiet secondary (outline/ghost) per the design system.
         self.export_btn = QPushButton("Export CSV…")
+        self.export_btn.setObjectName("SecondaryAction")
         self.export_btn.clicked.connect(self._on_export)
 
         actions = QHBoxLayout()
