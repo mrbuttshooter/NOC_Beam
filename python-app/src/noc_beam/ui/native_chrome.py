@@ -78,6 +78,45 @@ def apply_dark_title_bar(widget: QWidget, enabled: bool) -> bool:
         return False
 
 
+def apply_rounded_corners(widget: QWidget) -> bool:
+    """Ask DWM for Windows 11 rounded corners on `widget`'s native window.
+
+    Frameless windows lose the OS frame's rounding and shadow; setting
+    ``DWMWA_WINDOW_CORNER_PREFERENCE`` (33) to ``DWMWCP_ROUND`` (2)
+    restores both on Win11. On Win10 the attribute is rejected -> the
+    window stays square, which is the correct platform look there.
+    Never raises; returns True only if DWM accepted.
+    """
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        import ctypes.wintypes
+
+        hwnd = int(widget.winId())
+        if not hwnd:
+            return False
+        dwmapi = ctypes.WinDLL("dwmapi")
+        _DWMWA_WINDOW_CORNER_PREFERENCE = 33
+        _DWMWCP_ROUND = 2
+        pref = ctypes.wintypes.DWORD(_DWMWCP_ROUND)
+        hr = dwmapi.DwmSetWindowAttribute(
+            ctypes.wintypes.HWND(hwnd),
+            ctypes.wintypes.DWORD(_DWMWA_WINDOW_CORNER_PREFERENCE),
+            ctypes.byref(pref),
+            ctypes.sizeof(pref),
+        )
+        if hr != 0:
+            log.debug(
+                "DWM rejected corner preference for hwnd=%#x (hr=%#010x) "
+                "-- pre-Win11 build, staying square", hwnd, hr & 0xFFFFFFFF,
+            )
+        return hr == 0
+    except Exception:
+        log.exception("apply_rounded_corners failed")
+        return False
+
+
 class DarkTitleBarFilter(QObject):
     """QApplication event filter that darkens native chrome on every window.
 

@@ -158,6 +158,35 @@ class _CallStripRow(QFrame):
         super().mousePressEvent(ev)
 
 
+class _ChromeRow(QFrame):
+    """Frameless-window chrome row: the drag surface replacing the OS
+    caption. A left-press on empty chrome starts a native system move
+    (keeps Aero Snap); double-click toggles maximize. Child buttons
+    consume their own mouse events, so these handlers only fire on true
+    chrome area."""
+
+    def __init__(self, shell: "PhoneShell") -> None:
+        super().__init__(shell)
+        self.setObjectName("ChromeRow")
+        self._shell = shell
+
+    def mousePressEvent(self, ev) -> None:  # noqa: N802, ANN001
+        if ev.button() == Qt.MouseButton.LeftButton:
+            handle = self.window().windowHandle()
+            if handle is not None:
+                handle.startSystemMove()
+                ev.accept()
+                return
+        super().mousePressEvent(ev)
+
+    def mouseDoubleClickEvent(self, ev) -> None:  # noqa: N802, ANN001
+        if ev.button() == Qt.MouseButton.LeftButton:
+            self._shell._toggle_max_restore()
+            ev.accept()
+            return
+        super().mouseDoubleClickEvent(ev)
+
+
 class PhoneShell(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -206,6 +235,18 @@ class PhoneShell(QMainWindow):
         self._pending_fas_media: dict[int, str] = {}
         self._always_on_top = False
         self._always_on_top_action = None
+
+        # Visual 2.0: the main window owns its chrome. Frameless + our own
+        # chrome row (drag/dblclick handled by _ChromeRow, edge resize by
+        # nativeEvent WM_NCHITTEST, rounded corners by DWM in showEvent).
+        # WindowMinMaxButtonsHint keeps taskbar minimize/restore and
+        # Win+Up/Down working without an OS caption.
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowMinMaxButtonsHint
+        )
+        self._dwm_polished = False
 
         self._build_menu()
         self._build_ui()
@@ -385,7 +426,7 @@ class PhoneShell(QMainWindow):
         # ---- Account pill: status dot + name, still a dropdown. Anchor of
         # the compact status strip that replaces the old six-row header.
         self.account_chip = QToolButton(top); self.account_chip.setObjectName("AccountChip")
-        self.account_chip.setText("No account  ▾")
+        self._set_account_chip_text("No account  ▾")
         self.account_chip.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.account_chip.setMenu(QMenu(self.account_chip))
         self.account_chip.setAccessibleName("Active SIP account")
@@ -430,16 +471,56 @@ class PhoneShell(QMainWindow):
         audio_menu.addAction(_audio_action)
         self.audio_popover_btn.setMenu(audio_menu)
 
-        # ---- Strip row 1 (always visible): account pill takes the width,
-        # warning badge + audio popover + menu sit at the trailing edge.
-        strip_row = QHBoxLayout()
-        strip_row.setContentsMargins(0, 2, 0, 0)
-        strip_row.setSpacing(8)
-        strip_row.addWidget(self.account_chip, 1)
-        strip_row.addWidget(self.warn_badge)
-        strip_row.addWidget(self.audio_popover_btn)
-        strip_row.addWidget(self.menu_btn)
-        top_l.addLayout(strip_row)
+        # ---- Chrome row (Visual 2.0): with the OS title bar gone, this
+        # single edge-to-edge band IS the app chrome — glyph + wordmark,
+        # account pill, warning badge, audio popover, hamburger, then
+        # ghost min/max/close. It is also the window drag surface (see
+        # _ChromeRow). Added to the CENTRAL layout in _build_ui's assembly
+        # step, not to `top`, so the band spans the full window width.
+        self.chrome_row = _ChromeRow(self)
+        self.chrome_row.setFixedHeight(40)
+        chrome_l = QHBoxLayout(self.chrome_row)
+        chrome_l.setContentsMargins(12, 0, 6, 0)
+        chrome_l.setSpacing(10)
+
+        glyph = QLabel(self.chrome_row)
+        glyph.setObjectName("ChromeGlyph")
+        try:
+            from PySide6.QtWidgets import QApplication as _QApp
+            icon = _QApp.windowIcon()
+            if not icon.isNull():
+                glyph.setPixmap(icon.pixmap(18, 18))
+        except Exception:
+            pass
+        wordmark = QLabel("NOC_Beam", self.chrome_row)
+        wordmark.setObjectName("ChromeWordmark")
+
+        chrome_l.addWidget(glyph)
+        chrome_l.addWidget(wordmark)
+        chrome_l.addStretch(1)
+        chrome_l.addWidget(self.account_chip)
+        chrome_l.addWidget(self.warn_badge)
+        chrome_l.addWidget(self.audio_popover_btn)
+        chrome_l.addWidget(self.menu_btn)
+
+        def _win_btn(name: str, text: str, tip: str, slot) -> QToolButton:
+            b = QToolButton(self.chrome_row)
+            b.setObjectName(name)
+            b.setText(text)
+            b.setToolTip(tip)
+            b.setAccessibleName(tip)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.clicked.connect(slot)
+            return b
+
+        self.win_min_btn = _win_btn("WinBtn", "–", "Minimize", self.showMinimized)
+        self.win_max_btn = _win_btn("WinBtn", "▢", "Maximize or restore",
+                                    self._toggle_max_restore)
+        self.win_close_btn = _win_btn("WinBtnClose", "✕", "Close", self.close)
+        chrome_l.addSpacing(4)
+        chrome_l.addWidget(self.win_min_btn)
+        chrome_l.addWidget(self.win_max_btn)
+        chrome_l.addWidget(self.win_close_btn)
 
         # SUPPLIER picker -- shown only when active account has
         # switch_type in {teles, genband}. The custom picker filters
@@ -776,6 +857,7 @@ class PhoneShell(QMainWindow):
         # central widget paints opaquely.
         central.setAutoFillBackground(True)
         cl = QVBoxLayout(central); cl.setContentsMargins(0, 0, 0, 0); cl.setSpacing(0)
+        cl.addWidget(self.chrome_row)
         cl.addWidget(top); cl.addWidget(self.stack, 1); cl.addWidget(self.bottom_tabs)
         self.setCentralWidget(central)
 
@@ -843,6 +925,92 @@ class PhoneShell(QMainWindow):
             )
         except Exception:
             log.exception("Post-startup supplier re-fire failed")
+
+    def _set_account_chip_text(self, text: str) -> None:
+        """Set the account pill label with a width pinned to the text.
+
+        QSS padding on QToolButton is not reflected in its sizeHint, so at
+        natural layout size (chrome row, no stretch) the label elides to
+        "...". Pin a minimum width from font metrics + chip padding.
+        """
+        self.account_chip.setText(text)
+        try:
+            fm = self.account_chip.fontMetrics()
+            self.account_chip.setMinimumWidth(fm.horizontalAdvance(text) + 28)
+            self.account_chip.setMaximumWidth(fm.horizontalAdvance(text) + 32)
+        except Exception:
+            pass
+
+    def _toggle_max_restore(self) -> None:
+        """Maximize <-> restore, driven by the chrome max button and a
+        double-click on the chrome row (the frameless stand-ins for the
+        OS caption behaviors)."""
+        try:
+            if self.isMaximized():
+                self.showNormal()
+                self.win_max_btn.setText("▢")
+            else:
+                self.showMaximized()
+                self.win_max_btn.setText("❐")
+        except Exception:
+            log.exception("max/restore toggle failed")
+
+    def showEvent(self, event) -> None:  # noqa: N802, ANN001
+        super().showEvent(event)
+        # One-shot DWM polish for the frameless window: Win11 rounded
+        # corners (which also restores the standard window shadow).
+        # Harmless no-op on Win10 / non-Windows.
+        if not getattr(self, "_dwm_polished", False):
+            self._dwm_polished = True
+            try:
+                from noc_beam.ui.native_chrome import apply_rounded_corners
+
+                apply_rounded_corners(self)
+            except Exception:
+                log.debug("rounded-corner polish failed", exc_info=True)
+
+    # Hit-test codes for the frameless resize band (WinUser.h).
+    _HT_EDGES = {
+        (True, False, True, False): 13,   # top-left      HTTOPLEFT
+        (False, True, True, False): 14,   # top-right     HTTOPRIGHT
+        (True, False, False, True): 16,   # bottom-left   HTBOTTOMLEFT
+        (False, True, False, True): 17,   # bottom-right  HTBOTTOMRIGHT
+        (True, False, False, False): 10,  # left          HTLEFT
+        (False, True, False, False): 11,  # right         HTRIGHT
+        (False, False, True, False): 12,  # top           HTTOP
+        (False, False, False, True): 15,  # bottom        HTBOTTOM
+    }
+
+    def nativeEvent(self, event_type, message):  # noqa: N802, ANN001
+        """Frameless window: hand a 6px edge band back to Windows as
+        native resize handles (WM_NCHITTEST), so edge-resize cursors,
+        drag-resize, and Aero Snap all keep working without an OS frame.
+        Everything else stays HTCLIENT via the default path."""
+        try:
+            if event_type == b"windows_generic_MSG" and not self.isMaximized():
+                import ctypes
+                import ctypes.wintypes
+
+                msg = ctypes.wintypes.MSG.from_address(int(message))
+                if msg.message == 0x0084:  # WM_NCHITTEST
+                    # QCursor.pos() is DPI-correct logical coords -- avoids
+                    # hand-converting the physical lParam point on mixed-DPI
+                    # multi-monitor setups.
+                    from PySide6.QtGui import QCursor
+
+                    pos = self.mapFromGlobal(QCursor.pos())
+                    m = 6
+                    left = pos.x() <= m
+                    right = pos.x() >= self.width() - m
+                    top = pos.y() <= m
+                    bottom = pos.y() >= self.height() - m
+                    if left or right or top or bottom:
+                        code = self._HT_EDGES.get((left, right, top, bottom))
+                        if code:
+                            return True, code
+        except Exception:
+            log.debug("nativeEvent hit-test failed", exc_info=True)
+        return super().nativeEvent(event_type, message)
 
     def _switch_tab(self, index: int) -> None:
         """Tab switch with a Visual 2.0 crossfade. The switch itself happens
@@ -1065,7 +1233,7 @@ class PhoneShell(QMainWindow):
             menu.addSeparator()
             menu.addAction("Add account...", self._on_add_account)
             self._active_account_id = ""
-            self.account_chip.setText("○  No account  ▾")
+            self._set_account_chip_text("○  No account  ▾")
             self.account_chip.setProperty("health", "muted")
             self.account_chip.style().unpolish(self.account_chip)
             self.account_chip.style().polish(self.account_chip)
@@ -1116,7 +1284,7 @@ class PhoneShell(QMainWindow):
         else:
             dot = "○"
             health = "muted"
-        self.account_chip.setText(f"{dot}  {label}  ▾")
+        self._set_account_chip_text(f"{dot}  {label}  ▾")
         self.account_chip.setProperty("health", health)
         self.account_chip.style().unpolish(self.account_chip)
         self.account_chip.style().polish(self.account_chip)

@@ -2792,6 +2792,36 @@ QWidget#DialPad QPushButton#DialPadButton:pressed {
     border-color: #5B6EE0;
 }
 
+/* Chrome row: the frameless window's own title band. Chrome-tinted so it
+   reads as chrome (maps to #1B2130 in dark), hairline separation below. */
+QFrame#ChromeRow {
+    background-color: #F7F8FB;
+    border-bottom: 1px solid #E5E7EE;
+}
+QLabel#ChromeWordmark {
+    font-size: 13px;
+    font-weight: 600;
+    color: #20232E;
+    background: transparent;
+}
+QToolButton#WinBtn, QToolButton#WinBtnClose {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 2px 10px;
+    min-height: 24px;
+    font-size: 13px;
+    color: #6A6A75;
+}
+QToolButton#WinBtn:hover {
+    background-color: #E9EBF2;
+    color: #20232E;
+}
+QToolButton#WinBtnClose:hover {
+    background-color: #D84B50;
+    color: #FFFFFF;
+}
+
 /* ===== SECTION: CALLS ===== */
 
 /* ------------------------------------------------------------------
