@@ -61,9 +61,9 @@ class _KeyButton(QPushButton):
             self.setAccessibleDescription(f"Dialpad key {digit}")
 
     def sizeHint(self) -> QSize:  # noqa: N802
-        # Compact mode: keypad is mostly here for in-call DTMF -- the
-        # primary dial path is keyboard typing into the dial input above.
-        return QSize(40, 32)
+        # Visual 2.0: keys are proper tiles (brief: 52-56px tall) so the
+        # keypad reads as the primary instrument, not an afterthought.
+        return QSize(56, 52)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         # Let the style draw bg + border + hover state via QSS.
@@ -84,27 +84,26 @@ class _KeyButton(QPushButton):
 
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        # Big digit
+        # Big digit -- Visual 2.0 type scale: dialpad digit 20px, centered.
         digit_font = QFont(self.font())
-        digit_font.setPointSize(15)
-        digit_font.setWeight(QFont.Weight.Normal)
+        digit_font.setPixelSize(20)
+        digit_font.setWeight(QFont.Weight.Medium)
         painter.setFont(digit_font)
-        digit_rect = self.rect().adjusted(0, 1, 0, -10 if self._caption else 0)
+        digit_rect = self.rect().adjusted(0, 2, 0, -14 if self._caption else 0)
         painter.drawText(
             digit_rect,
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
             self._digit,
         )
-        # Caption (small caps under) — make it visibly subordinate to
-        # the digit so the keypad doesn't read like equal-weight data.
+        # Caption: 10px muted, letterspaced, visibly subordinate.
         if self._caption:
             cap_font = QFont(self.font())
-            cap_font.setPointSize(6)
+            cap_font.setPixelSize(10)
             cap_font.setWeight(QFont.Weight.DemiBold)
             painter.setPen(self.palette().mid().color())
             cap_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 110)
             painter.setFont(cap_font)
-            cap_rect = self.rect().adjusted(0, 0, 0, -2)
+            cap_rect = self.rect().adjusted(0, 0, 0, -7)
             painter.drawText(
                 cap_rect,
                 Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
@@ -135,11 +134,13 @@ class DialPad(QWidget):
         self.entry.returnPressed.connect(self._on_call)
 
         grid = QGridLayout()
-        grid.setSpacing(3)
+        # Visual 2.0: the grid breathes -- 8px gaps, equal margins.
+        grid.setSpacing(8)
+        grid.setContentsMargins(0, 0, 0, 0)
         for i, (key, sub) in enumerate(_KEYS):
             btn = _KeyButton(key, sub, self)
-            btn.setMinimumSize(40, 40)
-            btn.setMaximumHeight(48)
+            btn.setMinimumSize(48, 52)
+            btn.setMaximumHeight(56)
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             # A11y: screen-readers announced "key 1, key 2..." with no
             # context; now each gets "Dial 1", "Dial 2", etc. The 12
@@ -167,6 +168,10 @@ class DialPad(QWidget):
         actions.addWidget(self.hangup_btn)
 
         layout = QVBoxLayout(self)
+        # Zero side margins so the tile grid shares left/right edges with
+        # the dial field + recents (the hosting page owns the 12px gutters).
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(8)
         layout.addWidget(self.entry)
         layout.addLayout(grid)
         layout.addLayout(actions)

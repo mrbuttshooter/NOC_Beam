@@ -3063,3 +3063,198 @@ QLabel#FasResultsEmpty {
     font-size: 12px;
     padding: 10px 24px;
 }
+
+
+/* ===== SECTION: VISUAL-2.0 ===== */
+/* Modernization layer (typography scale + composition + frameless chrome).
+   Appended LAST so these rules win by declaration order. Palette hexes
+   only; #F7F8FB is the dedicated chrome tint (dark: #1B2130 via map). */
+
+/* --- Type base: Segoe UI Variable with graceful fallbacks. ------------- */
+QWidget {
+    font-family: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI",
+                 "Inter", sans-serif;
+    font-size: 13px;
+}
+
+/* --- Frameless chrome bar (custom integrated title bar). --------------- */
+QFrame#ChromeBar {
+    background-color: #F7F8FB;
+    border: none;
+    border-bottom: 1px solid #E5E7EE;
+}
+QLabel#ChromeGlyph { background: transparent; padding: 0; }
+QLabel#ChromeWordmark {
+    background: transparent;
+    color: #20232E;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+QToolButton#WinBtn, QToolButton#WinBtnClose {
+    background: transparent;
+    color: #6A6A75;
+    border: none;
+    border-radius: 6px;
+    min-width: 32px;
+    max-width: 32px;
+    min-height: 26px;
+    font-size: 13px;
+    padding: 0;
+}
+QToolButton#WinBtn:hover { background-color: #E9EBF2; color: #20232E; }
+QToolButton#WinBtn:pressed { background-color: #E5E7EE; }
+QToolButton#WinBtnClose:hover { background-color: #D84B50; color: #FFFFFF; }
+QToolButton#WinBtnClose:pressed { background-color: #A33A3E; color: #FFFFFF; }
+
+/* Chrome-hosted pills inherit the chrome tint, not the card tint. */
+QFrame#ChromeBar QToolButton#AccountChip { background-color: #F7F8FB; }
+QFrame#ChromeBar QToolButton#AccountChip:hover { background-color: #E9EBF2; }
+
+/* Bottom nav joins the chrome family (mockup: chrome vs canvas split). */
+QFrame#BottomTabs {
+    background-color: #F7F8FB;
+    border: none;
+    border-top: 1px solid #E5E7EE;
+}
+QToolButton#TabBtn {
+    background: transparent;
+    color: #9AA0B0;
+    border: none;
+    border-top: 2px solid transparent;
+    padding: 5px 0 4px 0;
+    min-height: 38px;
+    min-width: 56px;
+    font-size: 11px;
+    font-weight: 500;
+}
+QToolButton#TabBtn:checked {
+    background: transparent;
+    border-top-color: transparent; /* animated TabIndicator owns the line */
+    color: #5B6EE0;
+    font-weight: 600;
+}
+QToolButton#TabBtn:hover { color: #6A6A75; background-color: #E9EBF2; }
+QFrame#TabIndicator {
+    background-color: #5B6EE0;
+    border: none;
+    border-radius: 1px;
+}
+
+/* --- Top strip becomes quiet canvas (chrome moved to ChromeBar). ------- */
+QFrame#TopStrip {
+    background-color: #F2F3F7;
+    border: none;
+}
+
+/* --- Supplier: label-inside-field, chevron inside, full width. --------- */
+QFrame#SupplierField {
+    background-color: #FFFFFF;
+    border: 1px solid #D5D9E4;
+    border-radius: 8px;
+    min-height: 34px;
+}
+QFrame#SupplierField QLabel#AccountKicker {
+    background: transparent;
+    color: #9AA0B0;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0 2px 0 10px;
+}
+QFrame#SupplierField QLineEdit#SupplierDropdownLine {
+    background: transparent;
+    border: none;
+    font-size: 13px;
+    min-height: 30px;
+    padding: 0 4px;
+}
+QFrame#SupplierField QToolButton#SupplierDropdownButton {
+    border: none;
+    background: transparent;
+    margin-right: 2px;
+}
+QFrame#SupplierField QToolButton#SupplierDropdownButton:hover {
+    background-color: #E9EBF2;
+}
+
+/* --- Inline banner: ONE line, 32px, quiet chip strip. ------------------ */
+QFrame#InlineBanner {
+    background-color: #F2F3F7;
+    border: none;
+    border-radius: 8px;
+    margin: 0;
+    min-height: 32px;
+    max-height: 32px;
+}
+QFrame#InlineBanner QLabel#StatusBanner {
+    padding: 0;
+    font-size: 12px;
+    qproperty-alignment: AlignLeft;
+}
+QPushButton#BannerAction {
+    padding: 2px 12px;
+    min-height: 20px;
+    max-height: 22px;
+    font-size: 11px;
+}
+
+/* --- Dial input: 20px mono, proper field. ------------------------------ */
+QLineEdit#DialInput {
+    background-color: #FFFFFF;
+    color: #20232E;
+    border: 1px solid #D5D9E4;
+    border-radius: 8px;
+    padding: 0 12px;
+    font-family: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+    font-size: 20px;
+    min-height: 42px;
+    max-height: 46px;
+}
+QLineEdit#DialInput:focus { border-color: #5B6EE0; }
+QPushButton#CallButton {
+    min-height: 42px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 0 24px;
+}
+
+/* --- Dialpad keys as proper tiles. -------------------------------------- */
+QWidget#DialPad QPushButton#DialPadButton {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E7EE;
+    border-radius: 10px;
+    min-height: 52px;
+    max-height: 56px;
+}
+QWidget#DialPad QPushButton#DialPadButton:hover {
+    background-color: #E9EBF2;
+    border-color: #D5D9E4;
+}
+QWidget#DialPad QPushButton#DialPadButton:pressed {
+    background-color: #EEF0FC;
+    border-color: #5B6EE0;
+}
+
+/* --- Recent Calls: kicker header + calm 40px rows. ---------------------- */
+QFrame#RecentsStrip { border-top: none; }
+QLabel#RecentsHeader {
+    color: #6A6A75;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    padding: 8px 0 2px 0;
+}
+QToolButton#RecentsViewAll {
+    color: #5B6EE0;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 2px 2px 6px;
+}
+QToolButton#RecentsViewAll:hover { color: #6C7EE8; text-decoration: underline; }
+QLabel#RecentsPeer  { font-size: 13px; }
+QLabel#RecentsTime  { font-size: 11px; color: #9AA0B0; }
+QLabel#RecentsChip  { font-size: 10px; border-radius: 9px; padding: 2px 9px; }
+QFrame#RecentsRow   { border-bottom: 1px solid #E5E7EE; }
+QFrame#RecentsRow:hover { background-color: #E9EBF2; border-radius: 8px; }
+QLabel#RecentsVoidGlyph { background: transparent; }

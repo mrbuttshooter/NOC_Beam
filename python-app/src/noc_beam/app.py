@@ -154,6 +154,24 @@ def run(argv: list[str]) -> int:
     app = QApplication(argv)
     app.setWindowIcon(_load_icon())
 
+    # Application typeface: Segoe UI Variable (OS-provided on Win11) with
+    # graceful fallbacks. Set on the QApplication so native-styled widgets
+    # (menus, tooltips, popups) pick it up too; the QSS base rule repeats
+    # the family list for stylesheet-driven widgets. Nothing is bundled --
+    # on Win10 this silently resolves to plain Segoe UI.
+    try:
+        from PySide6.QtGui import QFont
+
+        _app_font = QFont()
+        _app_font.setFamilies([
+            "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI",
+            "Inter", "sans-serif",
+        ])
+        _app_font.setPointSizeF(9.75)  # ~13px @ 96 DPI, matches the QSS base
+        app.setFont(_app_font)
+    except Exception:
+        log.exception("Could not set application font; using Qt default")
+
     # Orphan-window detector. Logs one WARNING line per unique top-
     # level QWidget shown during the session so we can identify any
     # stray window that surfaces as its own NOC_Beam taskbar entry:

@@ -349,7 +349,8 @@ class PhoneShell(QMainWindow):
         # should be in the menu bar. Fix: parent at construction time.
         top = QFrame(self); top.setObjectName("TopStrip")
         top_l = QVBoxLayout(top)
-        top_l.setContentsMargins(10, 6, 10, 4); top_l.setSpacing(2)
+        # Visual 2.0 grid: 12px outer gutters, 8px vertical rhythm.
+        top_l.setContentsMargins(12, 8, 12, 8); top_l.setSpacing(8)
 
         # The old brand row (app icon + "NOC_Beam" wordmark) duplicated the
         # OS/window-title identity and cost a whole header row. Removed. The
@@ -445,7 +446,10 @@ class PhoneShell(QMainWindow):
         # while typing without changing the active supplier until the
         # user explicitly commits.
         from noc_beam.ui.supplier_dropdown import SupplierDropdown
-        supp_row = QHBoxLayout(); supp_row.setContentsMargins(0, 2, 0, 0); supp_row.setSpacing(8)
+        # Visual 2.0: label-INSIDE-field pattern -- the whole supplier row is
+        # one bordered field ("Supplier" as a muted prefix inside it, chevron
+        # inside too), full-width, sharing edges with the content grid.
+        supp_row = QHBoxLayout(); supp_row.setContentsMargins(0, 0, 2, 0); supp_row.setSpacing(2)
         self.supplier_kicker = QLabel("Supplier", top)
         self.supplier_kicker.setObjectName("AccountKicker")
         self.supplier_combo = SupplierDropdown(top)
@@ -473,9 +477,11 @@ class PhoneShell(QMainWindow):
             pass
         supp_row.addWidget(self.supplier_kicker)
         supp_row.addWidget(self.supplier_combo, 1)
-        # Wrap in a QWidget so we can hide the whole row including the label.
-        from PySide6.QtWidgets import QWidget as _QWidget
-        self.supplier_row_widget = _QWidget(top)
+        # The wrapper IS the field: a styled QFrame carrying the border +
+        # radius; the line edit + chevron inside it render borderless.
+        self.supplier_row_widget = QFrame(top)
+        self.supplier_row_widget.setObjectName("SupplierField")
+        self.supplier_row_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.supplier_row_widget.setLayout(supp_row)
         self.supplier_row_widget.setVisible(False)
         top_l.addWidget(self.supplier_row_widget)
@@ -511,14 +517,17 @@ class PhoneShell(QMainWindow):
         self.banner = QFrame(top)
         self.banner.setObjectName("InlineBanner")
         self.banner.setProperty("level", "muted")
+        # Visual 2.0: ONE line, 32px tall. The message elides (see
+        # _set_status); the full technical detail rides in the tooltip.
+        self.banner.setFixedHeight(32)
         banner_l = QHBoxLayout(self.banner)
-        banner_l.setContentsMargins(12, 6, 8, 6)
+        banner_l.setContentsMargins(12, 0, 6, 0)
         banner_l.setSpacing(8)
         self.status_banner = QLabel("Starting...", self.banner)
         self.status_banner.setObjectName("StatusBanner")
         self.status_banner.setAccessibleName("Registration and call status")
         self.status_banner.setProperty("level", "muted")
-        self.status_banner.setWordWrap(True)
+        self.status_banner.setWordWrap(False)
         self.banner_btn = QPushButton("", self.banner)
         self.banner_btn.setObjectName("BannerAction")
         self.banner_btn.setAccessibleName("SIP status action")
@@ -543,15 +552,19 @@ class PhoneShell(QMainWindow):
         self.dialpad.call_btn.setVisible(False)
         self.dialpad.hangup_btn.setVisible(False)
         dialpad_page = QWidget(self)
-        dpl = QVBoxLayout(dialpad_page); dpl.setContentsMargins(4, 2, 4, 2); dpl.setSpacing(2)
+        # Visual 2.0 grid: 12px outer gutters, 8px rhythm between blocks so
+        # dial field / keypad / recents share left-right edges exactly.
+        dpl = QVBoxLayout(dialpad_page); dpl.setContentsMargins(12, 4, 12, 4); dpl.setSpacing(8)
 
         # Dial field + Call button live INSIDE the Dial tab only (not above
         # Contacts/Favorites/History, where they used to sit in the header).
         dial_row = QHBoxLayout()
-        dial_row.setContentsMargins(0, 2, 0, 2)
+        dial_row.setContentsMargins(0, 0, 0, 0)
         dial_row.setSpacing(8)
         self.dial_input = QLineEdit(dialpad_page); self.dial_input.setObjectName("DialInput")
-        self.dial_input.setPlaceholderText("Enter number or SIP URI")
+        # Short placeholder: the field renders 20px mono (Visual 2.0 type
+        # scale) so the old long hint clipped mid-word at 420px width.
+        self.dial_input.setPlaceholderText("Number or SIP URI")
         self.dial_input.setAccessibleName("Dial target")
         self.dial_input.setAccessibleDescription("Enter a phone number or SIP URI. Ctrl+K focuses this field.")
         self.dial_input.returnPressed.connect(self._on_dial_input_enter)
@@ -837,7 +850,24 @@ class PhoneShell(QMainWindow):
         # state is scannable at a glance instead of relying on text colour
         # alone (which a stressed user can miss).
         dot = {"ok": "●", "warn": "●", "danger": "●", "muted": "○"}.get(level, "○")
-        self.status_banner.setText(f"{dot}  {text}")
+        full = f"{dot}  {text}"
+        # One-line banner (Visual 2.0): elide the message to the label's
+        # current width; the tooltip carries the full technical detail.
+        # Skip eliding when the label has no real width yet (offscreen
+        # construction / before first layout) so tests and early callers
+        # always see the complete text.
+        shown = full
+        try:
+            w = self.status_banner.width()
+            if w > 120:
+                from PySide6.QtCore import Qt as _Qt
+                shown = self.status_banner.fontMetrics().elidedText(
+                    full, _Qt.TextElideMode.ElideRight, w - 4
+                )
+        except Exception:
+            shown = full
+        self.status_banner.setText(shown)
+        self.status_banner.setToolTip(text)
         self.status_banner.setProperty("level", level)
         self.status_banner.style().unpolish(self.status_banner)
         self.status_banner.style().polish(self.status_banner)

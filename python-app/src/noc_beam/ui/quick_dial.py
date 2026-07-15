@@ -113,6 +113,26 @@ def _fmt_time(ts: float) -> str:
     return time.strftime("%H:%M:%S", time.localtime(ts))
 
 
+def _void_pixmap(px: int = 46, opacity: float = 0.16):
+    """Large muted glyph for the empty area below the recents rows.
+
+    Baked at low opacity so it reads as texture, not content, in both
+    themes (the mid-grey #9AA0B0 sits between the two palettes)."""
+    from PySide6.QtGui import QPainter, QPixmap
+
+    from noc_beam.ui.rail_icons import rail_icon
+
+    src = rail_icon("calls", color="#9AA0B0", px=px).pixmap(px, px)
+    out = QPixmap(src.size())
+    out.setDevicePixelRatio(src.devicePixelRatio())
+    out.fill(Qt.GlobalColor.transparent)
+    p = QPainter(out)
+    p.setOpacity(opacity)
+    p.drawPixmap(0, 0, src)
+    p.end()
+    return out
+
+
 # --- data --------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -149,7 +169,8 @@ class RecentsRow(QFrame):
         # Keyboard-focusable so Enter can redial the row (whole-row affordance).
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setFixedHeight(38)
+        # Visual 2.0: calm 40px rows (brief: rows 40px, mono number 13px).
+        self.setFixedHeight(40)
         # See DenseListRow / HistoryRow notes: QFrame's QSS background
         # only paints the full widget rect when WA_StyledBackground is
         # set; otherwise the hover bg only paints an inner rectangle,
@@ -275,13 +296,25 @@ class QuickDialStrip(QFrame):
         self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_label.setVisible(False)
 
+        # Void glyph: when the recents list is short, the leftover space
+        # below must not look dead (brief §4) -- a subtle centered muted
+        # glyph fills it. Rendered at low opacity from the same icon set.
+        self._void_glyph = QLabel(self)
+        self._void_glyph.setObjectName("RecentsVoidGlyph")
+        self._void_glyph.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._void_glyph.setPixmap(_void_pixmap())
+
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(8, 6, 8, 4)
+        # Sides at 0: the hosting Dial page owns the 12px outer gutters, so
+        # rows/header share left-right edges with the dial field + keypad.
+        outer.setContentsMargins(0, 2, 0, 4)
         outer.setSpacing(2)
         outer.addLayout(header_row)
         outer.addLayout(self._rows_layout)
         outer.addWidget(self._empty_label)
         outer.addStretch(1)
+        outer.addWidget(self._void_glyph)
+        outer.addStretch(2)
 
         self._rows: list[RecentsRow] = []
         self.reload()
@@ -297,10 +330,14 @@ class QuickDialStrip(QFrame):
         if not targets:
             self._view_all.setVisible(False)
             self._empty_label.setVisible(True)
+            self._void_glyph.setVisible(True)
             return
 
         self._view_all.setVisible(True)
         self._empty_label.setVisible(False)
+        # Fill the leftover vertical space with the muted glyph only while
+        # the list is short; a full list wants the rows to own the column.
+        self._void_glyph.setVisible(len(targets) < self.MAX_ROWS)
         for target in targets:
             row = RecentsRow(target, self)
             row.activated.connect(self.call_requested.emit)

@@ -46,6 +46,11 @@ LIGHT_TO_DARK: dict[str, str] = {
     "#FFFFFF": "#2A3346",  # card/input surface (on-accent TEXT restored below)
     "#F2F3F7": "#232936",  # window / page background
     "#E9EBF2": "#323D54",  # hover surface
+    "#F7F8FB": "#1B2130",  # window CHROME (custom title bar + bottom nav).
+                           #   Visual 2.0: the mockup separates chrome
+                           #   (#1B2130) from canvas (#232936); light gets a
+                           #   near-white tint so the same QSS rule serves
+                           #   both themes.
 
     # ===== Borders =====
     "#E5E7EE": "#323A4A",  # default / subtle border, list dividers
@@ -193,6 +198,12 @@ QToolButton#RecentsCallBtn,
 QPushButton#EndCallButton,
 QPushButton#HangupButton,
 QPushButton#RejectButton {
+    color: #FFFFFF;
+}
+
+/* Frameless chrome: the close button's hover state is a danger FILL, so
+   its glyph must stay white in dark mode too. */
+QToolButton#WinBtnClose:hover {
     color: #FFFFFF;
 }
 """
