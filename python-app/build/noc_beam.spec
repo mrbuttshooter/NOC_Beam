@@ -141,6 +141,34 @@ a = Analysis(
     noarchive=False,
 )
 
+# ---------------------------------------------------------------------------
+# Dist diet (webui phase 2):
+#   1. QtWebEngine ships 53 locale .paks (~37 MB); the app UI is English-only,
+#      so keep en-US.pak and drop the other 52.
+#   2. The web softphone embeds QtWebEngine via WIDGETS (QWebEngineView) only;
+#      the QtWebEngineQuick QML layer is never imported. Drop its DLLs, the
+#      PySide6 QtWebEngineQuick pyd, and the qml/QtWebEngine* plugin tree.
+#      NOTE: Qt6Quick / Qt6QuickWidgets / Qt6Qml must STAY -- Qt6's
+#      QWebEngineView composites through Quick internally.
+def _keep_dist_entry(entry):
+    dest = entry[0].replace("\\", "/").lower()
+    if "qtwebengine_locales" in dest and not dest.endswith("en-us.pak"):
+        return False
+    name = dest.rsplit("/", 1)[-1]
+    if name.startswith((
+        "qt6webenginequick",      # Qt6WebEngineQuick.dll / ...DelegatesQml.dll
+        "qtwebenginequick",       # PySide6 QtWebEngineQuick.pyd/.pyi
+        "qt6webchannelquick",     # QML-side webchannel (widgets path unused)
+    )):
+        return False
+    if "/qml/qtwebengine" in dest:
+        return False
+    return True
+
+
+a.datas = [e for e in a.datas if _keep_dist_entry(e)]
+a.binaries = [e for e in a.binaries if _keep_dist_entry(e)]
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 # --onedir build: EXE bundles only the launcher; binaries/datas go in
