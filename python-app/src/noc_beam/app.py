@@ -376,6 +376,20 @@ def run(argv: list[str]) -> int:
     # start_minimized launches into the tray (or minimized to taskbar
     # if no tray) instead of popping a foreground window. Was
     # display-only at the checkbox layer until this hook.
+    # Release-smoke hook: NOC_BEAM_SMOKE_DIAL=<target> places one real call
+    # through the normal bridge path ~8s after startup. Exists so packaged
+    # builds can be verified end-to-end (engine + bridge + UI) on machines
+    # where driving the GUI programmatically isn't possible. Env-gated,
+    # inert in normal operation.
+    _smoke_target = os.environ.get("NOC_BEAM_SMOKE_DIAL", "").strip()
+    if _smoke_target:
+        from PySide6.QtCore import QTimer
+
+        log.warning("SMOKE DIAL armed: %r in 8s (NOC_BEAM_SMOKE_DIAL)", _smoke_target)
+        QTimer.singleShot(
+            8000, lambda t=_smoke_target: window._bridge.place_call(t)
+        )
+
     # Tray lives on the PhoneShell host; visibility is on the WebShell.
     _start_cfg = getattr(settings, "startup", None)
     if _start_cfg is not None and getattr(_start_cfg, "start_minimized", False):
