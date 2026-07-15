@@ -105,6 +105,32 @@ inside it). The single-instance activation callback raises WebShell.
 - Commit in coherent `webui(port): ...` chunks + Co-Authored-By Claude Fable
   line. Never push.
 
+## Status — phase 3 complete (2026-07-16)
+
+The port shipped. What exists on `redesign/web-softphone`:
+
+- **Phase 1** (`3ffed9c`..`cba7041`): WebShell (QWebEngineView+QWebChannel,
+  frameless 360x560) is THE app window; PhoneShell runs hidden as the logic
+  host; bridge + serializers headless-tested; tray/single-instance repointed.
+- **Phase 2** (`4a8cbc3`..`a486702`): owner P0s — multi-call card stack with
+  per-call controls + compact per-call DTMF pads (main pad hides at 2+ calls),
+  scrollable/keyboard-navigable dropdown menus, ~31px keypad; History /
+  Contacts / Favorites live as in-app web tabs (Qt windows remain as manage /
+  bulk escape hatches); dist diet: en-US locale only + WebEngineQuick dropped.
+- **Phase 3** (`0f1ba63`..): Qt aux windows clamped DARK beside the dark web
+  shell (stylesheet + DWM title bars); connected-call E2E verified over a real
+  loopback SIP call (incoming card, answer, talk timer, mute, hold, DTMF, end,
+  CDRs); QA sweep incl. fresh-profile empty states, quit/tray/activation
+  paths; extra QML/Quick payload trim (dist ~732 MiB); env-gated
+  `NOC_BEAM_SMOKE_DIAL` release-smoke hook; frozen build verified rendering
+  AND placing a real call. Test suite: 461 passing (+1 pre-existing
+  fas_live_demo failure).
+
+Known debt (accepted): CallSession extraction (retire the hidden PhoneShell
+host) stays deferred to phase 4; incoming-leg CONFIRMED transition can't
+complete on the loopback rig (ACK routes to the trunk's static-NAT contact) —
+verified to the extent the network allows.
+
 ## THE LOOP (mandatory)
 
 After every batch: kill big pythons
