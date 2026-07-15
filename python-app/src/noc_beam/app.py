@@ -89,22 +89,34 @@ def _acquire_single_instance_or_exit(argv: list[str]) -> int | None:
     if err != _ERROR_ALREADY_EXISTS:
         return None
 
-    # Another instance is already running. Show a friendly dialog and
-    # bail with exit code 0 (this is the expected user-facing outcome,
-    # not a failure).
-    log.warning("NOC_Beam is already running; aborting second instance")
+    # Another instance is already running. The owner double-clicked the
+    # shortcut expecting their window to come forward -- so instead of the
+    # old "already running, check your tray" QMessageBox (which scolded the
+    # user for the app's own choice to live in the tray), poke the first
+    # instance over the activation socket so IT raises its window, then exit
+    # 0 SILENTLY. Never surface UI from a second instance.
+    log.info("NOC_Beam already running; signalling first instance to activate")
     try:
-        from PySide6.QtWidgets import QApplication, QMessageBox
-        _msg_app = QApplication.instance() or QApplication(argv)
-        QMessageBox.information(
-            None,
-            __app_name__,
-            "NOC_Beam is already running. Check your system tray.",
-        )
+        # QLocalSocket needs an event dispatcher for its blocking waitFor*
+        # calls, so a QCoreApplication must exist. We deliberately use the
+        # lightweight QCoreApplication (not QApplication) -- this process is
+        # about to exit and never builds a GUI. QApplication.instance()
+        # returns None here because the mutex check runs before run() builds
+        # the real QApplication.
+        from PySide6.QtCore import QCoreApplication
+
+        from noc_beam.single_instance import signal_existing_instance
+
+        _ = QCoreApplication.instance() or QCoreApplication(argv)
+        if not signal_existing_instance():
+            # First instance hung or is still starting up. Nothing more we can
+            # safely do -- exit cleanly and silently. The warning is logged
+            # inside signal_existing_instance().
+            log.warning("Could not signal first instance; exiting second instance silently")
     except Exception:
-        # If even the message box fails (no display, etc.), the log line
-        # above is our breadcrumb. Still exit cleanly.
-        log.exception("Failed to show already-running message box")
+        # If even the IPC bootstrap fails (no Qt, etc.), the log lines above
+        # are our breadcrumb. Still exit cleanly with no dialog.
+        log.exception("Failed to signal first instance; exiting second instance silently")
     return 0
 
 
@@ -234,11 +246,11 @@ def run(argv: list[str]) -> int:
     # Load persisted settings to pick the theme. PhoneShell loads them
     # again itself; this is the small price of theme being a process-
     # wide concern (QApplication.setStyleSheet) while the rest of
-    # settings live on the window. Default theme is "light" (the
-    # Bria-evolution direction); dark / dark-hc remain available for
-    # users who prefer the original NOC dashboard look.
+    # settings live on the window. Default theme is "dark" (the redesign
+    # default the dataclass now ships); light / dark-hc remain available
+    # for users who prefer them.
     settings = load_settings()
-    theme = getattr(settings.appearance, "theme", "light")
+    theme = getattr(settings.appearance, "theme", "dark")
     apply_theme(app, settings.appearance.high_contrast, theme=theme)
 
     # FAS detection engine. The audio tap is wired per-call in
@@ -255,6 +267,41 @@ def run(argv: list[str]) -> int:
         log.exception("FAS engine failed to start; continuing without FAS detection")
 
     window = PhoneShell()
+
+    # Activation IPC for later launches. The Win32 mutex above already
+    # refused the second instance; this server is how that refused instance
+    # tells US (the first instance) to come to the front. Started only after
+    # the window exists so the callback always has something to raise. The
+    # QLocalServer delivers newConnection on this (GUI) thread, so the
+    # callback -- which touches Qt widgets -- runs safely on the GUI thread.
+    def _activate_main_window() -> None:
+        try:
+            # Reuse the exact tray-restore path so a window that was
+            # minimized-to-tray (hidden) actually reappears, not just an
+            # already-visible one. _restore_from_tray does
+            # showNormal()+raise_()+activateWindow(); fall back to the same
+            # calls directly if the method is ever renamed.
+            restore = getattr(window, "_restore_from_tray", None)
+            if callable(restore):
+                restore()
+            else:
+                window.showNormal()
+                window.raise_()
+                window.activateWindow()
+        except Exception:
+            log.exception("Failed to activate main window on second-launch signal")
+
+    try:
+        from noc_beam.single_instance import ActivationServer
+
+        # Kept on the app object so it lives for the process lifetime and is
+        # torn down with the QApplication rather than garbage-collected early.
+        app._activation_server = ActivationServer(_activate_main_window, parent=app)
+    except Exception:
+        # Activation is a convenience; if it can't start, the app still runs
+        # (a second launch just won't raise us). Never fatal.
+        log.exception("Could not start activation server; second launches won't raise the window")
+
     # Honour StartupSettings persisted from Settings -> General.
     # start_minimized launches into the tray (or minimized to taskbar
     # if no tray) instead of popping a foreground window. Was
