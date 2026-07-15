@@ -191,8 +191,9 @@ class PhoneShell(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(__app_name__)
-        self.resize(420, 740)
-        self.setMinimumWidth(380)
+        # Owner feedback (NOC_BEAM_TEST round 2): compact default footprint.
+        self.resize(384, 640)
+        self.setMinimumWidth(360)
 
         self.settings = load_settings()
         self.accounts = load_accounts()
@@ -494,6 +495,10 @@ class PhoneShell(QMainWindow):
             pass
         wordmark = QLabel("NOC_Beam", self.chrome_row)
         wordmark.setObjectName("ChromeWordmark")
+        # Responsive chrome: below ~430px the full wordmark doesn't fit next
+        # to the pill + controls, and Qt squeezes it into "NOC_Be". Keep the
+        # glyph as the compact identity and hide the text (resizeEvent).
+        self._chrome_wordmark = wordmark
 
         chrome_l.addWidget(glyph)
         chrome_l.addWidget(wordmark)
@@ -984,6 +989,15 @@ class PhoneShell(QMainWindow):
         except Exception:
             log.exception("max/restore toggle failed")
 
+    def resizeEvent(self, event) -> None:  # noqa: N802, ANN001
+        super().resizeEvent(event)
+        # Responsive chrome row: glyph-only identity below 430px so the
+        # account pill and window controls never squeeze the wordmark
+        # into an elided "NOC_Be".
+        wm = getattr(self, "_chrome_wordmark", None)
+        if wm is not None:
+            wm.setVisible(self.width() >= 430)
+
     def showEvent(self, event) -> None:  # noqa: N802, ANN001
         super().showEvent(event)
         # One-shot DWM polish for the frameless window: Win11 rounded
@@ -1221,7 +1235,11 @@ class PhoneShell(QMainWindow):
         return out
 
     def _update_warn_badge(self) -> None:
-        """Show the strip's warning badge only when accounts are degraded."""
+        """Owner decision (NOC_BEAM_TEST round 2): no warning badge in the
+        chrome, ever. Registration health is carried solely by the account
+        pill's dot color (red on failure) and the Accounts window. The badge
+        still gets its text/tooltip maintained so flipping the decision back
+        is a one-line change — but it never becomes visible."""
         badge = getattr(self, "warn_badge", None)
         if badge is None:
             return
@@ -1233,9 +1251,7 @@ class PhoneShell(QMainWindow):
             badge.setToolTip(
                 f"{n} account(s) degraded ({labels}) — click to retry registration"
             )
-            badge.setVisible(True)
-        else:
-            badge.setVisible(False)
+        badge.setVisible(False)
 
     def _refresh_accounts(self):
         self.accounts_view.populate(self.accounts)
@@ -3739,6 +3755,30 @@ class PhoneShell(QMainWindow):
             self._on_hangup_requested()
             event.accept()
             return
+        # Type-to-dial (owner request, round 2): on the Dial tab, dial
+        # characters land in the number field even when it isn't focused.
+        # Focused editables never lose keys to this: a QLineEdit/QComboBox
+        # (supplier picker, search boxes) consumes its own printable keys,
+        # so those events never bubble up to the window in the first place.
+        try:
+            if self.stack.currentIndex() == int(Tab.DIALPAD) and not (
+                event.modifiers()
+                & (Qt.KeyboardModifier.ControlModifier
+                   | Qt.KeyboardModifier.AltModifier)
+            ):
+                txt = event.text()
+                if key == Qt.Key.Key_Backspace:
+                    self.dial_input.setFocus(Qt.FocusReason.OtherFocusReason)
+                    self.dial_input.backspace()
+                    event.accept()
+                    return
+                if txt and (txt.isdigit() or txt in "*#+"):
+                    self.dial_input.setFocus(Qt.FocusReason.OtherFocusReason)
+                    self.dial_input.insert(txt)
+                    event.accept()
+                    return
+        except Exception:
+            log.debug("type-to-dial routing failed", exc_info=True)
         super().keyPressEvent(event)
 
     def _restore_from_tray(self):

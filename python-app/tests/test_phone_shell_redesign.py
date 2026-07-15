@@ -30,7 +30,9 @@ def test_phone_shell_uses_operator_width_and_critical_regions(
     qt_app.processEvents()
 
     try:
-        assert shell.minimumWidth() >= 380
+        # 360 floor per owner feedback round 2 (compact default footprint);
+        # was 380 in the original operator-width contract.
+        assert shell.minimumWidth() >= 360
         assert shell.findChild(type(shell.account_chip), "AccountChip") is not None
         assert shell.findChild(type(shell.status_banner), "StatusBanner") is not None
         assert shell.findChild(type(shell.bottom_tabs), "BottomTabs") is not None
