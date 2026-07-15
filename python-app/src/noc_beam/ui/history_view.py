@@ -403,6 +403,10 @@ class HistoryRow(QFrame):
         peer_lbl.setToolTip(tooltip)
         peer_lbl.setSizePolicy(_SP.Policy.Ignored, _SP.Policy.Preferred)
 
+        # Meta line carries date/time · supplier · duration ONLY. The
+        # status ("Busy" / "Cancelled" / ...) lives solely in the
+        # SipCodeBadge chip on the right -- one status carrier per row
+        # (brief rule 3); repeating it here read as noise.
         when = _fmt_when(entry.ended_at or entry.started_at)
         dur = _fmt_duration(entry.duration_s)
         bits = [when]
@@ -410,14 +414,6 @@ class HistoryRow(QFrame):
             bits.append(supplier_text)
         if dur:
             bits.append(dur)
-        if entry.end_code and not entry.was_answered:
-            # Operator preference: human label only ("Busy" /
-            # "Cancelled" / "Declined") -- the raw code stays in the
-            # SipCodeBadge tooltip on the same row.
-            from noc_beam.ui.components import sip_label as _sip_label
-            label = _sip_label(entry.end_code) or entry.end_reason
-            if label:
-                bits.append(label)
         meta_lbl = QLabel(" · ".join(b for b in bits if b))
         meta_lbl.setObjectName("HistoryRowMeta")
         meta_lbl.setSizePolicy(_SP.Policy.Ignored, _SP.Policy.Preferred)
@@ -601,6 +597,15 @@ class HistoryView(QWidget):
         self._range_filter.addItem("Last 30 days", "month")
         self._range_filter.currentIndexChanged.connect(self._refresh_rows)
 
+        # Let both combos shrink below their longest item at narrow window
+        # widths (the app's default is ~436px) instead of forcing the
+        # toolbar wider and clipping the buttons at the right edge.
+        for combo in (self._dir_filter, self._range_filter):
+            combo.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+            )
+            combo.setMinimumContentsLength(8)
+
         # Bulk-select mode toggle. Off by default -> row checkboxes stay
         # hidden and the list reads calm. Toggling it on reveals the
         # per-row checkboxes so the operator can pick a subset to export.
@@ -618,15 +623,19 @@ class HistoryView(QWidget):
         self._reload_btn.setText("⟳")
         self._reload_btn.setToolTip("Reload from disk")
         self._reload_btn.clicked.connect(self.reload)
-        # Export selected (or all visible if nothing checked) to a CSV
-        # named noc_beam_history_YYYYMMDD_HHMM.csv in ~/Desktop. No
-        # save-as dialog, no success popup -- just write the file and
-        # surface the path via the status line in the log.
-        self._export_btn = QPushButton("Export CSV")
-        self._export_btn.setObjectName("HistoryExportBtn")
+        # Export selected (or all visible if nothing checked) to a CSV.
+        # Icon-only quiet button (same treatment as reload): the text
+        # label "Export CSV" was truncating to "xport CS" at the app's
+        # default ~436px width, and operators use export rarely enough
+        # that a tooltip carries the label fine.
+        self._export_btn = QToolButton()
+        self._export_btn.setObjectName("HistoryIconBtn")
+        self._export_btn.setText("⤓")
+        self._export_btn.setAccessibleName("Export CSV")
+        self._export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._export_btn.setToolTip(
-            "Export checked rows to CSV. If nothing is checked, exports all "
-            "currently-visible (filtered) rows."
+            "Export CSV — checked rows, or all currently-visible "
+            "(filtered) rows when nothing is checked."
         )
         self._export_btn.clicked.connect(self._on_export)
         self._clear_btn = QPushButton("Clear")
