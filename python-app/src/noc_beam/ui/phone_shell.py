@@ -621,6 +621,13 @@ class PhoneShell(QMainWindow):
         banner_l.addWidget(self.status_banner, 1)
         banner_l.addWidget(self.banner_btn, 0, Qt.AlignmentFlag.AlignVCenter)
         top_l.addWidget(self.banner)
+        # Owner decision (NOC_BEAM_TEST feedback): no status/error strip in
+        # the UI at all. The banner machinery stays fully wired -- tests and
+        # every _set_status caller keep working, the text still lands in
+        # logs/tooltips -- but the widget itself never shows. Degraded
+        # accounts surface through the chrome row's warning badge instead.
+        self.banner.setVisible(False)
+        self._banner_suppressed = True
 
         self.dialpad = DialPad(self)
         self.dialpad.call_requested.connect(self._on_call_requested)
@@ -772,7 +779,18 @@ class PhoneShell(QMainWindow):
         dpl.addWidget(self.calls_strip)
         dpl.addWidget(self.call_widget)
         dpl.addWidget(self.first_run_hero)
-        dpl.addWidget(self.dialpad)
+        # Cap + center the keypad block: on wide windows the grid used to
+        # stretch edge-to-edge, ballooning the keys/input out of scale with
+        # the rest of the UI (owner feedback on the first test build).
+        # Stretch-wrapped (not alignment-pinned) so it still fills narrow
+        # windows edge-to-edge and only stops growing at 460px.
+        self.dialpad.setMaximumWidth(460)
+        _dp_row = QHBoxLayout()
+        _dp_row.setContentsMargins(0, 0, 0, 0)
+        _dp_row.addStretch(1)
+        _dp_row.addWidget(self.dialpad, 100)
+        _dp_row.addStretch(1)
+        dpl.addLayout(_dp_row)
         # Wrap recents in a QScrollArea so it's the shrink-victim when
         # the multi-call strip grows. Operator request: window stays
         # the same size, calls take space FROM the recents area
@@ -935,9 +953,20 @@ class PhoneShell(QMainWindow):
         """
         self.account_chip.setText(text)
         try:
-            fm = self.account_chip.fontMetrics()
-            self.account_chip.setMinimumWidth(fm.horizontalAdvance(text) + 28)
-            self.account_chip.setMaximumWidth(fm.horizontalAdvance(text) + 32)
+            # Measure with the font the QSS actually renders (12px DemiBold),
+            # not the widget's construction-time font -- on some DPI/font
+            # setups the regular-weight metrics under-measured and the label
+            # elided to "..." (owner bug report from the first test build).
+            from PySide6.QtGui import QFont, QFontMetrics
+
+            f = QFont(self.account_chip.font())
+            f.setPixelSize(12)
+            f.setWeight(QFont.Weight.DemiBold)
+            fm = QFontMetrics(f)
+            # 22px = QSS padding (8+12) + 1px borders; the rest is slack so
+            # we never sit exactly at the eliding threshold.
+            self.account_chip.setMinimumWidth(fm.horizontalAdvance(text) + 34)
+            self.account_chip.setMaximumWidth(16777215)
         except Exception:
             pass
 
@@ -1090,7 +1119,8 @@ class PhoneShell(QMainWindow):
             from noc_beam.ui import motion
 
             prev = getattr(self, "_last_banner_level", "muted")
-            if level in ("warn", "danger") and prev not in ("warn", "danger"):
+            if (level in ("warn", "danger") and prev not in ("warn", "danger")
+                    and not getattr(self, "_banner_suppressed", False)):
                 motion.slide_fade_in(self.banner, dy=-8)
             self._last_banner_level = level
             if "egistering" in str(text):
