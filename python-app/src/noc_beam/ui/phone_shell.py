@@ -3535,11 +3535,16 @@ class PhoneShell(QMainWindow):
 
         app = QApplication.instance()
         if app is not None:
-            theme = getattr(self.settings.appearance, "theme", "light")
+            # Web-softphone era (phase 3): the Qt layer stays DARK regardless
+            # of the persisted appearance.theme -- the visible app is the dark
+            # web shell, and a light Qt stylesheet next to it is jarring
+            # (owner bug report). The Appearance control still persists the
+            # user's choice (settings.json), but the applied Qt stylesheet is
+            # clamped to dark. Mirrors the startup clamp in app.py:run.
             apply_theme(
                 app,
                 self.settings.appearance.high_contrast,
-                theme=theme,
+                theme="dark",
             )
 
     def _on_diagnostics(self):

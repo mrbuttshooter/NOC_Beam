@@ -270,7 +270,16 @@ def run(argv: list[str]) -> int:
     # default the dataclass now ships); light / dark-hc remain available
     # for users who prefer them.
     settings = load_settings()
-    theme = getattr(settings.appearance, "theme", "dark")
+    # Web-softphone era (phase 3): the visible app surface is the dark web
+    # shell, so the Qt layer (Settings/Accounts/Trace/Test runner + every
+    # dialog the hamburger opens) applies the DARK stylesheet UNCONDITIONALLY.
+    # Honouring a persisted "light" appearance here produced glaring white Qt
+    # windows next to the dark web UI (owner bug report). The Appearance
+    # toggle remains in Settings for the hidden shell's sake, but it must
+    # never yield light Qt chrome beside the dark web shell -- see the same
+    # clamp in PhoneShell._apply_accessibility_settings for the runtime
+    # settings-apply path.
+    theme = "dark"
     apply_theme(app, settings.appearance.high_contrast, theme=theme)
 
     # Dark native title bars. QSS can't reach the native Windows chrome, so
