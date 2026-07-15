@@ -159,9 +159,25 @@ def _keep_dist_entry(entry):
         "qt6webenginequick",      # Qt6WebEngineQuick.dll / ...DelegatesQml.dll
         "qtwebenginequick",       # PySide6 QtWebEngineQuick.pyd/.pyi
         "qt6webchannelquick",     # QML-side webchannel (widgets path unused)
+        # ---- phase-3 extra diet: QML-only payload never reachable from a
+        # widgets-only QWebEngineView embed. Qt6Quick / Qt6QuickWidgets /
+        # Qt6Qml* / Qt6OpenGL* stay (QWebEngineView composites through the
+        # Quick scene graph); everything below is only loadable via QML
+        # imports, and the qml/ import tree itself is dropped wholesale.
+        "qt63dquick", "qt6quick3d", "qt6quickcontrols2",
+        "qt6quicktemplates2", "qt6quickdialogs2", "qt6quickparticles",
+        "qt6quickshapes", "qt6quicktimeline", "qt6quickeffects",
+        "qt6quicklayouts", "qt6quicktest", "qt6quickvectorimage",
+        "qt6sensorsquick", "qt6multimediaquick", "qt6pdfquick",
+        "qt6positioningquick", "qt6webviewquick",
+        "qtquick3d.", "qtquickcontrols2.", "qtquicktest.",  # PySide6 pyd/pyi
     )):
         return False
-    if "/qml/qtwebengine" in dest:
+    # Whole QML import tree: modules load only via QML `import` statements,
+    # which a widgets-only embed never issues (the WebEngine delegate builds
+    # its scene graph in C++, no QML files involved). Verified against a
+    # frozen rebuild -- the web view renders and calls place fine without it.
+    if "/pyside6/qml/" in dest or dest.startswith("pyside6/qml/"):
         return False
     return True
 
