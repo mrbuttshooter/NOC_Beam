@@ -23,6 +23,8 @@ const state = {
   accounts: { accounts: [], activeId: "", activeLabel: "No account", activeHealth: "muted" },
   suppliers: { visible: false, activeId: "", suppliers: [] },
   recents: [],
+  history: [],
+  contacts: [],
 };
 
 // ==========================================================================
@@ -169,6 +171,8 @@ function buildCard(c, multi) {
   return card;
 }
 
+let lastCallIds = "";
+
 function renderCalls(calls) {
   const box = $("calls");
   box.textContent = "";
@@ -179,6 +183,11 @@ function renderCalls(calls) {
   // to make room for the stack; each card carries its own compact pad.
   $("pad").hidden = multi;
   for (const c of calls) box.appendChild(buildCard(c, multi));
+  // A NEW call (incoming ring or fresh dial) surfaces the Dial view so the
+  // card is never hidden behind the History/Contacts tabs.
+  const ids = calls.map((c) => c.id).join(",");
+  if (calls.length && ids !== lastCallIds && activeView !== "dial") switchView("dial");
+  lastCallIds = ids;
 }
 
 // ==========================================================================
@@ -250,15 +259,17 @@ function openSupplierMenu() {
 // ==========================================================================
 // Hamburger app menu
 // ==========================================================================
+// History/Contacts/Favorites live as in-app tabs now (phase 2); the menu
+// keeps the full Qt windows as escape hatches (bulk ops / add-edit dialogs).
 const APP_MENU = [
   ["Settings", "settings"],
   ["Accounts", "accounts"],
   ["SIP trace", "trace"],
   ["Test runner", "test-runner"],
   ["sep", null],
-  ["History", "history"],
-  ["Contacts", "contacts"],
-  ["Favorites", "favorites"],
+  ["Full history", "history"],
+  ["Manage contacts", "contacts"],
+  ["Manage favorites", "favorites"],
   ["sep", null],
   ["Quit", "quit"],
 ];
@@ -375,6 +386,124 @@ function renderRecents(rows) {
 }
 
 // ==========================================================================
+// Tabbed views (phase 2): Dial / History / Contacts / Favorites
+// ==========================================================================
+const VIEWS = ["dial", "history", "contacts", "favorites"];
+let activeView = "dial";
+
+function switchView(name) {
+  if (!VIEWS.includes(name)) return;
+  activeView = name;
+  closeMenus();
+  for (const v of VIEWS) $("view-" + v).hidden = v !== name;
+  for (const t of document.querySelectorAll("#tabbar .tab")) {
+    t.classList.toggle("active", t.dataset.view === name);
+  }
+  // Fresh data on open (cheap; server caps history at 200 rows).
+  if (bridge) {
+    if (name === "history") bridge.refresh_history();
+    if (name === "contacts" || name === "favorites") bridge.refresh_contacts();
+  }
+  if (name === "history") renderHistory();
+  if (name === "contacts") renderContacts();
+  if (name === "favorites") renderFavorites();
+}
+
+// ---- History: searchable log with expandable per-row detail --------------
+let expandedHistoryKey = null;
+
+const DETAIL_LABELS = [
+  ["when", "When"], ["dialed", "Dialed"], ["peer", "Peer"],
+  ["account", "Account"], ["supplier", "Supplier"], ["codec", "Codec"],
+  ["result", "Result"], ["duration", "Duration"],
+];
+
+function buildDetail(d) {
+  const grid = el("div", "hdetail");
+  for (const [key, label] of DETAIL_LABELS) {
+    const v = (d && d[key]) || "";
+    if (!v) continue;
+    grid.appendChild(el("span", "k", label));
+    grid.appendChild(el("span", "v", v));
+  }
+  return grid;
+}
+
+function historyKey(r) { return (r.detail && r.detail.when) + "|" + r.uri; }
+
+function renderHistory() {
+  const box = $("history-list");
+  box.textContent = "";
+  const q = ($("history-search").value || "").trim().toLowerCase();
+  const rows = state.history.filter((r) =>
+    !q || r.num.toLowerCase().includes(q) || r.status.toLowerCase().includes(q));
+  if (!rows.length) {
+    box.appendChild(el("div", "empty", q ? "No matches." : "No calls yet."));
+    return;
+  }
+  for (const r of rows) {
+    const key = historyKey(r);
+    const row = el("div", "row");
+    row.appendChild(el("span", "arrow " + r.level, r.dir === "in" ? "↙" : "↗"));
+    row.appendChild(el("span", "n", r.num));
+    row.appendChild(el("span", "badge " + r.level, r.status));
+    row.appendChild(el("span", "w", r.time));
+    const redial = el("button", "redial", "📞");
+    redial.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (bridge) bridge.redial(r.uri);
+      switchView("dial");
+    });
+    row.appendChild(redial);
+    // Row click toggles the info detail (one open at a time).
+    row.addEventListener("click", () => {
+      expandedHistoryKey = expandedHistoryKey === key ? null : key;
+      renderHistory();
+    });
+    box.appendChild(row);
+    if (expandedHistoryKey === key) box.appendChild(buildDetail(r.detail));
+  }
+}
+
+// ---- Contacts / Favorites: list + search + call ---------------------------
+function buildContactRow(c) {
+  const row = el("div", "row");
+  const name = el("div", "cname");
+  name.appendChild(el("div", "nm", c.name || c.number));
+  name.appendChild(el("div", "nr", c.number));
+  row.appendChild(name);
+  if (c.favorite) row.appendChild(el("span", "star", "★"));
+  if (c.group) row.appendChild(el("span", "grp", c.group));
+  const call = el("button", "redial", "📞");
+  row.appendChild(call);
+  const dial = () => {
+    if (bridge) bridge.place_call(c.number);
+    switchView("dial");
+  };
+  call.addEventListener("click", (e) => { e.stopPropagation(); dial(); });
+  row.addEventListener("click", dial);
+  return row;
+}
+
+function renderContactList(boxId, searchId, favOnly) {
+  const box = $(boxId);
+  box.textContent = "";
+  const q = ($(searchId).value || "").trim().toLowerCase();
+  const rows = state.contacts.filter((c) =>
+    (!favOnly || c.favorite)
+    && (!q || (c.name || "").toLowerCase().includes(q) || (c.number || "").includes(q)));
+  if (!rows.length) {
+    box.appendChild(el("div", "empty",
+      q ? "No matches." : (favOnly ? "No favorites yet." : "No contacts yet.")));
+    return;
+  }
+  for (const c of rows) box.appendChild(buildContactRow(c));
+}
+
+function renderContacts() { renderContactList("contacts-list", "contacts-search", false); }
+function renderFavorites() { renderContactList("favorites-list", "favorites-search", true); }
+
+// ==========================================================================
 // State entry point (called from Python via runJavaScript)
 // ==========================================================================
 window.nb = {
@@ -384,6 +513,12 @@ window.nb = {
     if ("accounts" in patch) { state.accounts = patch.accounts; renderAccounts(state.accounts); }
     if ("suppliers" in patch) { state.suppliers = patch.suppliers; renderSuppliers(state.suppliers); }
     if ("recents" in patch) { state.recents = patch.recents; renderRecents(state.recents); }
+    if ("history" in patch) { state.history = patch.history || []; renderHistory(); }
+    if ("contacts" in patch) {
+      state.contacts = patch.contacts || [];
+      renderContacts();
+      renderFavorites();
+    }
   },
 };
 
@@ -398,7 +533,17 @@ function wireControls() {
     if (e.key === "Enter") { e.preventDefault(); placeCall(); }
   });
 
-  $("view-all").addEventListener("click", () => bridge && bridge.open_window("history"));
+  // "View all" jumps to the in-app History tab (phase 2).
+  $("view-all").addEventListener("click", () => switchView("history"));
+
+  // Tab bar + view plumbing.
+  for (const t of document.querySelectorAll("#tabbar .tab")) {
+    t.addEventListener("click", () => switchView(t.dataset.view));
+  }
+  $("history-search").addEventListener("input", renderHistory);
+  $("contacts-search").addEventListener("input", renderContacts);
+  $("favorites-search").addEventListener("input", renderFavorites);
+  $("contacts-manage").addEventListener("click", () => bridge && bridge.open_window("contacts"));
 
   // Chrome buttons
   $("btn-min").addEventListener("click", () => bridge && bridge.minimize());
@@ -422,14 +567,20 @@ function wireControls() {
   });
 
   // Dismiss menus on any outside click / Escape; type-to-dial only while
-  // no call is live (in-call digits belong to the DTMF pads).
+  // no call is live (in-call digits belong to the DTMF pads) and only when
+  // the keystroke isn't already headed into a text field (search boxes).
   document.addEventListener("click", closeMenus);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { closeMenus(); return; }
-    if (e.key === "/") { e.preventDefault(); $("num").focus(); }
-    else if (/^[0-9*#+]$/.test(e.key) && document.activeElement !== $("num")
-             && state.calls.length === 0) {
-      $("num").focus(); $("num").value += e.key;
+    const typing = e.target instanceof HTMLInputElement;
+    if (e.key === "/" && !typing) {
+      e.preventDefault();
+      switchView("dial");
+      $("num").focus();
+    } else if (/^[0-9*#+]$/.test(e.key) && !typing && state.calls.length === 0) {
+      switchView("dial");
+      $("num").focus();
+      $("num").value += e.key;
     }
   });
 }

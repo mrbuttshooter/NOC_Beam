@@ -306,6 +306,23 @@ class WebBridge(QObject):
             log.exception("bridge.toggle_max_restore failed")
 
     # ------------------------------------------------------------------
+    # Web views (phase 2): on-demand data refresh when a tab opens
+    # ------------------------------------------------------------------
+    @Slot()
+    def refresh_history(self) -> None:
+        try:
+            self._web.push_history()
+        except Exception:
+            log.exception("bridge.refresh_history failed")
+
+    @Slot()
+    def refresh_contacts(self) -> None:
+        try:
+            self._web.push_contacts()
+        except Exception:
+            log.exception("bridge.refresh_contacts failed")
+
+    # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
     @Slot()

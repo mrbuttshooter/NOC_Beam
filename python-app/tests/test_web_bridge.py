@@ -181,6 +181,58 @@ def test_serialize_recents_prefers_dialed_uri_and_limits() -> None:
 
 
 # ======================================================================
+# serialize_history (phase 2 web view)
+# ======================================================================
+def test_serialize_history_full_log_with_detail() -> None:
+    acc = _acc("a1", "Teles UK")
+    e1 = _cdr("sip:111@x", True, 100.0, code=200)
+    e1.account_id = "a1"
+    e1.supplier_label = "AAA Tel"
+    e1.codec = "G729"
+    e1.connected_at = 90.0
+    e1.duration_s = 10.0
+    e2 = _cdr("sip:111@x", False, 300.0, code=486)  # same peer -- NOT deduped
+    e2.account_id = "zz-unknown"
+    e2.supplier_label = ""
+    e2.codec = ""
+    e2.duration_s = 0.0
+    rows = S.serialize_history([e1, e2], [acc])
+    assert len(rows) == 2                    # history keeps every event
+    assert rows[0]["detail"]["result"] == "486"
+    assert rows[1]["detail"]["account"] == "Teles UK"
+    assert rows[1]["detail"]["supplier"] == "AAA Tel"
+    assert rows[1]["detail"]["codec"] == "G729"
+    assert rows[1]["detail"]["duration"] == "00:10"
+    assert rows[0]["detail"]["account"] == ""  # unknown account id -> blank
+    assert rows[0]["detail"]["when"].count(":") == 2
+
+
+def test_serialize_history_limit_and_order() -> None:
+    hist = [_cdr(f"sip:{i}@x", True, float(i)) for i in range(300)]
+    rows = S.serialize_history(hist, [], limit=200)
+    assert len(rows) == 200
+    assert rows[0]["num"] == "299"          # newest first
+
+
+# ======================================================================
+# serialize_contacts (phase 2 web view)
+# ======================================================================
+def _contact(name: str, number: str, fav: bool = False, group: str = "Work"):
+    return SimpleNamespace(id=name.lower(), name=name, number=number,
+                           group=group, favorite=fav)
+
+
+def test_serialize_contacts_sorted_and_fields() -> None:
+    out = S.serialize_contacts([
+        _contact("zoe", "300", fav=True),
+        _contact("Alice", "100"),
+    ])
+    assert [c["name"] for c in out] == ["Alice", "zoe"]  # case-insensitive sort
+    assert out[1] == {"id": "zoe", "name": "zoe", "number": "300",
+                      "group": "Work", "favorite": True}
+
+
+# ======================================================================
 # serialize_suppliers
 # ======================================================================
 def test_serialize_suppliers() -> None:
@@ -370,3 +422,13 @@ def test_ready_triggers_full_push() -> None:
     bridge = WebBridge(phone, web)
     bridge.ready()
     web.push_all.assert_called_once()
+
+
+def test_refresh_history_and_contacts_route_to_web() -> None:
+    phone = _fake_phone()
+    web = MagicMock()
+    bridge = WebBridge(phone, web)
+    bridge.refresh_history()
+    web.push_history.assert_called_once()
+    bridge.refresh_contacts()
+    web.push_contacts.assert_called_once()

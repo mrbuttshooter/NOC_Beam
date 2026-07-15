@@ -29,6 +29,8 @@ from noc_beam.webui.bridge import WebBridge
 from noc_beam.webui.serializers import (
     serialize_accounts,
     serialize_calls,
+    serialize_contacts,
+    serialize_history,
     serialize_recents,
     serialize_suppliers,
 )
@@ -120,8 +122,16 @@ class WebShell(QMainWindow):
                 "accounts": self._accounts_payload(),
                 "suppliers": self._suppliers_payload(),
                 "recents": self._recents_payload(),
+                "history": self._history_payload(),
+                "contacts": self._contacts_payload(),
             }
         )
+
+    def push_history(self, *_args) -> None:
+        self._apply({"history": self._history_payload()})
+
+    def push_contacts(self, *_args) -> None:
+        self._apply({"contacts": self._contacts_payload()})
 
     def push_call(self, *_args) -> None:
         self._apply({"calls": self._calls_payload()})
@@ -195,6 +205,24 @@ class WebShell(QMainWindow):
             log.exception("_recents_payload failed")
             return []
 
+    def _history_payload(self):
+        try:
+            from noc_beam.config.history import load_history
+
+            return serialize_history(load_history(), list(self._phone.accounts), limit=200)
+        except Exception:
+            log.exception("_history_payload failed")
+            return []
+
+    def _contacts_payload(self):
+        try:
+            from noc_beam.config.contacts import load_contacts
+
+            return serialize_contacts(load_contacts())
+        except Exception:
+            log.exception("_contacts_payload failed")
+            return []
+
     # ------------------------------------------------------------------
     # Wiring: mirror the same signals PhoneShell reacts to
     # ------------------------------------------------------------------
@@ -204,10 +232,18 @@ class WebShell(QMainWindow):
         p.calls.call_added.connect(self.push_call)
         p.calls.call_updated.connect(self.push_call)
         p.calls.call_removed.connect(self.push_call)
-        # Recents refresh after a call ends. Deferred one event-loop tick so
-        # PhoneShell._maybe_write_cdr (which appends the CDR on the same
-        # synchronous burst) has finished before we re-read the history file.
+        # Recents + history refresh after a call ends. Deferred one event-loop
+        # tick so PhoneShell._maybe_write_cdr (which appends the CDR on the
+        # same synchronous burst) has finished before we re-read the file.
         p.calls.call_removed.connect(lambda *_: QTimer.singleShot(0, self.push_recents))
+        p.calls.call_removed.connect(lambda *_: QTimer.singleShot(0, self.push_history))
+        # Contacts edited in the Qt manage window -> refresh the web tab.
+        try:
+            p.contacts_view.contact_saved.connect(
+                lambda *_: QTimer.singleShot(0, self.push_contacts)
+            )
+        except Exception:
+            log.debug("contact_saved hook unavailable", exc_info=True)
         # Registration health -> account pill dot + switcher.
         ev = sip_events()
         ev.registration_changed.connect(self._on_registration_changed)

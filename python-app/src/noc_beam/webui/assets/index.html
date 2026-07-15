@@ -259,6 +259,65 @@
   .menu .item.active { color: var(--accent); }
   .menu .sep { height: 1px; background: var(--border); margin: 4px 6px; }
 
+  /* ===== Tabbed views (phase 2: History/Contacts/Favorites in-app) ===== */
+  .view { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .tabbar {
+    display: flex; gap: 4px; padding-top: 7px;
+    border-top: 1px solid var(--border);
+  }
+  .tab {
+    flex: 1; text-align: center; padding: 6px 0 5px; border-radius: 8px;
+    font-size: 10.5px; font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--text-3); cursor: pointer;
+    transition: color .12s, background .12s;
+  }
+  .tab:hover { color: var(--text-2); }
+  .tab.active { color: var(--text); background: var(--raised); }
+
+  .viewbar { display: flex; gap: 8px; }
+  .search {
+    min-width: 0; width: 100%; flex: 0 0 auto;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 9px; color: var(--text); padding: 8px 12px;
+    font-size: 12.5px; outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  /* Inside the horizontal viewbar the search shares the row with a button. */
+  .viewbar .search { flex: 1 1 auto; width: auto; }
+  .search:focus { border-color: var(--accent);
+                  box-shadow: 0 0 0 3px rgba(102,115,232,.18); }
+  .search::placeholder { color: var(--text-3); }
+  .mini-btn {
+    border: 1px solid var(--border); background: var(--raised);
+    color: var(--text-2); border-radius: 9px; padding: 0 14px;
+    font-size: 12px; cursor: pointer; transition: all .13s;
+  }
+  .mini-btn:hover { color: var(--text); border-color: var(--border-strong); }
+
+  .vlist { flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+           gap: 4px; margin: 0 -6px; padding: 0 6px; }
+
+  /* History expandable detail panel */
+  .hdetail {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 9px; padding: 8px 12px; margin: 0 4px 4px;
+    display: grid; grid-template-columns: auto 1fr; gap: 2px 12px;
+    font-size: 11px;
+  }
+  .hdetail .k { color: var(--text-3); }
+  .hdetail .v { color: var(--text-2); font-family: var(--mono);
+                user-select: text; overflow-wrap: anywhere; }
+
+  /* Contact rows reuse .row; name + mono number stacked left */
+  .row .cname { flex: 1; min-width: 0; }
+  .row .cname .nm { font-weight: 600; font-size: 12.5px;
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .cname .nr { font-family: var(--mono); font-size: 11px; color: var(--text-3);
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .grp { font-size: 10px; color: var(--text-3); border: 1px solid var(--border);
+              border-radius: 20px; padding: 2px 8px; flex: 0 0 auto; }
+  .row .star { color: var(--warn); font-size: 12px; flex: 0 0 auto; }
+
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-thumb { background: var(--raised); border-radius: 4px; }
 </style>
@@ -280,26 +339,58 @@
   </div>
 
   <div class="body">
-    <div class="omni">
-      <input id="num" placeholder="Type a number, paste, or press / to focus" spellcheck="false">
-      <button class="call-btn" id="btn-call">Call</button>
-    </div>
-
-    <div class="supplier-row" id="supplier-row" hidden>
-      <span class="k">via</span>
-      <div class="supplier-sel" id="supplier-sel">
-        <span class="lbl" id="supplier-label">—</span>
-        <span class="caret">▾</span>
+    <!-- ===== Dial view ===== -->
+    <div class="view" id="view-dial">
+      <div class="omni">
+        <input id="num" placeholder="Type a number, paste, or press / to focus" spellcheck="false">
+        <button class="call-btn" id="btn-call">Call</button>
       </div>
+
+      <div class="supplier-row" id="supplier-row" hidden>
+        <span class="k">via</span>
+        <div class="supplier-sel" id="supplier-sel">
+          <span class="lbl" id="supplier-label">—</span>
+          <span class="caret">▾</span>
+        </div>
+      </div>
+
+      <!-- Live-call stack: one card per active call, built by app.js. -->
+      <div class="calls" id="calls"></div>
+
+      <div class="pad" id="pad"></div>
+
+      <div class="sect"><h2>Recent calls</h2><a id="view-all">View all</a></div>
+      <div class="recents" id="recents"></div>
     </div>
 
-    <!-- Live-call stack: one card per active call, built by app.js. -->
-    <div class="calls" id="calls"></div>
+    <!-- ===== History view (phase 2) ===== -->
+    <div class="view" id="view-history" hidden>
+      <input class="search" id="history-search" placeholder="Search number or status" spellcheck="false">
+      <div class="vlist" id="history-list"></div>
+    </div>
 
-    <div class="pad" id="pad"></div>
+    <!-- ===== Contacts view (phase 2) ===== -->
+    <div class="view" id="view-contacts" hidden>
+      <div class="viewbar">
+        <input class="search" id="contacts-search" placeholder="Search contacts" spellcheck="false">
+        <button class="mini-btn" id="contacts-manage" title="Add / edit in the manager">Manage</button>
+      </div>
+      <div class="vlist" id="contacts-list"></div>
+    </div>
 
-    <div class="sect"><h2>Recent calls</h2><a id="view-all">View all</a></div>
-    <div class="recents" id="recents"></div>
+    <!-- ===== Favorites view (phase 2) ===== -->
+    <div class="view" id="view-favorites" hidden>
+      <input class="search" id="favorites-search" placeholder="Search favorites" spellcheck="false">
+      <div class="vlist" id="favorites-list"></div>
+    </div>
+
+    <!-- ===== Bottom tab bar ===== -->
+    <div class="tabbar" id="tabbar">
+      <div class="tab active" data-view="dial">Dial</div>
+      <div class="tab" data-view="history">History</div>
+      <div class="tab" data-view="contacts">Contacts</div>
+      <div class="tab" data-view="favorites">Favorites</div>
+    </div>
   </div>
 
   <!-- popover menus -->

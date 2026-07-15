@@ -194,6 +194,71 @@ def serialize_recents(history: list[Any], limit: int = 10) -> list[dict[str, Any
 
 
 # ----------------------------------------------------------------------
+# History view (phase 2: full searchable list + per-row detail)
+# ----------------------------------------------------------------------
+def serialize_history(
+    entries: list[Any],
+    accounts: list[Any] | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    """Full history rows, newest first, NOT peer-deduped (unlike recents --
+    the History tab is the log, recents is the shortcut strip). Each row
+    carries a `detail` block for the expandable info panel; account ids are
+    resolved to their human labels via the accounts list."""
+    label_by_id: dict[str, str] = {}
+    for a in accounts or []:
+        label_by_id[str(getattr(a, "id", ""))] = (
+            getattr(a, "label", "")
+            or getattr(a, "display_name", "")
+            or f"{getattr(a, 'username', '')}@{getattr(a, 'domain', '')}"
+        )
+    import time as _time
+
+    ordered = sorted(entries, key=lambda e: getattr(e, "ended_at", 0) or 0, reverse=True)
+    out: list[dict[str, Any]] = []
+    for e in ordered[:limit]:
+        row = _recent_row(e)
+        dur = float(getattr(e, "duration_s", 0.0) or 0.0)
+        m, s = divmod(int(dur), 60)
+        h, m = divmod(m, 60)
+        code = getattr(e, "end_code", 0) or 0
+        reason = getattr(e, "end_reason", "") or ""
+        ended = getattr(e, "ended_at", 0) or 0
+        row["detail"] = {
+            "dialed": getattr(e, "dialed_uri", "") or "",
+            "peer": getattr(e, "peer_uri", "") or "",
+            "account": label_by_id.get(str(getattr(e, "account_id", "")), ""),
+            "supplier": getattr(e, "supplier_label", "") or "",
+            "codec": getattr(e, "codec", "") or "",
+            "result": (f"{code} {reason}".strip() if code else reason),
+            "duration": (f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}") if dur else "",
+            "when": _time.strftime("%Y-%m-%d %H:%M:%S", _time.localtime(ended)) if ended else "",
+        }
+        out.append(row)
+    return out
+
+
+# ----------------------------------------------------------------------
+# Contacts / favorites (config/contacts.py Contact dataclass)
+# ----------------------------------------------------------------------
+def serialize_contacts(contacts: list[Any]) -> list[dict[str, Any]]:
+    """All contacts, name-sorted. The favorites tab is the favorite=True
+    subset (client-side filter, same payload)."""
+    out: list[dict[str, Any]] = []
+    for c in sorted(contacts, key=lambda c: (getattr(c, "name", "") or "").lower()):
+        out.append(
+            {
+                "id": str(getattr(c, "id", "")),
+                "name": getattr(c, "name", "") or "",
+                "number": getattr(c, "number", "") or "",
+                "group": getattr(c, "group", "") or "",
+                "favorite": bool(getattr(c, "favorite", False)),
+            }
+        )
+    return out
+
+
+# ----------------------------------------------------------------------
 # Accounts + registration health (mirror ui/phone_shell.py:_health_bucket)
 # ----------------------------------------------------------------------
 def health_bucket(code: int) -> str:
