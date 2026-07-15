@@ -230,3 +230,14 @@ def apply_theme(app: QApplication, high_contrast: bool = False, *, theme: str = 
     if qss:
         app.setStyleSheet(qss)
         log.info("apply_theme: QApplication.setStyleSheet applied (%d chars)", len(qss))
+    # Cache the active theme on the QApplication so consumers can read it
+    # without a settings.json disk read. apply_theme is the single choke
+    # point for theme changes (startup + the Settings "Apply" runtime
+    # switch), so this value is always fresh. The native dark-title-bar
+    # filter reads it on every top-level Show event -- menus, combo popups
+    # and tooltips all fire Show -- so sourcing it from disk each time added
+    # a synchronous JSON read+parse to routine dropdown opens.
+    try:
+        app.setProperty("noc_active_theme", theme)
+    except Exception:
+        pass

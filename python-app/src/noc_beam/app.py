@@ -266,9 +266,17 @@ def run(argv: list[str]) -> int:
         from noc_beam.ui.native_chrome import DarkTitleBarFilter
 
         def _current_theme() -> str:
-            # Re-read settings each time: cheap (Show events are rare) and
-            # always fresh after a runtime theme change. Fall back to the
-            # startup theme if the store read fails mid-session.
+            # Prefer the in-process theme cached on the QApplication by
+            # apply_theme (updated at startup and on every runtime theme
+            # switch -- the only ways the theme changes). Reading it here
+            # avoids a synchronous settings.json read+parse on the GUI
+            # thread for EVERY top-level Show: menus, combo popups and
+            # tooltips all fire Show, so the previous per-Show load_settings()
+            # added disk I/O to routine dropdown opens. Fall back to a disk
+            # read, then to the startup theme, if the cache isn't set yet.
+            cached = app.property("noc_active_theme")
+            if cached:
+                return str(cached)
             try:
                 s = load_settings()
                 return getattr(s.appearance, "theme", "dark")
