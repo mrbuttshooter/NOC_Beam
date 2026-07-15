@@ -21,157 +21,71 @@ from PySide6.QtWidgets import QApplication
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Light -> Dark colour map. Keys are exact hex strings as they appear in
-# light.qss (case-sensitive uppercase). Add new entries as new colours
-# enter light.qss; missing keys stay as-is (visible by eyeballing the
-# resulting dark output).
+# Light -> Dark colour map.  PALETTE VERSION: NOC_BEAM_TEST v1 (indigo accent)
 #
-# Buckets:
-#   surfaces  - whites/very-light greys become deep darks
-#   borders   - light greys become mid darks
-#   text      - dark greys become near-whites
-#   accents   - brand colours either kept or slightly shifted for dark bg
+# Keys are the exact hex strings that appear in the recoloured light.qss
+# (the approved "refined light" palette). Values are the approved dark
+# palette. light.qss is the single source of truth; every hex it contains
+# has an entry here EXCEPT #FFFFFF, which is deliberately dual-purpose:
+#
+#   * As a *surface* (cards / inputs / panels — the vast majority of uses)
+#     it must become the dark card colour #2A3346, so #FFFFFF -> #2A3346
+#     lives in this map.
+#   * As *on-accent / on-status TEXT* (white label on an indigo / red
+#     filled button) it must stay #FFFFFF in dark for contrast. Those few
+#     selectors are re-asserted to #FFFFFF in _DARK_OVERRIDES below, which
+#     is appended AFTER colour substitution so the literal white survives.
+#
+# Buckets: surfaces / hover / borders / text / accent (indigo) / statuses.
+# All target hexes are taken verbatim from the approved dark palette:
+#   window #232936, chrome #1B2130, card #2A3346, hover #323D54,
+#   selected #2C3350, borders #323A4A/#3B4557, text #E3E9F2/#9AA7BD/#7C889E.
 # ---------------------------------------------------------------------------
 LIGHT_TO_DARK: dict[str, str] = {
-    # ===== Surface hierarchy =====
-    # CORE RULE: keep all idle surfaces at the SAME base color (#1B2129).
-    # Light mode uses subtle gradients between #FFFFFF, #F6F7F9, #FAFBFC
-    # etc. but in dark mode those gradients look like recessed/pressed
-    # states. Unify them; only hover/selected gets a distinct (lighter)
-    # color so interactivity stays visible.
-    #
-    # Light bg variants    ->  Dark unified base    Role
-    # #FFFFFF, #F6F7F9...  ->  #1B2129              all idle surfaces
-    # #F5F6F8 (hover)      ->  #262E3A              hover/pressed (lighter)
-    "#FFFFFF": "#1B2129",
-    "#FAFBFC": "#1B2129",
-    "#FAFAFA": "#1B2129",
-    "#F9FAFB": "#1B2129",
-    "#F7F8FA": "#1B2129",
-    "#F6F8FA": "#1B2129",
-    "#F6F7F9": "#1B2129",  # unified — same as cards (no recessed look)
-    # Hover / pressed / selected -- LIGHTER than the base, but only by
-    # a few RGB points so the edge of the hovered region doesn't form
-    # a hard visible line against the panel. The orange-tinted accent
-    # highlights (#FFF5ED -> #2C2B22, see below) carry the "this row
-    # is selected" signal with more chroma.
-    "#F5F6F8": "#1F252E",
-    "#F4F6F9": "#1F252E",
-    "#F1F3F5": "#1F252E",
-    "#EEF0F2": "#1F252E",
-    "#EDEFF2": "#1F252E",
-    "#ECEFF2": "#1F252E",
-    # Row-hover (the gray operator picked for light mode after the
-    # "still white" feedback). In dark mode it needs to map to a
-    # clearly-visible cyan-tinted shade -- without an entry here the
-    # programmatic-substitution leaves it as #E8ECF1, which paints
-    # near-white in dark mode and reads as a glitch on hover.
-    "#E8ECF1": "#253A5B",
+    # ===== Surfaces =====
+    "#FFFFFF": "#2A3346",  # card/input surface (on-accent TEXT restored below)
+    "#F2F3F7": "#232936",  # window / page background
+    "#E9EBF2": "#323D54",  # hover surface
 
-    # ===== Status-tinted row backgrounds =====
-    # Map to the SAME base as primary surface. In light mode missed/failed
-    # rows get a soft pink/orange tint that pops them out of the list. In
-    # dark mode that same tint reads as garish red bars -- the row text
-    # and the SIP-code badge already carry the colour signal, the row bg
-    # doesn't need to. Just blend with the base.
-    "#FDF6F6": "#1B2129",
-    "#FDEDED": "#1B2129",
-    "#FDF1F2": "#1B2129",
-    "#FCE7E9": "#1B2129",
-    "#FDECEE": "#1B2129",
-    "#FFEBEC": "#1B2129",
-    "#FEF6F6": "#1B2129",
-    "#FFFBF5": "#1B2129",
-    "#FFF3E1": "#1B2129",
-    "#FFF7E6": "#1B2129",
-    "#FFF7F0": "#1B2129",
-    "#FFF4EB": "#1B2129",
-    "#FFF3CD": "#1B2129",
-    "#FFF4DB": "#1B2129",
-    "#FEEEE3": "#1B2129",
-    # Accent (orange) soft -- used for selection highlights
-    "#FFE0CC": "#3A2410",
-    "#FFD7BD": "#3A2410",
-    "#FFE2C9": "#3A2410",
-    "#FFF5ED": "#2C2B22",
-    # Green soft
-    "#E8F7EE": "#1A2E22",
-    "#DFF7E8": "#1A2E22",
-    "#A9E7BC": "#2A5238",
-    # Blue / info soft
-    "#E8F2FA": "#1F2C38",
-    "#EAF0F6": "#1F2C38",
-    "#E5F2FA": "#1F2C38",
-    "#DCEEFC": "#22344A",
-
-    # ===== Borders -- very subtle on dark =====
-    # On dark backgrounds even a faint border becomes a hard "line"
-    # because the contrast ratio against #1B2129 spikes fast.
-    # Keep the LIST dividers nearly invisible (#222831), promote only
-    # to a clear border when the element really needs one (inputs).
-    "#ECEEF1": "#222831",  # list dividers, soft separators -- nearly invisible
-    "#E0E3E7": "#222831",
-    "#E1E4E8": "#222831",
-    "#DDE3E8": "#222831",
-    "#D8DEE4": "#252B36",
-    "#D1D5DB": "#2B323D",  # input borders, slightly more visible
-    "#D0D7DE": "#2B323D",
-    "#C9CDD3": "#2B323D",
-    "#C2C9D2": "#2B323D",
-    "#B7C0CB": "#3B4654",
-    "#D2A8AB": "#3B2A2D",  # danger row border (also subtle)
-    "#94A0AD": "#3B4654",  # hover border
-    "#B8DDF2": "#1A4F73",  # info border light
-    "#6FB8E8": "#2A8DC4",  # info border
+    # ===== Borders =====
+    "#E5E7EE": "#323A4A",  # default / subtle border, list dividers
+    "#D5D9E4": "#3B4557",  # strong / input border
 
     # ===== Text (dark -> light) =====
-    "#1F2328": "#E5E9F0",
-    "#1F2933": "#E5E9F0",
-    "#0F172A": "#E5E9F0",
-    "#4B5563": "#9DA5B0",
-    "#57606A": "#9DA5B0",
-    "#6B7280": "#7C8696",
-    "#8C959F": "#6B7280",
+    "#20232E": "#E3E9F2",  # primary
+    "#6A6A75": "#9AA7BD",  # secondary
+    "#9AA0B0": "#7C889E",  # muted / placeholder (also muted status fg)
 
-    # ===== Brand accents (orange) — push brighter on dark bg =====
-    "#E85D04": "#FF8A2A",
-    "#FF7A1A": "#FF8A2A",
-    "#FF7314": "#FF8A2A",
-    "#E25A0E": "#FF7A1A",
-    "#C24B00": "#E85D04",
-    "#C84E0A": "#E85D04",
-    "#C97C0E": "#E0931F",
-    "#E08A1A": "#E0931F",
-    "#6B4A0A": "#F2D27A",
-    "#8A5A00": "#F2D27A",
-    "#E0B872": "#F2D27A",
-    "#F2D27A": "#F2D27A",  # keep
+    # ===== Accent (indigo — kept, only pressed lifted for dark contrast) =====
+    "#5B6EE0": "#5B6EE0",  # accent base (identical in both themes)
+    "#6C7EE8": "#6C7EE8",  # accent hover (identical)
+    "#4A5BC9": "#6C7EE8",  # accent pressed -> lift to hover so it stays
+                            #   legible as text/fill on dark surfaces
+    "#EEF0FC": "#2C3350",  # accent soft / selected-row tint
 
-    # ===== Semantic green (success / answered) =====
-    "#116329": "#46CF74",
-    "#1A7F37": "#46CF74",
-    "#1FA64C": "#46CF74",
-    "#2DA44E": "#46CF74",
-    "#2EBD5C": "#46CF74",
-    "#46CF74": "#46CF74",  # keep
+    # ===== Status: ok / answered (green) =====
+    "#2BA36B": "#57C98B",  # fg
+    "#1D7A4F": "#7FD6A6",  # chip text
+    "#E2F4EA": "#243A30",  # chip bg
 
-    # ===== Semantic red (danger / missed) =====
-    "#9F1D28": "#FF8DA0",
-    "#A02129": "#FF8DA0",
-    "#B22D35": "#FF8DA0",
-    "#B32D2E": "#FF8DA0",
-    "#D33841": "#FF5C7A",
-    "#E55260": "#FF5C7A",
-    "#E5A4A8": "#FF8DA0",
-    "#F2B8BE": "#FF8DA0",
-    "#F2C0C4": "#FF8DA0",
-    "#E0BFC2": "#FF8DA0",
+    # ===== Status: danger / failed (red) =====
+    "#D84B50": "#E0575B",  # fg
+    "#A33A3E": "#E0888B",  # chip text
+    "#F9E5E6": "#3A2C31",  # chip bg
 
-    # ===== Semantic blue (info / link) =====
-    "#0969DA": "#7FD3FF",
-    "#145C8A": "#7FD3FF",
-    "#1A6FA0": "#7FD3FF",
-    "#2A8DC4": "#7FD3FF",
+    # ===== Status: warn / progress / ringing (amber) =====
+    "#B07811": "#E8B34B",  # fg
+    "#8A5F0E": "#E8C98A",  # chip text
+    "#FBF1DD": "#332B23",  # chip bg
+
+    # ===== Status: info (blue) =====
+    "#3D77C2": "#6FA8E8",  # fg
+    "#2B5789": "#8FC0F0",  # chip text
+    "#E6F0FA": "#22344A",  # chip bg
+
+    # ===== Status: muted / idle (reserved chip roles, future use) =====
+    "#EEEFF3": "#2A3040",  # muted chip bg
+    "#5F646E": "#9AA7BD",  # muted chip text
 }
 
 
@@ -262,12 +176,25 @@ def _substitute_assets(qss: str) -> str:
 _DARK_OVERRIDES = """
 /* ===== Dark-mode-only overrides (appended after color substitution) =====
    Things that can't be expressed as a simple light->dark colour swap.
-   Currently empty -- the earlier "kill all row hovers in dark mode"
-   override was removed once the operator explicitly asked for the
-   gray (light) / cyan-tinted-dark (dark) hover treatment everywhere.
-   The light->dark color substitution (LIGHT_TO_DARK with the new
-   #E8ECF1 -> #253A5B entry) now handles row hover consistently.
+
+   On-accent / on-status TEXT: these buttons are filled with the indigo
+   accent or the red danger colour, and their label must stay #FFFFFF for
+   contrast. But #FFFFFF is mapped to the dark card surface (#2A3346) so
+   filled surfaces recolour correctly -- which would also darken this
+   text. Re-assert white here (this block is appended AFTER substitution,
+   so the literal #FFFFFF survives). CallAvatar / QToolTip are intentionally
+   NOT listed: they read better as dark-text-on-light in dark mode.
 */
+QPushButton#CallButton,
+QPushButton#PrimaryAction,
+QPushButton#RunTestButton,
+QToolButton#HistoryRowCall,
+QToolButton#RecentsCallBtn,
+QPushButton#EndCallButton,
+QPushButton#HangupButton,
+QPushButton#RejectButton {
+    color: #FFFFFF;
+}
 """
 
 

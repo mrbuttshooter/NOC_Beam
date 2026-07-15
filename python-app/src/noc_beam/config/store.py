@@ -252,8 +252,15 @@ class AppearanceSettings:
     reduced_motion: bool = False
     # Swap dark.qss <-> dark-hc.qss. Phase F wires the toggle.
     high_contrast: bool = False
-    # Theme: "light" (Bria-evolution default) | "dark" (NOC dashboard look).
-    theme: str = "light"
+    # Theme: "dark" (NOC dashboard look — the new default) | "light".
+    #
+    # NOTE: there are TWO theme fields in this module. THIS one
+    # (AppearanceSettings.theme) is the one that actually drives the UI:
+    # app.py reads `settings.appearance.theme` and passes it to
+    # apply_theme(). The top-level GlobalSettings.theme (below) is a
+    # legacy/companion field that is persisted but not read by app.py;
+    # both are kept "dark" so saved settings and defaults stay consistent.
+    theme: str = "dark"
 
 
 @dataclass
@@ -334,6 +341,9 @@ class GlobalSettings:
     sip_port: int = 0               # 0 = ephemeral
     log_level: int = 4              # PJSIP log level 0..6
     user_agent: str = "NOC_Beam/0.1"
+    # Legacy/companion theme field. The UI is driven by
+    # AppearanceSettings.theme (see note there); app.py does NOT read this
+    # one. Kept "dark" so it agrees with the appearance default.
     theme: str = "dark"
 
 
