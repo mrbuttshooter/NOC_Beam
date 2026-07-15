@@ -148,6 +148,10 @@ def run(argv: list[str]) -> int:
 
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    # QtWebEngine (the web softphone shell) shares its GL context with the
+    # rest of Qt. Must be set BEFORE the QApplication is constructed or
+    # QWebEngineView emits a runtime warning and can fail to composite.
+    QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
     QApplication.setApplicationName(__app_name__)
     QApplication.setOrganizationName(__app_name__)
 
@@ -318,7 +322,15 @@ def run(argv: list[str]) -> int:
     except Exception:
         log.exception("FAS engine failed to start; continuing without FAS detection")
 
-    window = PhoneShell()
+    # The web softphone is the shipped UI. PhoneShell is instantiated as the
+    # hidden phase-1 "logic host" (call orchestration, supplier materialization,
+    # history writes, tray) and never shown; WebShell renders the approved
+    # compact softphone and drives PhoneShell over a QWebChannel bridge.
+    # See docs/redesign/WEB-SOFTPHONE-brief.md.
+    phone = PhoneShell()
+    from noc_beam.webui.web_shell import WebShell
+
+    window = WebShell(phone)
 
     # Activation IPC for later launches. The Win32 mutex above already
     # refused the second instance; this server is how that refused instance
@@ -328,11 +340,8 @@ def run(argv: list[str]) -> int:
     # callback -- which touches Qt widgets -- runs safely on the GUI thread.
     def _activate_main_window() -> None:
         try:
-            # Reuse the exact tray-restore path so a window that was
-            # minimized-to-tray (hidden) actually reappears, not just an
-            # already-visible one. _restore_from_tray does
-            # showNormal()+raise_()+activateWindow(); fall back to the same
-            # calls directly if the method is ever renamed.
+            # Raise the WEB window (not the hidden PhoneShell host). A window
+            # that was minimized-to-tray (hidden) actually reappears here.
             restore = getattr(window, "_restore_from_tray", None)
             if callable(restore):
                 restore()
@@ -358,9 +367,10 @@ def run(argv: list[str]) -> int:
     # start_minimized launches into the tray (or minimized to taskbar
     # if no tray) instead of popping a foreground window. Was
     # display-only at the checkbox layer until this hook.
+    # Tray lives on the PhoneShell host; visibility is on the WebShell.
     _start_cfg = getattr(settings, "startup", None)
     if _start_cfg is not None and getattr(_start_cfg, "start_minimized", False):
-        if getattr(window, "tray", None) is not None and window.tray.available:
+        if getattr(phone, "tray", None) is not None and phone.tray.available:
             window.hide()
         else:
             window.showMinimized()

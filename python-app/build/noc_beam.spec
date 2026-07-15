@@ -97,6 +97,16 @@ for f in RESOURCES.iterdir():
     if f.is_file():
         datas.append((str(f), "noc_beam/ui/resources"))
 
+# Web softphone assets (index.html, app.js, qwebchannel.js). The WebShell
+# loads these from noc_beam/webui/assets at runtime via QUrl.fromLocalFile,
+# so they must ship as data files next to the package. QtWebEngine itself is
+# pulled in automatically by PyInstaller's PySide6 hook (adds ~150MB to dist).
+WEBUI_ASSETS = SRC / "noc_beam" / "webui" / "assets"
+if WEBUI_ASSETS.is_dir():
+    for f in WEBUI_ASSETS.iterdir():
+        if f.is_file():
+            datas.append((str(f), "noc_beam/webui/assets"))
+
 if ICON.exists() and not any(d[0] == str(ICON) for d in datas):
     datas.append((str(ICON), "assets"))
 
