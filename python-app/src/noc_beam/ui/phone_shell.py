@@ -191,8 +191,9 @@ class PhoneShell(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(__app_name__)
-        # Owner feedback (NOC_BEAM_TEST round 2): compact default footprint.
-        self.resize(384, 640)
+        # Owner feedback (NOC_BEAM_TEST rounds 2-3): compact default
+        # footprint; keypad shrunk so the window can drop under 600 tall.
+        self.resize(384, 560)
         self.setMinimumWidth(360)
 
         self.settings = load_settings()
@@ -789,7 +790,7 @@ class PhoneShell(QMainWindow):
         # the rest of the UI (owner feedback on the first test build).
         # Stretch-wrapped (not alignment-pinned) so it still fills narrow
         # windows edge-to-edge and only stops growing at 460px.
-        self.dialpad.setMaximumWidth(460)
+        self.dialpad.setMaximumWidth(400)
         _dp_row = QHBoxLayout()
         _dp_row.setContentsMargins(0, 0, 0, 0)
         _dp_row.addStretch(1)

@@ -74,7 +74,7 @@ class _KeyButton(QPushButton):
     def sizeHint(self) -> QSize:  # noqa: N802
         # Visual 2.0: keys are proper tiles (brief: 52-56px tall) so the
         # keypad reads as the primary instrument, not an afterthought.
-        return QSize(56, 52)
+        return QSize(48, 38)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         # Let the style draw bg + border + hover state via QSS.
@@ -97,10 +97,10 @@ class _KeyButton(QPushButton):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         # Big digit -- Visual 2.0 type scale: dialpad digit 20px, centered.
         digit_font = QFont(self.font())
-        digit_font.setPixelSize(20)
+        digit_font.setPixelSize(15)
         digit_font.setWeight(QFont.Weight.Medium)
         painter.setFont(digit_font)
-        digit_rect = self.rect().adjusted(0, 2, 0, -14 if self._caption else 0)
+        digit_rect = self.rect().adjusted(0, 1, 0, -11 if self._caption else 0)
         painter.drawText(
             digit_rect,
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
@@ -109,7 +109,7 @@ class _KeyButton(QPushButton):
         # Caption: 10px muted, letterspaced, visibly subordinate.
         if self._caption:
             cap_font = QFont(self.font())
-            cap_font.setPixelSize(10)
+            cap_font.setPixelSize(9)
             cap_font.setWeight(QFont.Weight.DemiBold)
             painter.setPen(self.palette().mid().color())
             cap_font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 110)
@@ -145,13 +145,15 @@ class DialPad(QWidget):
         self.entry.returnPressed.connect(self._on_call)
 
         grid = QGridLayout()
-        # Visual 2.0: the grid breathes -- 8px gaps, equal margins.
-        grid.setSpacing(8)
+        # Owner feedback round 3: keypad stays but compact -- numbers come
+        # in by paste/keyboard, so the keys are a secondary surface. 6px
+        # gaps, 36-40px keys.
+        grid.setSpacing(6)
         grid.setContentsMargins(0, 0, 0, 0)
         for i, (key, sub) in enumerate(_KEYS):
             btn = _KeyButton(key, sub, self)
-            btn.setMinimumSize(48, 52)
-            btn.setMaximumHeight(56)
+            btn.setMinimumSize(40, 36)
+            btn.setMaximumHeight(40)
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             # A11y: screen-readers announced "key 1, key 2..." with no
             # context; now each gets "Dial 1", "Dial 2", etc. The 12

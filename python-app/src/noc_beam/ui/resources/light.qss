@@ -3254,10 +3254,10 @@ QPushButton#CallButton {
 QWidget#DialPad QPushButton#DialPadButton {
     background-color: #FFFFFF;
     border: 1px solid #E5E7EE;
-    border-radius: 10px;
-    min-height: 44px;
-    max-height: 48px;
-    max-width: 128px;
+    border-radius: 8px;
+    min-height: 34px;
+    max-height: 40px;
+    max-width: 112px;
 }
 QWidget#DialPad QPushButton#DialPadButton:hover {
     background-color: #E9EBF2;
