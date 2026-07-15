@@ -1261,8 +1261,12 @@ class SettingsDialog(QDialog):
         reg.addRow("Expires In", expires_lbl)
         outer.addLayout(reg)
 
+        # Quiet, NOT primary: the single indigo primary in the Settings
+        # window is the footer "Apply". "Test Register" is a secondary,
+        # repeatable probe action, so it reads as a quiet outline button
+        # (was an orange/indigo PrimaryAction competing with Apply).
         test_btn = QPushButton("Test Register")
-        test_btn.setObjectName("PrimaryAction")
+        test_btn.setObjectName("SecondaryAction")
         test_btn.setMinimumHeight(32)
         # Wired: emit test_register_requested so the host can route
         # through the same flow the standalone AccountDialog uses.

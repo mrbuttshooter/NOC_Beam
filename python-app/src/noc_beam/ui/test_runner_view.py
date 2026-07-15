@@ -266,8 +266,12 @@ class TestRunnerView(QMainWindow):
         # was just confusing (UX audit blocker 5).
         self.cancel_btn = QPushButton("Close")
         self.cancel_btn.setObjectName("SecondaryAction")
+        # Export CSV is a QUIET action — the one indigo primary in this
+        # window is "Run N calls" (RunTestButton). Export used to be a
+        # second filled primary fighting Run for attention; it's now a
+        # quiet outline button matching Clear/Stop.
         self.export_btn = QPushButton("Export CSV")
-        self.export_btn.setObjectName("PrimaryAction")
+        self.export_btn.setObjectName("TestRunnerExportBtn")
         self.export_btn.setEnabled(False)
 
         self._build_ui()
@@ -1739,14 +1743,27 @@ class TestRunnerView(QMainWindow):
         running = getattr(self, "_running_count", 0)
         completed = passed + failed + errored + running
         pending = max(0, self.table.rowCount() - completed)
-        self.summary_passed.setText(f"{passed} passed")
+        self._set_counter(self.summary_passed, f"{passed} passed", passed == 0)
         # Surface errors next to failed without folding them in, so real
         # supplier rejects stay distinguishable from transport drops.
-        self.summary_failed.setText(
-            f"{failed} failed" + (f" · {errored} error" if errored else "")
+        self._set_counter(
+            self.summary_failed,
+            f"{failed} failed" + (f" · {errored} error" if errored else ""),
+            failed == 0 and errored == 0,
         )
-        self.summary_running.setText(f"{running} running")
-        self.summary_pending.setText(f"{pending} pending")
+        self._set_counter(self.summary_running, f"{running} running", running == 0)
+        self._set_counter(self.summary_pending, f"{pending} pending", pending == 0)
+
+    @staticmethod
+    def _set_counter(label: QLabel, text: str, is_zero: bool) -> None:
+        """Update a summary counter chip. Zero-count chips render in the
+        muted style (dimmed) so only the counts that actually matter carry
+        their status colour; a run with 0 failed shouldn't flash a red
+        pill. Non-zero chips keep their per-level status colour."""
+        label.setText(text)
+        label.setProperty("zero", bool(is_zero))
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     def _set_text(self, row: int, column: int, text: str) -> None:
         item = self.table.item(row, column)

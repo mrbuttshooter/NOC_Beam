@@ -49,7 +49,9 @@ from pathlib import Path
 
 from noc_beam.config.paths import log_dir
 from noc_beam.sip.events import sip_events
+from noc_beam.ui.design_tokens import STATUS_MUTED_LIGHT
 from noc_beam.ui.history_view import default_export_dir
+from noc_beam.ui.rail_icons import rail_icon
 
 
 _trace_logger: logging.Logger | None = None
@@ -663,14 +665,29 @@ class TraceView(QWidget):
         self._rows_layout.setSpacing(0)
         self._rows_layout.addStretch(1)
 
-        self._empty = QLabel(
+        # Empty state (design system rule 8): muted icon + one-line
+        # invitation. Trace has no primary action, so no button — just the
+        # muted signalling icon over the waiting text.
+        self._empty = QWidget(self._rows_holder)
+        _empty_l = QVBoxLayout(self._empty)
+        _empty_l.setContentsMargins(24, 48, 24, 48)
+        _empty_l.setSpacing(12)
+        self._empty_icon = QLabel(self._empty)
+        self._empty_icon.setObjectName("TraceEmptyIcon")
+        self._empty_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_icon.setPixmap(
+            rail_icon("trace", color=STATUS_MUTED_LIGHT, px=40).pixmap(40, 40)
+        )
+        _empty_text = QLabel(
             "Waiting for SIP traffic.\n\n"
             "Once a SIP account registers or a call is placed,\n"
             "every signalling dialog will land here.",
-            self._rows_holder,
+            self._empty,
         )
-        self._empty.setObjectName("TraceEmpty")
-        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        _empty_text.setObjectName("TraceEmpty")
+        _empty_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        _empty_l.addWidget(self._empty_icon)
+        _empty_l.addWidget(_empty_text)
         self._rows_layout.insertWidget(0, self._empty)
 
         self._scroll = QScrollArea(self)

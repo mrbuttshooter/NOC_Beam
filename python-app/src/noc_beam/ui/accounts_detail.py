@@ -37,6 +37,8 @@ from PySide6.QtWidgets import (
 
 from noc_beam.config.store import AccountConfig
 from noc_beam.sip.events import sip_events
+from noc_beam.ui.design_tokens import STATUS_MUTED_LIGHT
+from noc_beam.ui.rail_icons import rail_icon
 
 
 def _initials(name: str, fallback: str = "?") -> str:
@@ -136,11 +138,22 @@ class AccountDetail(QWidget):
         empty = QWidget()
         layout = QVBoxLayout(empty)
         layout.setContentsMargins(40, 40, 40, 40)
+        layout.setSpacing(12)
+        # Empty state (design system rule 8): muted icon + one-line
+        # invitation. No action button — selecting a row is done in the
+        # master list to the left, not from here.
+        icon = QLabel()
+        icon.setObjectName("ViewEmptyIcon")
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setPixmap(
+            rail_icon("accounts", color=STATUS_MUTED_LIGHT, px=44).pixmap(44, 44)
+        )
         hint = QLabel("Select an account to see registration status and quality.")
         hint.setObjectName("ViewHint")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint.setWordWrap(True)
         layout.addStretch(1)
+        layout.addWidget(icon)
         layout.addWidget(hint)
         layout.addStretch(2)
         return empty

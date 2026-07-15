@@ -466,9 +466,11 @@ class AccountDialog(QDialog):
 
     def _set_status(self, text: str, ok: bool | None) -> None:
         self.test_status.setText(text)
-        color = {
-            True:  "#66D19E",   # success
-            False: "#FF5C7A",   # danger
-            None:  "#B7C0CC",   # in-progress / neutral
-        }[ok]
-        self.test_status.setStyleSheet(f"color: {color};")
+        # Drive the colour off a palette-backed `level` property (styled in
+        # light.qss / derived dark) instead of a hardcoded inline hex, so
+        # the test-registration status matches the app's status colours and
+        # adapts to the active theme.
+        level = {True: "ok", False: "danger", None: "progress"}[ok]
+        self.test_status.setProperty("level", level)
+        self.test_status.style().unpolish(self.test_status)
+        self.test_status.style().polish(self.test_status)

@@ -36,7 +36,27 @@ from PySide6.QtWidgets import (
 )
 
 from noc_beam.config.store import AccountConfig
+from noc_beam.ui.components import StatusPill
+from noc_beam.ui.design_tokens import (
+    STATUS_DANGER_LIGHT,
+    STATUS_MUTED_LIGHT,
+    STATUS_OK_LIGHT,
+    STATUS_WARN_LIGHT,
+)
 from noc_beam.ui.rail_icons import rail_icon
+
+
+# Registration code -> (chip level, dot colour, label). ONE mapping so the
+# Accounts list renders registration state exactly like the main-window
+# account pill and the Settings registration pill (dot + status chip).
+def _registration_status(code: int) -> tuple[str, str, str]:
+    if code == 0:
+        return "muted", STATUS_MUTED_LIGHT, "Unregistered"
+    if 200 <= code < 300:
+        return "ok", STATUS_OK_LIGHT, f"Registered ({code})"
+    if code in (401, 403, 407):
+        return "danger", STATUS_DANGER_LIGHT, f"Auth failed ({code})"
+    return "warn", STATUS_WARN_LIGHT, f"Error ({code})"
 
 
 def _relative_time(ts: float | None) -> str:
@@ -102,7 +122,7 @@ class AcctRow(QFrame):
 
         # ---- Tier 1: status dot + name + status text + last-activity
         self.dot = QLabel(self)
-        self.dot.setPixmap(_status_dot_pixmap("#7C8696"))
+        self.dot.setPixmap(_status_dot_pixmap(STATUS_MUTED_LIGHT))
         self.dot.setFixedSize(10, 10)
 
         # Prefer the UI nickname (`label`) so the NOC Accounts list
@@ -117,8 +137,11 @@ class AcctRow(QFrame):
         self.name = QLabel(display, self)
         self.name.setObjectName("AcctRowName")
 
-        self.status_text = QLabel("Unregistered", self)
-        self.status_text.setObjectName("AcctRowStatus")
+        # Registration state renders as the unified dot + status chip
+        # (StatusPill) used everywhere else in the app — was a plain gray
+        # "Unregistered" text label with no chip treatment. Keep the
+        # StatusPill objectName so it picks up the shared chip QSS.
+        self.status_text = StatusPill("Unregistered", "muted", self)
 
         self.last_activity = QLabel("never", self)
         self.last_activity.setObjectName("AcctRowMeta")
@@ -131,7 +154,8 @@ class AcctRow(QFrame):
         tier1.setSpacing(8)
         tier1.addWidget(self.dot, 0, Qt.AlignmentFlag.AlignVCenter)
         tier1.addWidget(self.name, 0)
-        tier1.addWidget(self.status_text, 1)
+        tier1.addWidget(self.status_text, 0, Qt.AlignmentFlag.AlignVCenter)
+        tier1.addStretch(1)
         tier1.addWidget(self.last_activity, 0)
 
         # ---- Tier 2: URI mono
@@ -228,19 +252,18 @@ class AcctRow(QFrame):
         self.style().polish(self)
 
     def set_status(self, code: int) -> None:
-        """Update status dot colour + status text + last-activity stamp."""
-        if code == 0:
-            color, text = "#7C8696", "Unregistered"
-        elif 200 <= code < 300:
-            color, text = "#66D19E", f"Registered ({code})"
-        elif code in (401, 403, 407, 423):
-            color, text = "#F0C36D", f"Auth failed ({code})"
-        elif code == 408:
-            color, text = "#FF5C7A", f"Timeout ({code})"
-        else:
-            color, text = "#FF5C7A", f"Error ({code})"
+        """Update status dot colour + status chip + last-activity stamp.
+
+        Dot colour + chip level come from the single _registration_status
+        mapping so this row renders identically to the main-window account
+        pill and the Settings registration pill.
+        """
+        level, color, text = _registration_status(code)
         self.dot.setPixmap(_status_dot_pixmap(color, px=10))
         self.status_text.setText(text)
+        self.status_text.setProperty("level", level)
+        self.status_text.style().unpolish(self.status_text)
+        self.status_text.style().polish(self.status_text)
         if code != 0:
             self._last_activity_ts = time.time()
             self.last_activity.setText(_relative_time(self._last_activity_ts))

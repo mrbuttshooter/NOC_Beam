@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 
 from noc_beam.config.store import AccountConfig
 from noc_beam.sip.events import sip_events
+from noc_beam.ui.design_tokens import STATUS_DANGER_LIGHT, STATUS_OK_LIGHT
 
 log = logging.getLogger(__name__)
 
@@ -195,11 +196,11 @@ class _RegisterTimingPanel(QWidget):
         # fixed pure-RGB and is unreadable on light backgrounds plus
         # clashes with the muted Bria-cyan palette on dark.
         if 200 <= code < 300:
-            code_item.setForeground(QtGui.QColor("#66D19E"))  # success token
+            code_item.setForeground(QtGui.QColor(STATUS_OK_LIGHT))  # ok status fg
         elif code in (401, 403, 407):
-            # Match the danger token used elsewhere in dark.qss
-            # (was a fourth red, #EF5350, introduced in audit v2).
-            code_item.setForeground(QtGui.QColor("#FF5C7A"))
+            # Palette danger status foreground (painted item colour, so it
+            # uses the canonical light-palette hex rather than a QSS token).
+            code_item.setForeground(QtGui.QColor(STATUS_DANGER_LIGHT))
         self.table.setItem(row, 2, code_item)
         self.table.setItem(row, 3, QTableWidgetItem(delta))
 

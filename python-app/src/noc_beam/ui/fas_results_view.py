@@ -299,6 +299,19 @@ class FasResultsView(QWidget):
         chips_wrap.setLayout(chips_row)
         layout.addWidget(chips_wrap)
 
+        # ----- Empty state (design system rule 8) --------------------
+        # Muted one-line invitation shown when the run has no rows. The
+        # table's own column headers stay visible below it; this hint
+        # tells the operator where results come from.
+        self._empty_hint = QLabel(
+            "No sweep results yet — run a FAS Sweep from the Test Runner "
+            "to populate this view."
+        )
+        self._empty_hint.setObjectName("FasResultsEmpty")
+        self._empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_hint.setWordWrap(True)
+        layout.addWidget(self._empty_hint)
+
         # ----- Results table -----------------------------------------
         self.table = QTableWidget(0, len(COLUMN_LABELS))
         self.table.setObjectName("FasResultsTable")
@@ -421,6 +434,11 @@ class FasResultsView(QWidget):
                                      else float("-inf")))
             self._set_cell(row_idx, COL_REASONS, row.fas_reasons or "")
         self.table.setSortingEnabled(True)
+
+        # Toggle the muted empty-state hint: shown only when the current
+        # (filtered) view has no rows to display.
+        if hasattr(self, "_empty_hint"):
+            self._empty_hint.setVisible(not self._visible_rows)
 
         # Clear the detail / action enablement on repopulate.
         self.detail_text.clear()

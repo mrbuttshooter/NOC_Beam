@@ -2656,3 +2656,62 @@ QListWidget#CodecDnDList::item:selected {
 /* ===== SECTION: CALLS ===== */
 
 /* ===== SECTION: AUX-WINDOWS ===== */
+
+/* ------------------------------------------------------------------
+   agent-aux: consistency layer for the four auxiliary windows
+   (Settings / Accounts / SIP trace / Test runner). Roles only —
+   colours come from the light palette + LIGHT_TO_DARK mapping.
+   ------------------------------------------------------------------ */
+
+/* Test Runner: Export CSV is a QUIET action (the one primary is Run). */
+QPushButton#TestRunnerExportBtn {
+    background-color: #FFFFFF;
+    color: #6A6A75;
+    border: 1px solid #D5D9E4;
+    border-radius: 4px;
+    padding: 4px 14px;
+    min-height: 26px;
+}
+QPushButton#TestRunnerExportBtn:hover {
+    background-color: #E9EBF2;
+    border-color: #9AA0B0;
+    color: #20232E;
+}
+QPushButton#TestRunnerExportBtn:pressed { background-color: #E5E7EE; }
+QPushButton#TestRunnerExportBtn:disabled {
+    color: #9AA0B0;
+    background-color: #E9EBF2;
+    border-color: #E5E7EE;
+}
+
+/* Test Runner summary chips: zero-count chips render muted so only the
+   counts that matter carry their status colour. This rule sits after the
+   per-level rules (end of file), so for a chip carrying both level=* and
+   zero="true" the muted values win. */
+QLabel#TestRunnerCounter[zero="true"] {
+    background-color: #EEEFF3;
+    color: #5F646E;
+    border-color: #E5E7EE;
+}
+
+/* Account dialog: Test-registration status text uses palette status
+   foregrounds (theme-derived) instead of a hardcoded inline hex. */
+QLabel#AccountTestStatus {
+    background: transparent;
+    font-size: 12px;
+    font-weight: 600;
+}
+QLabel#AccountTestStatus[level="ok"]       { color: #2BA36B; }
+QLabel#AccountTestStatus[level="danger"]   { color: #D84B50; }
+QLabel#AccountTestStatus[level="progress"] { color: #B07811; }
+
+/* Empty-state icons + hints (design system rule 8). */
+QLabel#TraceEmptyIcon, QLabel#ViewEmptyIcon {
+    background: transparent;
+    border: none;
+}
+QLabel#FasResultsEmpty {
+    color: #9AA0B0;
+    font-size: 12px;
+    padding: 10px 24px;
+}
