@@ -35,11 +35,12 @@ import logging
 import re
 import time
 
-from PySide6.QtCore import QEvent, QObject, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu,
-    QMessageBox, QPushButton, QStackedWidget, QToolButton, QVBoxLayout, QWidget,
+    QMessageBox, QPushButton, QStackedWidget, QToolButton, QVBoxLayout,
+    QWidget, QWidgetAction,
 )
 
 from noc_beam import __app_name__, __version__
@@ -66,6 +67,7 @@ from noc_beam.ui.contacts_view import ContactsView
 from noc_beam.ui.dialpad import DialPad
 from noc_beam.ui.favorites_view import FavoritesView
 from noc_beam.ui.history_view import HistoryView
+from noc_beam.ui.rail_icons import rail_icon
 from noc_beam.ui.settings_dialog import SettingsDialog
 from noc_beam.ui.theme import apply_theme
 # TraceView is imported lazily inside _on_open_trace -- removing the
@@ -349,34 +351,12 @@ class PhoneShell(QMainWindow):
         top_l = QVBoxLayout(top)
         top_l.setContentsMargins(10, 6, 10, 4); top_l.setSpacing(2)
 
-        brand_row = QHBoxLayout(); brand_row.setSpacing(8)
-        # Brand mark: render the real app icon (the cyan-beam N) as a
-        # QPixmap rather than the old text-on-orange-square placeholder.
-        # QIcon handles the multi-resolution .ico and gives us a crisp
-        # pixmap at the target display size on hi-DPI screens.
-        from PySide6.QtCore import QSize as _QSize
-        from PySide6.QtGui import QIcon as _QIcon
-        from pathlib import Path as _Path
-        _icon_path = _Path(__file__).parent / "resources" / "icon.ico"
-        self.brand_mark = QLabel("", top)
-        self.brand_mark.setObjectName("BrandMark")
-        try:
-            _bm_px = _QIcon(str(_icon_path)).pixmap(_QSize(28, 28))
-            if not _bm_px.isNull():
-                self.brand_mark.setPixmap(_bm_px)
-        except Exception:
-            self.brand_mark.setText("N")
-        # Version moved out of the visible brand row -- it was reading like
-        # a leftover build artifact next to the wordmark. Surfaced via the
-        # brand-mark tooltip and the About dialog instead.
-        self.brand_mark.setToolTip(f"{__app_name__} {__version__}")
-        self.brand_word = QLabel(__app_name__, top); self.brand_word.setObjectName("BrandWord")
-        brand_row.addWidget(self.brand_mark); brand_row.addWidget(self.brand_word)
-        brand_row.addStretch(1)
+        # The old brand row (app icon + "NOC_Beam" wordmark) duplicated the
+        # OS/window-title identity and cost a whole header row. Removed. The
+        # hamburger action menu it hosted is relocated onto the compact
+        # status strip below. `self.brand_mark` / `self.brand_word` are gone.
 
-        # Hamburger menu (replaces the QMenuBar -- see _build_menu).
-        # Three vertical groups under one button on the right of the
-        # brand row, opens an InstantPopup QMenu.
+        # ---- Hamburger menu button (relocated from the removed brand row).
         self.menu_btn = QToolButton(top)
         self.menu_btn.setObjectName("MenuButton")
         self.menu_btn.setText("≡")
@@ -386,7 +366,7 @@ class PhoneShell(QMainWindow):
         self.menu_btn.setAccessibleDescription("Opens Softphone, View, and Help actions")
         big_menu = QMenu(self.menu_btn)
         for group_label, items in self._menu_actions:
-            section = big_menu.addSection(group_label)
+            big_menu.addSection(group_label)
             for label, slot in items:
                 if label == "---":
                     big_menu.addSeparator()
@@ -400,19 +380,65 @@ class PhoneShell(QMainWindow):
                     else:
                         action.triggered.connect(lambda _checked=False, slot=slot: slot())
         self.menu_btn.setMenu(big_menu)
-        brand_row.addWidget(self.menu_btn)
-        top_l.addLayout(brand_row)
 
-        acct_row = QHBoxLayout(); acct_row.setContentsMargins(0, 6, 0, 0); acct_row.setSpacing(8)
-        kicker = QLabel("ACCOUNT", top); kicker.setObjectName("AccountKicker")
+        # ---- Account pill: status dot + name, still a dropdown. Anchor of
+        # the compact status strip that replaces the old six-row header.
         self.account_chip = QToolButton(top); self.account_chip.setObjectName("AccountChip")
         self.account_chip.setText("No account  ▾")
         self.account_chip.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.account_chip.setMenu(QMenu(self.account_chip))
         self.account_chip.setAccessibleName("Active SIP account")
         self.account_chip.setAccessibleDescription("Choose the SIP account used for outgoing calls")
-        acct_row.addWidget(kicker); acct_row.addWidget(self.account_chip, 1)
-        top_l.addLayout(acct_row)
+
+        # ---- Degraded-account warning badge. Hidden unless one or more
+        # enabled accounts sit in a warn/danger registration state; then it
+        # shows the count and retries registration on click (same action as
+        # the inline banner's Retry).
+        self.warn_badge = QToolButton(top)
+        self.warn_badge.setObjectName("WarnBadge")
+        self.warn_badge.setText("⚠ 0")
+        self.warn_badge.setToolTip("Account(s) degraded — click to retry registration")
+        self.warn_badge.setAccessibleName("Degraded accounts")
+        self.warn_badge.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.warn_badge.clicked.connect(lambda: self._on_status_link("retry-register"))
+        self.warn_badge.setVisible(False)
+
+        # ---- Audio popover button. Mic/speaker mute + volume sliders and
+        # the RX/TX meters are set-once controls, so they move out of the
+        # always-on header into a popover opened from this one speaker icon.
+        self.audio_popover_btn = QToolButton(top)
+        self.audio_popover_btn.setObjectName("AudioPopoverBtn")
+        self.audio_popover_btn.setIcon(rail_icon("speaker", color="#6A6A75", px=18))
+        self.audio_popover_btn.setIconSize(QSize(18, 18))
+        self.audio_popover_btn.setToolTip("Audio devices and levels")
+        self.audio_popover_btn.setAccessibleName("Audio controls")
+        self.audio_popover_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+
+        # AudioStrip (mic/speaker buttons + volume sliders + RX/TX meters):
+        # the SAME widget and signal wiring as before, now hosted inside the
+        # popover menu instead of consuming a permanent header row.
+        self.audio = AudioStrip(top)
+        self.audio.mic_muted_changed.connect(self._on_audio_strip_mic_mute)
+        self.audio.mic_volume_changed.connect(self._on_audio_strip_mic_volume)
+        self.audio.muted_changed.connect(self._on_audio_strip_mute)
+        self.audio.volume_changed.connect(self._on_audio_strip_volume)
+        audio_menu = QMenu(self.audio_popover_btn)
+        audio_menu.setObjectName("AudioPopover")
+        _audio_action = QWidgetAction(audio_menu)
+        _audio_action.setDefaultWidget(self.audio)
+        audio_menu.addAction(_audio_action)
+        self.audio_popover_btn.setMenu(audio_menu)
+
+        # ---- Strip row 1 (always visible): account pill takes the width,
+        # warning badge + audio popover + menu sit at the trailing edge.
+        strip_row = QHBoxLayout()
+        strip_row.setContentsMargins(0, 2, 0, 0)
+        strip_row.setSpacing(8)
+        strip_row.addWidget(self.account_chip, 1)
+        strip_row.addWidget(self.warn_badge)
+        strip_row.addWidget(self.audio_popover_btn)
+        strip_row.addWidget(self.menu_btn)
+        top_l.addLayout(strip_row)
 
         # SUPPLIER picker -- shown only when active account has
         # switch_type in {teles, genband}. The custom picker filters
@@ -456,18 +482,6 @@ class PhoneShell(QMainWindow):
         # Active supplier id for the current account (str or "").
         self._active_supplier_id: str = ""
 
-        self.audio = AudioStrip(top)
-        # Top-strip mic icon mutes the microphone on the active call.
-        self.audio.mic_muted_changed.connect(self._on_audio_strip_mic_mute)
-        # Top-strip mic vol drives the capture-device → call-port gain.
-        self.audio.mic_volume_changed.connect(self._on_audio_strip_mic_volume)
-        # Top-strip speaker icon mutes the OUTPUT side of the active call.
-        self.audio.muted_changed.connect(self._on_audio_strip_mute)
-        # Volume slider drives the output-side audio level on the
-        # active call's media. No-op when there's no call.
-        self.audio.volume_changed.connect(self._on_audio_strip_volume)
-        top_l.addWidget(self.audio)
-
         # TX / RX live audio meter -- 200ms QTimer polls the active call's
         # audio media and updates AudioStrip's progress bars. Try with
         # an explicit parent first (proper Qt ownership, no leak); fall
@@ -488,41 +502,64 @@ class PhoneShell(QMainWindow):
         except Exception:
             log.exception("level timer setup failed")
 
-        self.status_banner = QLabel("Starting...", top)
+        # ---- Inline status banner (rule 7): a chip-style strip carrying a
+        # message + a quiet action button (e.g. Retry / Add account). This
+        # replaces the old centered status text + centered hyperlink and is
+        # the single sink for every error the shell used to raise as a modal
+        # QMessageBox ambush. `self.status_banner` keeps its name/objectName
+        # so existing callers and tests still find it.
+        self.banner = QFrame(top)
+        self.banner.setObjectName("InlineBanner")
+        self.banner.setProperty("level", "muted")
+        banner_l = QHBoxLayout(self.banner)
+        banner_l.setContentsMargins(12, 6, 8, 6)
+        banner_l.setSpacing(8)
+        self.status_banner = QLabel("Starting...", self.banner)
         self.status_banner.setObjectName("StatusBanner")
         self.status_banner.setAccessibleName("Registration and call status")
         self.status_banner.setProperty("level", "muted")
         self.status_banner.setWordWrap(True)
-        self.status_link = QLabel("", top); self.status_link.setObjectName("StatusBannerLink")
-        self.status_link.setAccessibleName("SIP status action")
-        self.status_link.setVisible(False); self.status_link.setOpenExternalLinks(False)
-        self.status_link.linkActivated.connect(self._on_status_link)
-        top_l.addWidget(self.status_banner); top_l.addWidget(self.status_link)
-
-        dial_row = QHBoxLayout(); dial_row.setContentsMargins(0, 4, 0, 0); dial_row.setSpacing(8)
-        self.dial_input = QLineEdit(top); self.dial_input.setObjectName("DialInput")
-        self.dial_input.setPlaceholderText("Enter number or SIP URI")
-        self.dial_input.setAccessibleName("Dial target")
-        self.dial_input.setAccessibleDescription("Enter a phone number or SIP URI. Ctrl+K focuses this field.")
-        self.dial_input.returnPressed.connect(self._on_dial_input_enter)
-        self.call_btn = QPushButton("Call", top); self.call_btn.setObjectName("CallButton")
-        self.call_btn.setAccessibleName("Place call")
-        self.call_btn.clicked.connect(self._on_dial_input_enter)
-        dial_row.addWidget(self.dial_input, 1); dial_row.addWidget(self.call_btn)
-        top_l.addLayout(dial_row)
+        self.banner_btn = QPushButton("", self.banner)
+        self.banner_btn.setObjectName("BannerAction")
+        self.banner_btn.setAccessibleName("SIP status action")
+        self.banner_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.banner_btn.setVisible(False)
+        self.banner_btn.clicked.connect(self._on_banner_action_clicked)
+        # `_status_action` holds the action id the button will fire; kept in
+        # sync by _set_status. Empty means the button stays hidden.
+        self._status_action = ""
+        banner_l.addWidget(self.status_banner, 1)
+        banner_l.addWidget(self.banner_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        top_l.addWidget(self.banner)
 
         self.dialpad = DialPad(self)
         self.dialpad.call_requested.connect(self._on_call_requested)
         self.dialpad.hangup_requested.connect(self._on_hangup_requested)
         self.dialpad.digit_pressed.connect(self._on_digit_pressed)
         # Hide DialPad's internal entry + Call/Hangup buttons -- the
-        # PhoneShell's top strip owns those affordances. The keypad
+        # Dial-tab dial bar (built below) owns those affordances. The keypad
         # below is purely the 3x4 numeric grid.
         self.dialpad.entry.setVisible(False)
         self.dialpad.call_btn.setVisible(False)
         self.dialpad.hangup_btn.setVisible(False)
         dialpad_page = QWidget(self)
         dpl = QVBoxLayout(dialpad_page); dpl.setContentsMargins(4, 2, 4, 2); dpl.setSpacing(2)
+
+        # Dial field + Call button live INSIDE the Dial tab only (not above
+        # Contacts/Favorites/History, where they used to sit in the header).
+        dial_row = QHBoxLayout()
+        dial_row.setContentsMargins(0, 2, 0, 2)
+        dial_row.setSpacing(8)
+        self.dial_input = QLineEdit(dialpad_page); self.dial_input.setObjectName("DialInput")
+        self.dial_input.setPlaceholderText("Enter number or SIP URI")
+        self.dial_input.setAccessibleName("Dial target")
+        self.dial_input.setAccessibleDescription("Enter a phone number or SIP URI. Ctrl+K focuses this field.")
+        self.dial_input.returnPressed.connect(self._on_dial_input_enter)
+        self.call_btn = QPushButton("Call", dialpad_page); self.call_btn.setObjectName("CallButton")
+        self.call_btn.setAccessibleName("Place call")
+        self.call_btn.clicked.connect(self._on_dial_input_enter)
+        dial_row.addWidget(self.dial_input, 1); dial_row.addWidget(self.call_btn)
+        dpl.addLayout(dial_row)
         self.call_widget = CallWidget()
         # FAS verdict badge hidden on the dialpad call card per boss
         # directive 2026-05-25: verdicts now surface only in the Test
@@ -804,11 +841,21 @@ class PhoneShell(QMainWindow):
         self.status_banner.setProperty("level", level)
         self.status_banner.style().unpolish(self.status_banner)
         self.status_banner.style().polish(self.status_banner)
-        if link_text and link_action:
-            self.status_link.setText(f'<a href="{link_action}">{link_text}</a>')
-            self.status_link.setVisible(True)
+        # Level-tint the whole banner frame so warn/danger read as a
+        # chip-style strip (rule 7), not just coloured text.
+        if hasattr(self, "banner"):
+            self.banner.setProperty("level", level)
+            self.banner.style().unpolish(self.banner)
+            self.banner.style().polish(self.banner)
+        # The old centered hyperlink is now a quiet action button. Same
+        # (link_text, link_action) call sites drive it unchanged.
+        self._status_action = link_action if (link_text and link_action) else ""
+        if self._status_action:
+            self.banner_btn.setText(link_text)
+            self.banner_btn.setVisible(True)
         else:
-            self.status_link.setVisible(False); self.status_link.clear()
+            self.banner_btn.setVisible(False)
+            self.banner_btn.setText("")
         # Transient status messages (e.g. "Settings applied",
         # "Transferring...", post-apply notices) used to stick on the
         # banner forever until something else changed it, which made
@@ -856,12 +903,19 @@ class PhoneShell(QMainWindow):
                     label = self._account_label(acc.id)
                     self._set_status(
                         f"Account: {label} -- auth failed ({code})", "warn",
-                        "Click here to retry", "retry-register",
+                        "Retry", "retry-register",
                     )
                     return
             self._set_status("Ready", "ok")
         except Exception:
             self._set_status("Ready", "ok")
+
+    def _on_banner_action_clicked(self) -> None:
+        """Quiet Retry/Add button on the inline banner. Delegates to the
+        same action router the old status hyperlink used."""
+        action = getattr(self, "_status_action", "")
+        if action:
+            self._on_status_link(action)
 
     def _on_status_link(self, action):
         if action == "add-account":
@@ -890,6 +944,40 @@ class PhoneShell(QMainWindow):
                 )
             else:
                 self._set_status("Retrying registration...", "muted")
+
+    def _degraded_account_ids(self) -> list[str]:
+        """Enabled accounts sitting in a warn/danger registration state.
+
+        Excludes the 0 sentinel (never registered yet) and 405 (Method Not
+        Allowed = expected IP-authenticated trunk, not a fault), matching
+        the _on_registration_changed banner logic. Drives the strip's
+        warning badge."""
+        out: list[str] = []
+        for acc in self.accounts:
+            if not getattr(acc, "enabled", False):
+                continue
+            code = self._reg_state.get(acc.id, 0)
+            if code == 0 or (200 <= code < 300) or code == 405:
+                continue
+            out.append(acc.id)
+        return out
+
+    def _update_warn_badge(self) -> None:
+        """Show the strip's warning badge only when accounts are degraded."""
+        badge = getattr(self, "warn_badge", None)
+        if badge is None:
+            return
+        degraded = self._degraded_account_ids()
+        n = len(degraded)
+        if n:
+            badge.setText(f"⚠ {n}")
+            labels = ", ".join(self._account_label(a) for a in degraded)
+            badge.setToolTip(
+                f"{n} account(s) degraded ({labels}) — click to retry registration"
+            )
+            badge.setVisible(True)
+        else:
+            badge.setVisible(False)
 
     def _refresh_accounts(self):
         self.accounts_view.populate(self.accounts)
@@ -951,6 +1039,7 @@ class PhoneShell(QMainWindow):
         self.account_chip.setMenu(menu)
         if old_menu is not None:
             old_menu.deleteLater()
+        self._update_warn_badge()
 
     def _set_active_account(self, account_id, label):
         self._active_account_id = account_id
@@ -1461,7 +1550,10 @@ class PhoneShell(QMainWindow):
             return True
         except Exception as e:
             log.exception("Failed to add account %s", cfg.id)
-            QMessageBox.warning(self, "Account error", str(e))
+            # Rule 7: surface as an inline banner, not a startup modal
+            # ambush (this runs in the _start_sip enable loop on boot).
+            self._set_status(f"Account error: {e}", "danger",
+                             "Retry", "retry-register")
             return False
 
     def _save_accounts_or_warn(self, accounts):
@@ -1469,6 +1561,9 @@ class PhoneShell(QMainWindow):
             save_accounts(accounts)
         except Exception as e:
             log.exception("Failed to save accounts to %s", accounts_file())
+            # A failed disk write means the account is NOT persisted (data
+            # loss on next launch). This one stays a blocking confirmation
+            # the operator must acknowledge — the inline banner mirrors it.
             QMessageBox.warning(
                 self,
                 "Account save failed",
@@ -1693,24 +1788,13 @@ class PhoneShell(QMainWindow):
 
     def _on_endpoint_error(self, msg):
         log.error("Endpoint error: %s", msg)
+        # Rule 7: endpoint errors are inline banners, never modal ambushes.
+        # An endpoint_error STORM (transport flapping, DNS failure looping)
+        # used to stack one blocking QMessageBox per event — each spinning
+        # its own nested event loop. The banner coalesces every error into
+        # one non-blocking strip with a quiet Retry button.
         self._set_status(f"Endpoint error: {msg}", "danger",
-                         "Click here to retry", "retry-register")
-        # Debounce the modal. An endpoint_error STORM (transport flapping,
-        # DNS failure looping) used to stack one QMessageBox per event;
-        # each modal spins its own nested event loop, so N stacked modals
-        # meant N-deep reentrancy and an operator clicking OK N times. The
-        # status banner above already surfaces every error non-modally;
-        # only ever show ONE dialog at a time. While it's open, subsequent
-        # errors just update the banner + log (above).
-        if not self.accounts:
-            return
-        if getattr(self, "_endpoint_error_dialog_open", False):
-            return
-        self._endpoint_error_dialog_open = True
-        try:
-            QMessageBox.warning(self, "SIP endpoint error", msg)
-        finally:
-            self._endpoint_error_dialog_open = False
+                         "Retry", "retry-register")
 
     def _on_registration_changed(self, account_id, code, reason):
         acc = next((a for a in self.accounts if a.id == account_id), None)
@@ -1736,11 +1820,12 @@ class PhoneShell(QMainWindow):
         if account_id == self._active_account_id and acc is not None and bucket != last_bucket:
             self._set_active_account(account_id, label)
         self._last_reg_health[account_id] = bucket
+        self._update_warn_badge()
         if 200 <= code < 300:
             self._set_status(f"Registered: {label}", "ok")
         elif code in (401, 403, 407, 423):
             self._set_status(f"Account: {label} -- auth failed ({code})", "warn",
-                             "Click here to retry", "retry-register")
+                             "Retry", "retry-register")
         elif code == 405:
             # 405 Method Not Allowed means the registrar refuses REGISTER
             # entirely -- the hallmark of an IP-authenticated trunk (e.g.
@@ -3344,11 +3429,22 @@ class PhoneShell(QMainWindow):
             # tools" binding (browsers, IDEs); freeing Ctrl+5 for
             # future use.
             ("Ctrl+Shift+T",  self._on_open_trace),
-            ("Ctrl+K",        lambda: self.dial_input.setFocus(Qt.FocusReason.ShortcutFocusReason)),
+            # Dial field now lives on the Dial tab only, so Ctrl+K first
+            # switches to it, then focuses the field.
+            ("Ctrl+K",        self._focus_dial_field),
         ):
             sc = QShortcut(QKeySequence(seq), self)
             sc.setContext(Qt.ShortcutContext.WindowShortcut)
             sc.activated.connect(slot)
+
+    def _focus_dial_field(self) -> None:
+        """Ctrl+K: reveal the Dial tab (which now owns the dial field) and
+        focus the input."""
+        try:
+            self.bottom_tabs.select(int(Tab.DIALPAD))
+        except Exception:
+            pass
+        self.dial_input.setFocus(Qt.FocusReason.ShortcutFocusReason)
 
     def keyPressEvent(self, event):
         # Global fallback for Return/Esc. keyPressEvent only fires for

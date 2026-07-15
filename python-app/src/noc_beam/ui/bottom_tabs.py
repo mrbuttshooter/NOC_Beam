@@ -69,10 +69,10 @@ class BottomTabs(QFrame):
             btn = QToolButton(self)
             btn.setObjectName("TabBtn")
             btn.setCheckable(True)
-            btn.setIcon(rail_icon(icon_name, color="#94A0AD", px=18))
-            # Active-state icon coloured with the brand orange so the
+            btn.setIcon(rail_icon(icon_name, color="#9AA0B0", px=18))
+            # Active-state icon coloured with the indigo accent so the
             # checked state reads as a colour change, not just a border.
-            on = rail_icon(icon_name, color="#E85D04", px=18).pixmap(18, 18)
+            on = rail_icon(icon_name, color="#5B6EE0", px=18).pixmap(18, 18)
             ic = btn.icon()
             from PySide6.QtGui import QIcon
 

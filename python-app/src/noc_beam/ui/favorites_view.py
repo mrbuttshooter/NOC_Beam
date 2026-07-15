@@ -44,7 +44,7 @@ class FavoriteRow(QFrame):
 
         call_btn = QToolButton(self)
         call_btn.setObjectName("IconActionButton")
-        call_btn.setIcon(rail_icon("calls", color="#2DA44E", px=16))
+        call_btn.setIcon(rail_icon("calls", color="#5B6EE0", px=16))
         call_btn.setIconSize(QSize(16, 16))
         call_btn.setToolTip("Call")
         call_btn.clicked.connect(lambda: self.call_requested.emit(self.contact.number))
@@ -78,7 +78,7 @@ class FavoritesView(QWidget):
 
         self.manage_btn = QToolButton(self)
         self.manage_btn.setObjectName("ContactsActionBtn")
-        self.manage_btn.setIcon(rail_icon("user-plus", color="#57606A", px=18))
+        self.manage_btn.setIcon(rail_icon("user-plus", color="#6A6A75", px=18))
         self.manage_btn.setIconSize(QSize(18, 18))
         self.manage_btn.setToolTip("Manage favorites")
         self.manage_btn.clicked.connect(self.manage_requested.emit)
@@ -131,12 +131,7 @@ class FavoritesView(QWidget):
         contacts = [contact for contact in self._contacts if self._matches(contact, needle)]
 
         if not contacts:
-            text = "No favorites yet." if not needle else "No favorites match your search."
-            empty = QLabel(text, self._rows_holder)
-            empty.setObjectName("ViewEmpty")
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty.setWordWrap(True)
-            self._rows_layout.addWidget(empty, 1)
+            self._rows_layout.addWidget(self._build_empty_state(bool(needle)), 1)
             return
 
         for contact in sorted(contacts, key=lambda item: item.name.lower()):
@@ -144,6 +139,45 @@ class FavoritesView(QWidget):
             row.call_requested.connect(self.call_requested.emit)
             self._rows_layout.addWidget(row)
         self._rows_layout.addStretch(1)
+
+    def _build_empty_state(self, searching: bool) -> QWidget:
+        """Rule-8 empty state: muted icon + one-line invitation + a hint
+        explaining how to populate Favorites (star a contact). No action
+        button on the search-miss variant."""
+        holder = QWidget(self._rows_holder)
+        holder.setObjectName("EmptyState")
+        col = QVBoxLayout(holder)
+        col.setContentsMargins(24, 48, 24, 24)
+        col.setSpacing(10)
+        col.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+
+        icon = QLabel(holder)
+        icon.setObjectName("EmptyStateIcon")
+        icon.setPixmap(rail_icon("star", color="#9AA0B0", px=40).pixmap(40, 40))
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        col.addWidget(icon, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        title = QLabel(
+            "No favorites match your search." if searching else "No favorites yet.",
+            holder,
+        )
+        title.setObjectName("ViewEmpty")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setWordWrap(True)
+        col.addWidget(title)
+
+        if not searching:
+            hint = QLabel(
+                "Star a contact — open its menu and choose "
+                "“Star as favorite” to pin it here.",
+                holder,
+            )
+            hint.setObjectName("ViewHint")
+            hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            hint.setWordWrap(True)
+            col.addWidget(hint)
+
+        return holder
 
     def _clear_rows(self) -> None:
         while self._rows_layout.count():

@@ -53,7 +53,7 @@ def _dot_pixmap(color_hex: str, px: int = 12) -> QPixmap:
     return pix
 
 
-def _wordmark_pixmap(height_px: int = WORDMARK_PX, color: str = "#E6EDF3") -> QPixmap:
+def _wordmark_pixmap(height_px: int = WORDMARK_PX, color: str = "#E3E9F2") -> QPixmap:
     """Render the title-bar wordmark SVG to a pixmap at `height_px` height."""
     svg_path = RESOURCES / "logo-wordmark.svg"
     if not svg_path.exists():
@@ -101,7 +101,7 @@ class TitleBar(QFrame):
         self.chip.setObjectName("AccountChip")
         self.chip.setText("No account")
         self.chip.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.chip.setIcon(QIcon(_dot_pixmap("#7C8696")))
+        self.chip.setIcon(QIcon(_dot_pixmap("#7C889E")))
         self.chip.setIconSize(QSize(10, 10))
         self.chip.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.chip.setMenu(QMenu(self.chip))
@@ -212,15 +212,15 @@ class TitleBar(QFrame):
         # Optimistic green dot whenever a real account is selected; the
         # actual registration code is broadcast via registration_changed
         # and a future tick can refine this per-account.
-        self.chip.setIcon(QIcon(_dot_pixmap("#66D19E")))
+        self.chip.setIcon(QIcon(_dot_pixmap("#57C98B")))
 
     # ------------------------------------------------------------------
     def set_chip_status(self, level: str) -> None:
         """Recolour the chip dot. level in: ok / warn / danger / muted."""
         color = {
-            "ok": "#66D19E",
-            "warn": "#F0C36D",
-            "danger": "#FF5C7A",
-            "muted": "#7C8696",
-        }.get(level, "#7C8696")
+            "ok": "#57C98B",
+            "warn": "#E8B34B",
+            "danger": "#E0575B",
+            "muted": "#7C889E",
+        }.get(level, "#7C889E")
         self.chip.setIcon(QIcon(_dot_pixmap(color)))

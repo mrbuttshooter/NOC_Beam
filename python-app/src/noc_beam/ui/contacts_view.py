@@ -36,7 +36,7 @@ from noc_beam.ui.components import FooterActionBar
 from noc_beam.ui.rail_icons import rail_icon
 
 
-def _group_avatar(letter: str, color_hex: str = "#E85D04", px: int = 28) -> QPixmap:
+def _group_avatar(letter: str, color_hex: str = "#5B6EE0", px: int = 28) -> QPixmap:
     """Square rounded avatar with the group's first letter, Bria-style."""
     pix = QPixmap(QSize(px, px))
     pix.fill(Qt.GlobalColor.transparent)
@@ -183,7 +183,7 @@ class GroupRow(QFrame):
 
         chev = QToolButton(self)
         chev.setObjectName("GroupChevron")
-        chev.setIcon(rail_icon("chevron-down", color="#94A0AD", px=12))
+        chev.setIcon(rail_icon("chevron-down", color="#9AA0B0", px=12))
         chev.setIconSize(QSize(12, 12))
         chev.setAutoRaise(True)
         chev.setToolTip(f"Toggle {name}")
@@ -243,7 +243,7 @@ class ContactRow(QFrame):
 
         call_btn = QToolButton(self)
         call_btn.setObjectName("IconActionButton")
-        call_btn.setIcon(rail_icon("calls", color="#2DA44E", px=16))
+        call_btn.setIcon(rail_icon("calls", color="#5B6EE0", px=16))
         call_btn.setIconSize(QSize(16, 16))
         call_btn.setToolTip("Call")
         call_btn.clicked.connect(lambda: self.call_requested.emit(self.contact.number))
@@ -313,7 +313,7 @@ class ContactsView(QWidget):
         # Filter button -- mockup panel 3 shows filter chip next to search.
         self.filter_btn = QToolButton(self)
         self.filter_btn.setObjectName("ContactsActionBtn")
-        self.filter_btn.setIcon(rail_icon("settings", color="#57606A", px=18))
+        self.filter_btn.setIcon(rail_icon("settings", color="#6A6A75", px=18))
         self.filter_btn.setIconSize(QSize(18, 18))
         self.filter_btn.setToolTip("Filter")
         self.filter_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -329,14 +329,14 @@ class ContactsView(QWidget):
 
         self.add_group_btn = QToolButton(self)
         self.add_group_btn.setObjectName("ContactsActionBtn")
-        self.add_group_btn.setIcon(rail_icon("users", color="#57606A", px=18))
+        self.add_group_btn.setIcon(rail_icon("users", color="#6A6A75", px=18))
         self.add_group_btn.setIconSize(QSize(18, 18))
         self.add_group_btn.setToolTip("New group")
         self.add_group_btn.clicked.connect(self._on_add_group)
 
         self.add_contact_btn = QToolButton(self)
         self.add_contact_btn.setObjectName("ContactsActionBtn")
-        self.add_contact_btn.setIcon(rail_icon("user-plus", color="#57606A", px=18))
+        self.add_contact_btn.setIcon(rail_icon("user-plus", color="#6A6A75", px=18))
         self.add_contact_btn.setIconSize(QSize(18, 18))
         self.add_contact_btn.setToolTip("Add contact")
         self.add_contact_btn.clicked.connect(lambda: self._on_add_contact())
@@ -388,12 +388,7 @@ class ContactsView(QWidget):
         contacts = [contact for contact in self._contacts if self._matches(contact, needle)]
 
         if not contacts:
-            text = "No contacts yet." if not needle else "No contacts match your search."
-            empty = QLabel(text, self._rows_holder)
-            empty.setObjectName("ViewEmpty")
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            empty.setWordWrap(True)
-            self._rows_layout.addWidget(empty, 1)
+            self._rows_layout.addWidget(self._build_empty_state(bool(needle)), 1)
             return
 
         grouped: dict[str, list[Contact]] = defaultdict(list)
@@ -417,6 +412,52 @@ class ContactsView(QWidget):
                 child_widgets.append(contact_row)
             self._group_widgets[group] = child_widgets
         self._rows_layout.addStretch(1)
+
+    def _build_empty_state(self, searching: bool) -> QWidget:
+        """Rule-8 empty state: muted icon + one-line invitation + an
+        action button where an action exists. When a search is active we
+        show the no-match variant without the Add-contact CTA (the action
+        wouldn't clear the filter)."""
+        holder = QWidget(self._rows_holder)
+        holder.setObjectName("EmptyState")
+        col = QVBoxLayout(holder)
+        col.setContentsMargins(24, 48, 24, 24)
+        col.setSpacing(10)
+        col.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+
+        icon = QLabel(holder)
+        icon.setObjectName("EmptyStateIcon")
+        icon.setPixmap(rail_icon("user", color="#9AA0B0", px=40).pixmap(40, 40))
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        col.addWidget(icon, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        # Title text kept exactly "No contacts yet." — pinned by
+        # tests/test_contacts_view.py::test_constructs_with_empty_store.
+        title = QLabel(
+            "No contacts match your search." if searching else "No contacts yet.",
+            holder,
+        )
+        title.setObjectName("ViewEmpty")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setWordWrap(True)
+        col.addWidget(title)
+
+        if not searching:
+            hint = QLabel("Add a contact to place calls in one tap.", holder)
+            hint.setObjectName("ViewHint")
+            hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            hint.setWordWrap(True)
+            col.addWidget(hint)
+
+            add_btn = QToolButton(holder)
+            add_btn.setObjectName("EmptyStateAction")
+            add_btn.setText("Add contact")
+            add_btn.setToolTip("Add a new contact")
+            add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            add_btn.clicked.connect(lambda: self._on_add_contact())
+            col.addWidget(add_btn, 0, Qt.AlignmentFlag.AlignHCenter)
+
+        return holder
 
     def _clear_rows(self) -> None:
         while self._rows_layout.count():

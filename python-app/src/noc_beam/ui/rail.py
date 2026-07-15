@@ -34,10 +34,10 @@ ICON_PX = 22
 
 # Indicator colours per level. None hides the dot (no overlay).
 _INDICATOR_COLOR = {
-    "ok":     "#66D19E",
-    "warn":   "#F0C36D",
-    "danger": "#FF5C7A",
-    "info":   "#7FD3FF",
+    "ok":     "#57C98B",
+    "warn":   "#E8B34B",
+    "danger": "#E0575B",
+    "info":   "#6FA8E8",
 }
 
 
@@ -116,7 +116,7 @@ class StatusPill(QFrame):
 
         self._registered = 0
         self._total = 0
-        self._dot_color = QColor("#7C8696")  # neutral when nothing's registered
+        self._dot_color = QColor("#7C889E")  # neutral when nothing's registered
 
         self.counter = QLabel("0/0")
         self.counter.setObjectName("RailCounter")
@@ -143,13 +143,13 @@ class StatusPill(QFrame):
         self._total = total
         self.counter.setText(f"{registered}/{total}")
         if total == 0:
-            self._dot_color = QColor("#7C8696")
+            self._dot_color = QColor("#7C889E")
         elif registered == total:
-            self._dot_color = QColor("#66D19E")  # all green
+            self._dot_color = QColor("#57C98B")  # all green
         elif registered == 0:
-            self._dot_color = QColor("#FF5C7A")  # none — danger
+            self._dot_color = QColor("#E0575B")  # none — danger
         else:
-            self._dot_color = QColor("#F0C36D")  # partial — warning
+            self._dot_color = QColor("#E8B34B")  # partial — warning
         self.update()
 
     def show_message(self, text: str, ms: int = 0) -> None:
