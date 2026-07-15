@@ -2739,6 +2739,21 @@ QToolButton#EmptyStateAction {
 QToolButton#EmptyStateAction:hover   { background-color: #6C7EE8; border-color: #6C7EE8; }
 QToolButton#EmptyStateAction:pressed { background-color: #4A5BC9; border-color: #4A5BC9; }
 
+
+/* Recents (Dial-tab) ghost redial icon: quiet, hover-revealed; replaces
+   the old filled RecentsCallBtn pill (calm-row treatment, brief rule). */
+QToolButton#RecentsRowCall {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 2px;
+}
+QToolButton#RecentsRowCall:hover {
+    background-color: #EEF0FC;
+    border-color: #5B6EE0;
+}
+QToolButton#RecentsRowCall:pressed { background-color: #E9EBF2; }
+
 /* ===== SECTION: CALLS ===== */
 
 /* ------------------------------------------------------------------

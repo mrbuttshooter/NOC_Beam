@@ -1888,7 +1888,11 @@ class PhoneShell(QMainWindow):
         )
         if not has_confirmed:
             self._select_call(call_id)
-        self.call_widget.show_incoming(call_id, remote)
+        # Feed the hero card context line even when another confirmed call
+        # kept audio focus (so _select_call above was skipped).
+        _rec = self.calls.get(call_id)
+        _supp = getattr(_rec, "supplier_label", "") if _rec is not None else ""
+        self.call_widget.show_incoming(call_id, remote, account=label, supplier=_supp or "")
         self.bottom_tabs.select(int(Tab.DIALPAD))
         if not self.isVisible() and self.tray.available:
             self.tray.notify("Incoming call", f"{remote or 'Unknown caller'}  *  via {label}")
@@ -2176,10 +2180,16 @@ class PhoneShell(QMainWindow):
                 pass
             return
         self.call_widget.setVisible(True)
+        # Feed the hero card's "via <account> · <supplier>" context line
+        # from the CallRecord labels. The card hides the line when both are
+        # empty, so this is safe for records that carry no supplier.
+        _acct = getattr(rec, "account_label", "") or ""
+        _supp = getattr(rec, "supplier_label", "") or ""
         if rec.direction == "in" and rec.state == CallState.INCOMING:
-            self.call_widget.show_incoming(call_id, rec.remote_uri)
+            self.call_widget.show_incoming(call_id, rec.remote_uri, account=_acct, supplier=_supp)
         else:
-            self.call_widget.show_outgoing(call_id, rec.remote_uri or "...")
+            self.call_widget.show_outgoing(call_id, rec.remote_uri or "...", account=_acct, supplier=_supp)
+        self.call_widget.set_context(_acct, _supp)
         self.call_widget.update_state(rec.state.value, rec.last_code, rec.last_reason)
         if rec.codec:
             self.call_widget.update_media(rec.codec, rec.clock_rate, rec.channels)
@@ -2262,10 +2272,13 @@ class PhoneShell(QMainWindow):
             try:
                 last_peer = self._last_call_peer.get(call_id, "")
                 if rec.remote_uri and rec.remote_uri != last_peer:
+                    _acct = getattr(rec, "account_label", "") or ""
+                    _supp = getattr(rec, "supplier_label", "") or ""
                     if rec.direction == "in" and rec.state == CallState.INCOMING:
-                        self.call_widget.show_incoming(call_id, rec.remote_uri)
+                        self.call_widget.show_incoming(call_id, rec.remote_uri, account=_acct, supplier=_supp)
                     else:
-                        self.call_widget.show_outgoing(call_id, rec.remote_uri)
+                        self.call_widget.show_outgoing(call_id, rec.remote_uri, account=_acct, supplier=_supp)
+                    self.call_widget.set_context(_acct, _supp)
                     self._last_call_peer[call_id] = rec.remote_uri
             except Exception:
                 pass

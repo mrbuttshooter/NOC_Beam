@@ -130,7 +130,13 @@ class _DialTarget:
 # --- widgets -----------------------------------------------------------
 
 class RecentsRow(QFrame):
-    """One row matching mockup panel 1: arrow / peer / chip / time / phone."""
+    """One calm recents row: arrow / peer / chip / time / ghost redial icon.
+
+    The WHOLE ROW is the redial affordance (double-click OR Enter), matching
+    History (agent-calls' history_view.py). The per-row control is a quiet
+    ghost phone icon shown only on hover -- the old filled green pill button
+    is gone (brief rule: delete the repeated filled call circles).
+    """
 
     activated = Signal(str)
 
@@ -140,6 +146,8 @@ class RecentsRow(QFrame):
         self.setObjectName("RecentsRow")
         self.setProperty("level", target.arrow_level)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Keyboard-focusable so Enter can redial the row (whole-row affordance).
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(38)
         # See DenseListRow / HistoryRow notes: QFrame's QSS background
@@ -177,14 +185,18 @@ class RecentsRow(QFrame):
         ts = QLabel(target.time_text, self)
         ts.setObjectName("RecentsTime")
 
-        # Green pill call button (right-most)
-        call_btn = QToolButton(self)
-        call_btn.setObjectName("RecentsCallBtn")
-        call_btn.setText("☎")  # ☎ telephone glyph
-        call_btn.setFixedSize(QSize(28, 28))
-        call_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        call_btn.setToolTip(f"Call {target.uri}")
-        call_btn.clicked.connect(lambda: self.activated.emit(self._target.uri))
+        # Ghost phone icon (right-most): a quiet, explicit click target shown
+        # only on hover. Replaces the old filled green pill; the row itself is
+        # the primary redial affordance.
+        self._call_btn = QToolButton(self)
+        self._call_btn.setObjectName("RecentsRowCall")
+        self._call_btn.setIcon(_rail_icon("calls", color="#6A6A75", px=16))
+        self._call_btn.setIconSize(QSize(16, 16))
+        self._call_btn.setFixedSize(QSize(28, 28))
+        self._call_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._call_btn.setToolTip(f"Call {target.uri}")
+        self._call_btn.clicked.connect(lambda: self.activated.emit(self._target.uri))
+        self._call_btn.setVisible(False)  # hover reveals it
 
         row = QHBoxLayout(self)
         # contentsMargins=0 so QSS hover bg covers the full row;
@@ -195,12 +207,32 @@ class RecentsRow(QFrame):
         row.addWidget(peer, 1, Qt.AlignmentFlag.AlignVCenter)
         row.addWidget(chip, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addWidget(ts, 0, Qt.AlignmentFlag.AlignVCenter)
-        row.addWidget(call_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(self._call_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-    def mousePressEvent(self, event):  # noqa: N802, ANN001
-        if event.button() == Qt.MouseButton.LeftButton:
+    def enterEvent(self, event):  # noqa: N802, ANN001
+        # Reveal the quiet ghost redial icon while hovering.
+        self._call_btn.setVisible(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):  # noqa: N802, ANN001
+        self._call_btn.setVisible(False)
+        super().leaveEvent(event)
+
+    def keyPressEvent(self, event):  # noqa: N802, ANN001
+        # Enter / Return on a focused row redials it (whole-row affordance).
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self.activated.emit(self._target.uri)
-        super().mousePressEvent(event)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):  # noqa: N802, ANN001
+        # Double-click redials (Bria/History parity). Ignore when the click
+        # landed on the ghost call button (its own clicked handler fires).
+        if event.button() == Qt.MouseButton.LeftButton and \
+                self.childAt(event.pos()) is not self._call_btn:
+            self.activated.emit(self._target.uri)
+        super().mouseDoubleClickEvent(event)
 
 
 class QuickDialStrip(QFrame):

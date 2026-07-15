@@ -715,7 +715,10 @@ def test_phone_shell_settings_apply_theme_live(
     try:
         shell._on_settings()
 
-        assert applied == [(True, "light")]
+        # Dark is the redesign default (AppearanceSettings.theme now defaults
+        # to "dark"), so a settings-apply with no explicit theme change
+        # re-applies "dark".
+        assert applied == [(True, "dark")]
         assert shell.settings.appearance.high_contrast is True
         assert shell.settings.appearance.reduced_motion is True
     finally:
