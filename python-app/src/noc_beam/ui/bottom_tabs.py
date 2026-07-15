@@ -93,13 +93,54 @@ class BottomTabs(QFrame):
         self._group.idClicked.connect(self._on_id_clicked)
         self._buttons[int(Tab.DIALPAD)].setChecked(True)
 
+        # Visual 2.0 motion: the active indicator is a small accent bar
+        # that SLIDES between tabs (animated geometry) instead of the old
+        # static per-button border-top. Free-floating child (no layout).
+        self._active_id = int(Tab.DIALPAD)
+        self._indicator = QFrame(self)
+        self._indicator.setObjectName("TabIndicator")
+        self._indicator.setFixedHeight(3)
+        self._indicator.raise_()
+
+    def _indicator_rect(self, tab_id: int):
+        from PySide6.QtCore import QRect
+
+        btn = self._buttons.get(int(tab_id))
+        if btn is None:
+            return QRect(0, 0, 0, 3)
+        w = min(max(btn.width() - 36, 28), 48)
+        x = btn.x() + (btn.width() - w) // 2
+        return QRect(x, 0, w, 3)
+
+    def _move_indicator(self, tab_id: int, animate: bool = True) -> None:
+        rect = self._indicator_rect(tab_id)
+        if rect.width() <= 0:
+            return
+        if animate:
+            from noc_beam.ui import motion
+            motion.slide_geometry(self._indicator, rect, 180)
+        else:
+            self._indicator.setGeometry(rect)
+
+    def showEvent(self, event) -> None:  # noqa: N802, ANN001
+        super().showEvent(event)
+        self._move_indicator(self._active_id, animate=False)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802, ANN001
+        super().resizeEvent(event)
+        self._move_indicator(self._active_id, animate=False)
+
     def _on_id_clicked(self, tab_id: int) -> None:
+        self._active_id = int(tab_id)
+        self._move_indicator(tab_id)
         self.tab_changed.emit(tab_id)
 
     def select(self, tab: int) -> None:
         btn = self._buttons.get(int(tab))
         if btn is not None and not btn.isChecked():
             btn.setChecked(True)
+            self._active_id = int(tab)
+            self._move_indicator(int(tab))
             self.tab_changed.emit(int(tab))
 
     def set_badge(self, tab: int, count: int) -> None:

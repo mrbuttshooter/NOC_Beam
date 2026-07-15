@@ -59,6 +59,17 @@ class _KeyButton(QPushButton):
             self.setAccessibleDescription(f"Dialpad key {digit}, letters {caption}")
         else:
             self.setAccessibleDescription(f"Dialpad key {digit}")
+        # Visual 2.0 motion: quick opacity dip on press. Decoration only --
+        # the DTMF/dial signal path does not depend on it.
+        self.pressed.connect(self._press_flash)
+
+    def _press_flash(self) -> None:
+        try:
+            from noc_beam.ui import motion
+
+            motion.press_flash(self)
+        except Exception:
+            pass
 
     def sizeHint(self) -> QSize:  # noqa: N802
         # Visual 2.0: keys are proper tiles (brief: 52-56px tall) so the

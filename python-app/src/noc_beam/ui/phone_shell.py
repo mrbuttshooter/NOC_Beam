@@ -753,7 +753,7 @@ class PhoneShell(QMainWindow):
         # Zoiper / Linphone don't surface packet trace inline.
 
         self.bottom_tabs = BottomTabs(self)
-        self.bottom_tabs.tab_changed.connect(self.stack.setCurrentIndex)
+        self.bottom_tabs.tab_changed.connect(self._switch_tab)
         # Missed-call badge: history view announces the unread missed
         # count whenever it reloads; clicking the History tab marks
         # everything seen and clears the badge.
@@ -844,6 +844,18 @@ class PhoneShell(QMainWindow):
         except Exception:
             log.exception("Post-startup supplier re-fire failed")
 
+    def _switch_tab(self, index: int) -> None:
+        """Tab switch with a Visual 2.0 crossfade. The switch itself happens
+        first and unconditionally -- motion is decoration and must never
+        gate navigation."""
+        self.stack.setCurrentIndex(int(index))
+        try:
+            from noc_beam.ui import motion
+
+            motion.fade_in(self.stack.currentWidget(), motion.DUR_FAST)
+        except Exception:
+            pass
+
     def _set_status(self, text, level="muted", link_text="", link_action="",
                      transient: bool = False):
         # Prepend a coloured dot glyph so the registration / endpoint
@@ -901,6 +913,24 @@ class PhoneShell(QMainWindow):
             self._status_revert_timer.timeout.connect(self._revert_status_to_baseline)
         if transient:
             self._status_revert_timer.start(3000)
+        # Visual 2.0 motion: (a) the banner slides in when it ESCALATES to
+        # warn/danger (steady-state and de-escalations stay still so the
+        # strip never nags); (b) the account chip breathes while a
+        # registration attempt is in flight ("Registering" /
+        # "Re-registering" status text), and stops on any other status.
+        try:
+            from noc_beam.ui import motion
+
+            prev = getattr(self, "_last_banner_level", "muted")
+            if level in ("warn", "danger") and prev not in ("warn", "danger"):
+                motion.slide_fade_in(self.banner, dy=-8)
+            self._last_banner_level = level
+            if "egistering" in str(text):
+                motion.pulse(self.account_chip)
+            else:
+                motion.stop_pulse(self.account_chip)
+        except Exception:
+            pass
 
     def _revert_status_to_baseline(self) -> None:
         """Recompute the steady-state status banner: registered account

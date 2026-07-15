@@ -374,6 +374,12 @@ class CallWidget(QWidget):
         self.call_id = -1
         self._set_peer("", "")
         self.set_context("", "")
+        try:
+            from noc_beam.ui import motion
+
+            motion.stop_pulse(self.state_label)
+        except Exception:
+            pass
         self.state_label.setText("")
         self.state_label.setVisible(False)
         self.duration_label.setText("")
@@ -420,6 +426,8 @@ class CallWidget(QWidget):
         self.hold_btn.setEnabled(False)
         self.transfer_btn.setEnabled(False)
         self._set_state("outgoing")
+        if is_new_call:
+            self._entrance()
 
     def show_incoming(
         self,
@@ -428,6 +436,7 @@ class CallWidget(QWidget):
         account: str = "",
         supplier: str = "",
     ) -> None:
+        is_new_call = self.call_id != call_id
         self.call_id = call_id
         headline, sub = _split_peer(remote)
         self._set_peer(headline or remote, sub)
@@ -446,6 +455,17 @@ class CallWidget(QWidget):
         self.hold_btn.setEnabled(False)
         self.mute_btn.setEnabled(False)
         self._set_state("incoming")
+        if is_new_call:
+            self._entrance()
+
+    def _entrance(self) -> None:
+        """Visual 2.0: hero card entrance -- fade + slide-up into place."""
+        try:
+            from noc_beam.ui import motion
+
+            motion.slide_fade_in(self, dy=10, duration=motion.DUR_SLOW)
+        except Exception:
+            pass
 
     def update_state(self, state_name: str, code: int, reason: str) -> None:
         if state_name == "CALLING":
@@ -463,6 +483,17 @@ class CallWidget(QWidget):
         else:
             pill = state_name.title()
         self.state_label.setText(pill)
+        # Visual 2.0 motion: the chip breathes while the call is ringing
+        # (either direction) and settles the moment it connects or ends.
+        try:
+            from noc_beam.ui import motion
+
+            if state_name in ("CALLING", "EARLY", "INCOMING"):
+                motion.pulse(self.state_label)
+            else:
+                motion.stop_pulse(self.state_label)
+        except Exception:
+            pass
         self._on_hold = state_name == "HELD"
         self.hold_btn.setToolTip("Resume call" if self._on_hold else "Hold call")
         self.hold_btn.setText("Resume" if self._on_hold else "Hold")
