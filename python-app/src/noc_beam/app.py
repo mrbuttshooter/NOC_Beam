@@ -253,6 +253,34 @@ def run(argv: list[str]) -> int:
     theme = getattr(settings.appearance, "theme", "dark")
     apply_theme(app, settings.appearance.high_contrast, theme=theme)
 
+    # Dark native title bars. QSS can't reach the native Windows chrome, so
+    # in dark mode every window (main, Settings, Accounts, trace, runner...)
+    # would sit under a glaring white DWM title bar. A single app-wide event
+    # filter stamps DWMWA_USE_IMMERSIVE_DARK_MODE on each top-level widget at
+    # Show time -- centralized here so no individual view needs to know about
+    # DWM. The theme is re-read from persisted settings on every Show, so
+    # dialogs opened after a runtime theme switch get the right chrome.
+    # Known limitation: windows already on screen when the theme changes keep
+    # their old bar color until re-shown/recreated.
+    try:
+        from noc_beam.ui.native_chrome import DarkTitleBarFilter
+
+        def _current_theme() -> str:
+            # Re-read settings each time: cheap (Show events are rare) and
+            # always fresh after a runtime theme change. Fall back to the
+            # startup theme if the store read fails mid-session.
+            try:
+                s = load_settings()
+                return getattr(s.appearance, "theme", "dark")
+            except Exception:
+                return theme
+
+        _dark_chrome_filter = DarkTitleBarFilter(_current_theme, parent=app)
+        app.installEventFilter(_dark_chrome_filter)
+    except Exception:
+        # Cosmetic feature -- a white title bar is ugly, not fatal.
+        log.exception("Could not install dark-title-bar filter")
+
     # FAS detection engine. The audio tap is wired per-call in
     # sip/call.py:onCallMediaState; this just spins up the worker
     # thread so it's ready when the first call confirms. Honours
