@@ -48,7 +48,12 @@ class SupplierDropdown(QWidget):
         self._line.setObjectName("SupplierDropdownLine")
         self._button = QToolButton(self)
         self._button.setObjectName("SupplierDropdownButton")
-        self._button.setText("v")
+        # No text: the chevron glyph is drawn by QSS (image: url(arrow-down
+        # SVG), auto-swapped to the light variant in dark mode). The old
+        # literal letter "v" read as a stray character next to the combo.
+        self._button.setText("")
+        self._button.setToolTip("Show suppliers")
+        self._button.setAccessibleName("Show supplier list")
         self._button.setCursor(Qt.CursorShape.PointingHandCursor)
         self._button.setAutoRaise(True)
 

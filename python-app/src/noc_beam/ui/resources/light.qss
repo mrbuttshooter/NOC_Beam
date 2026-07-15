@@ -2754,6 +2754,44 @@ QToolButton#RecentsRowCall:hover {
 }
 QToolButton#RecentsRowCall:pressed { background-color: #E9EBF2; }
 
+
+/* Supplier dropdown chevron: real arrow glyph instead of the literal
+   letter "v". __ARROW_DOWN__ swaps to the light SVG in dark mode. */
+QToolButton#SupplierDropdownButton {
+    image: url(__ARROW_DOWN__);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    min-width: 22px;
+    min-height: 22px;
+    padding: 5px;
+}
+QToolButton#SupplierDropdownButton:hover {
+    background-color: #E9EBF2;
+    border-color: #D5D9E4;
+}
+QToolButton#SupplierDropdownButton:pressed { background-color: #EEF0FC; }
+
+/* Dialpad keys: raised tiles instead of bare digits floating on the
+   window bg. Later-rule override of the transparent base above; the
+   LIGHT_TO_DARK map derives the dark tile (#2A3346 / #323A4A) from
+   these light hexes automatically. */
+QWidget#DialPad QPushButton#DialPadButton {
+    background-color: #FFFFFF;
+    border: 1px solid #E5E7EE;
+    border-radius: 8px;
+    min-height: 40px;
+    max-height: 48px;
+}
+QWidget#DialPad QPushButton#DialPadButton:hover {
+    background-color: #E9EBF2;
+    border-color: #D5D9E4;
+}
+QWidget#DialPad QPushButton#DialPadButton:pressed {
+    background-color: #EEF0FC;
+    border-color: #5B6EE0;
+}
+
 /* ===== SECTION: CALLS ===== */
 
 /* ------------------------------------------------------------------

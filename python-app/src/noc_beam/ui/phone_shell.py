@@ -445,8 +445,8 @@ class PhoneShell(QMainWindow):
         # while typing without changing the active supplier until the
         # user explicitly commits.
         from noc_beam.ui.supplier_dropdown import SupplierDropdown
-        supp_row = QHBoxLayout(); supp_row.setContentsMargins(0, 4, 0, 0); supp_row.setSpacing(8)
-        self.supplier_kicker = QLabel("SUPPLIER", top)
+        supp_row = QHBoxLayout(); supp_row.setContentsMargins(0, 2, 0, 0); supp_row.setSpacing(8)
+        self.supplier_kicker = QLabel("Supplier", top)
         self.supplier_kicker.setObjectName("AccountKicker")
         self.supplier_combo = SupplierDropdown(top)
         self.supplier_combo.setObjectName("SupplierCombo")
@@ -1107,9 +1107,13 @@ class PhoneShell(QMainWindow):
             self._active_supplier_id = self.supplier_combo.itemData(0) or ""
         self.supplier_combo.blockSignals(False)
         self.supplier_row_widget.setVisible(True)
-        # Refresh kicker label to show which kind of routing applies.
-        self.supplier_kicker.setText(
-            "SUPPLIER (auth)" if kind == "teles" else "SUPPLIER (prefix)"
+        # Sentence-case label matching the status strip's muted-label style;
+        # the routing kind (auth vs prefix) moves into the tooltip so the row
+        # reads as part of the compact strip, not a second shouting header.
+        self.supplier_kicker.setText("Supplier")
+        self.supplier_kicker.setToolTip(
+            "Auth-based supplier routing" if kind == "teles"
+            else "Prefix-based supplier routing"
         )
         # If a Teles account has a routing template such as U{id}, selecting
         # or restoring the supplier must immediately materialise the account
