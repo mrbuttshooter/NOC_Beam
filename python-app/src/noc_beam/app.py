@@ -176,13 +176,11 @@ def run(argv: list[str]) -> int:
     # level QWidget shown during the session so we can identify any
     # stray window that surfaces as its own NOC_Beam taskbar entry:
     #     [ORPHAN-WINDOW] <ClassName> title='<title>' parent=<None|...>
-    # Force-on for the current debug rollout (was env-var-gated). Once
-    # the orphan is identified and patched, drop this block or revert
-    # to the env-var gate. Cost is one event filter on the Qt event
-    # loop + a one-shot warning per top-level widget — not a per-frame
-    # hit.
-    if True:  # set to False to disable; was: os.environ.get("NOC_BEAM_DEBUG_ORPHANS") == "1"
-        import os  # kept inside the block so the env-var gate is trivial to restore
+    # Back to env-var-gated for release builds (the force-on debug rollout
+    # served its purpose; the redesign review flagged shipping it enabled).
+    # Set NOC_BEAM_DEBUG_ORPHANS=1 to re-arm when chasing a stray window.
+    import os
+    if os.environ.get("NOC_BEAM_DEBUG_ORPHANS") == "1":
         from PySide6.QtCore import QEvent, QObject
         from PySide6.QtWidgets import QWidget
 
