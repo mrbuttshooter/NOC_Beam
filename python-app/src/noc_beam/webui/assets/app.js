@@ -261,6 +261,9 @@ function openSupplierMenu() {
 // ==========================================================================
 // History/Contacts/Favorites live as in-app tabs now (phase 2); the menu
 // keeps the full Qt windows as escape hatches (bulk ops / add-edit dialogs).
+// BUILD_TAG renders as a muted footer in the menu — bump it on every shipped
+// zip so "which build am I on?" is answerable in two clicks.
+const BUILD_TAG = "build 2026-07-16.2";
 const APP_MENU = [
   ["Settings", "settings"],
   ["Accounts", "accounts"],
@@ -284,6 +287,8 @@ function openAppMenu() {
     item.addEventListener("click", () => { if (bridge) bridge.open_window(target); closeMenus(); });
     menu.appendChild(item);
   }
+  menu.appendChild(el("div", "sep"));
+  menu.appendChild(el("div", "build-tag", BUILD_TAG));
   positionMenu(menu, $("btn-menu"), true);
 }
 
