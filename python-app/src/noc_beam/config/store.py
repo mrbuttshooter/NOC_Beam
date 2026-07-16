@@ -262,6 +262,17 @@ class AppearanceSettings:
     # both are kept "dark" so saved settings and defaults stay consistent.
     theme: str = "dark"
 
+    def __post_init__(self) -> None:
+        # Owner feedback 2026-07-16.3: the light theme was retired as a
+        # user-facing option (the app is the dark web shell; the Qt layer is
+        # clamped dark). Silently migrate any persisted "light" -> "dark" so
+        # an old settings.json loads dark instead of a now-unreachable state.
+        # The internal light.qss -> LIGHT_TO_DARK derivation machinery is
+        # untouched (light.qss is still the generative source of dark.qss);
+        # this only makes "light" unreachable as a runtime selection.
+        if self.theme == "light":
+            self.theme = "dark"
+
 
 @dataclass
 class StartupSettings:

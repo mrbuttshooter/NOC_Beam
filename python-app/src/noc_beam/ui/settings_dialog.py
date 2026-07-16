@@ -758,57 +758,11 @@ class SettingsDialog(QDialog):
         layout.addWidget(subtitle)
 
         # --- Appearance card -----------------------------------------
-        appearance_card = QFrame()
-        appearance_card.setObjectName("SettingsCard")
-        a_l = QVBoxLayout(appearance_card)
-        a_l.setContentsMargins(18, 16, 18, 16)
-        a_l.setSpacing(8)
-        a_label = QLabel("APPEARANCE")
-        a_label.setObjectName("SettingsCardLabel")
-        a_l.addWidget(a_label)
-        # Promote the theme picker here so the user sees it on General.
-        # The dedicated Appearance pane still has it (same widget).
-        self._general_theme_combo = QComboBox()
-        self._general_theme_combo.addItem("Light", "light")
-        self._general_theme_combo.addItem("Dark", "dark")
-        # Mirror current selection from the main theme_combo.
-        try:
-            current_theme = getattr(self._settings.appearance, "theme", "light")
-            idx = self._general_theme_combo.findData(current_theme)
-            if idx >= 0:
-                self._general_theme_combo.setCurrentIndex(idx)
-
-            # Sync the General combo's pick onto theme_combo via DATA,
-            # not display text. Appearance pane's theme_combo items are
-            # labeled "Light (Bria-style)" / "Dark (NOC dashboard)" so
-            # setCurrentText("Dark") used to fail silently -- which is
-            # why picking Dark in General never actually changed the
-            # theme.
-            def _sync_theme_to_appearance(text: str) -> None:
-                if not hasattr(self, "theme_combo"):
-                    return
-                # Map our label ("Light" / "Dark") -> data key.
-                data = self._general_theme_combo.currentData()
-                if not data:
-                    return
-                idx = self.theme_combo.findData(data)
-                if idx >= 0:
-                    self.theme_combo.setCurrentIndex(idx)
-            self._general_theme_combo.currentTextChanged.connect(_sync_theme_to_appearance)
-        except Exception:
-            pass
-        theme_row = QHBoxLayout()
-        theme_row.setContentsMargins(0, 0, 0, 0)
-        theme_lbl = QLabel("Theme")
-        theme_lbl.setObjectName("SettingsRowLabel")
-        theme_lbl.setMinimumWidth(140)
-        theme_row.addWidget(theme_lbl)
-        theme_row.addWidget(self._general_theme_combo, 1)
-        a_l.addLayout(theme_row)
-        a_hint = QLabel("Applied immediately — no restart needed.")
-        a_hint.setObjectName("SettingsRowHint")
-        a_l.addWidget(a_hint)
-        layout.addWidget(appearance_card)
+        # Owner feedback 2026-07-16.3: light theme retired as a user-facing
+        # option -- the app is the dark web shell, and the Qt layer is clamped
+        # dark regardless (PhoneShell._apply_accessibility_settings). The
+        # theme picker that used to live here is gone; accessibility toggles
+        # (high-contrast, reduce-motion) remain on the Appearance pane.
 
         # --- Startup card --------------------------------------------
         startup_card = QFrame()
@@ -1065,42 +1019,19 @@ class SettingsDialog(QDialog):
         title.setObjectName("SettingsTitle")
         outer.addWidget(title)
 
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItem("Light (Bria-style)", "light")
-        self.theme_combo.addItem("Dark (NOC dashboard)", "dark")
-        current_theme = getattr(self._settings.appearance, "theme", "light")
-        idx = self.theme_combo.findData(current_theme)
-        if idx >= 0:
-            self.theme_combo.setCurrentIndex(idx)
-        # Two-way sync with the General pane's mirror combo. Previously
-        # only General -> Appearance was wired, so picking Dark in
-        # Appearance left General's combo showing stale "Light" until
-        # next open. Round-trip the data key via findData so the
-        # display-label difference between the two combos doesn't
-        # break the match (Appearance has "Light (Bria-style)",
-        # General has "Light").
-        def _sync_back_to_general():
-            gen = getattr(self, "_general_theme_combo", None)
-            if gen is None:
-                return
-            data = self.theme_combo.currentData()
-            gidx = gen.findData(data)
-            if gidx >= 0 and gen.currentIndex() != gidx:
-                gen.blockSignals(True)
-                gen.setCurrentIndex(gidx)
-                gen.blockSignals(False)
-        self.theme_combo.currentIndexChanged.connect(
-            lambda _i: _sync_back_to_general()
-        )
-        theme_hint = QLabel("Applied immediately on Apply — no restart needed.")
-        theme_hint.setObjectName("ViewHint")
-        theme_hint.setWordWrap(True)
-
+        # Owner feedback 2026-07-16.3: the Light/Dark theme picker was removed
+        # from this pane. The app ships dark-only (the Qt layer is clamped dark
+        # beside the dark web shell), so a user-facing light option was dead
+        # weight that only invited a jarring half-light state. appearance.theme
+        # is now forced "dark" on save (see _collect_into) and any persisted
+        # "light" is silently migrated on load (AppearanceSettings.__post_init__).
+        # High-contrast + reduce-motion below stay -- they're accessibility
+        # toggles, not the light/dark switch.
         self.high_contrast_chk = QCheckBox("Use high-contrast theme")
         self.high_contrast_chk.setChecked(self._settings.appearance.high_contrast)
         hc_hint = QLabel(
-            "Pure-black background, white foreground/borders, yellow focus. "
-            "Overrides the theme picker above when enabled."
+            "Pure-black background, white foreground/borders, yellow focus "
+            "for maximum legibility."
         )
         hc_hint.setObjectName("ViewHint")
         hc_hint.setWordWrap(True)
@@ -1114,8 +1045,6 @@ class SettingsDialog(QDialog):
         form = QFormLayout()
         form.setSpacing(8)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        form.addRow("Theme", self.theme_combo)
-        form.addRow("", theme_hint)
         form.addRow("", self.high_contrast_chk)
         form.addRow("", hc_hint)
         form.addRow("", self.reduced_motion_chk)
@@ -1420,9 +1349,7 @@ class SettingsDialog(QDialog):
         try:
             self.high_contrast_chk.setChecked(defaults.appearance.high_contrast)
             self.reduced_motion_chk.setChecked(defaults.appearance.reduced_motion)
-            idx = self.theme_combo.findData(defaults.appearance.theme)
-            if idx >= 0:
-                self.theme_combo.setCurrentIndex(idx)
+            # Theme picker removed (owner feedback 2026-07-16.3): dark-only.
         except Exception:
             pass
         # Codecs -- repopulate the two drag-drop QListWidgets from the
@@ -1507,7 +1434,9 @@ class SettingsDialog(QDialog):
             pass
         settings.appearance.high_contrast = self.high_contrast_chk.isChecked()
         settings.appearance.reduced_motion = self.reduced_motion_chk.isChecked()
-        settings.appearance.theme = self.theme_combo.currentData() or "light"
+        # Owner feedback 2026-07-16.3: light removed as a user-facing option;
+        # the theme is forced dark on save (the picker is gone from the UI).
+        settings.appearance.theme = "dark"
 
         # Persist the three Startup checkboxes from the General pane.
         # Previously toggling them had zero effect because apply_to
