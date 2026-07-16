@@ -3290,3 +3290,17 @@ QLabel#RecentsChip  { font-size: 10px; border-radius: 9px; padding: 2px 9px; }
 QFrame#RecentsRow   { border-bottom: 1px solid #E5E7EE; }
 QFrame#RecentsRow:hover { background-color: #E9EBF2; border-radius: 8px; }
 QLabel#RecentsVoidGlyph { background: transparent; }
+
+/* ---- Owner round 5 (2026-07-16.5): aux-window density pass -------------- */
+/* Settings / SIP trace / Test runner recompacted to match the web app.
+   Appended last so these later rules win over the earlier per-window ones. */
+QListWidget#SettingsNav::item { padding: 6px 12px; }
+QLabel#SectionHeader { margin-top: 6px; }
+QPushButton#PrimaryAction, QPushButton#SecondaryAction {
+    min-height: 26px;
+    padding: 3px 14px;
+}
+QLabel#TraceMsgSummary, QLabel#TraceMsgTime, QLabel#TraceMsgDelta {
+    font-size: 11px;
+}
+QFrame#TraceMsgRow, QFrame#TraceDialogRow { padding: 1px 4px; }

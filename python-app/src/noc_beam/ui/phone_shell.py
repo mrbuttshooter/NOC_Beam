@@ -3578,7 +3578,8 @@ class PhoneShell(QMainWindow):
             from PySide6.QtWidgets import QMainWindow
             self._trace_window = QMainWindow(self)
             self._trace_window.setWindowTitle("NOC_Beam SIP trace")
-            self._trace_window.resize(900, 600)
+            # Owner round 5: compact default to match the web app's density.
+            self._trace_window.resize(760, 480)
             from noc_beam.ui.trace_view import TraceView
             self._popup_trace_view = TraceView(self._trace_window)
             self._trace_window.setCentralWidget(self._popup_trace_view)
@@ -3645,7 +3646,8 @@ class PhoneShell(QMainWindow):
             if isinstance(_geom, QByteArray) and not _geom.isEmpty():
                 self._test_runner_window.restoreGeometry(_geom)
             else:
-                self._test_runner_window.resize(1400, 860)
+                # Owner round 5: compact default; saved geometry still wins.
+                self._test_runner_window.resize(1000, 620)
             _orig_close = self._test_runner_window.closeEvent
             def _save_geom_on_close(ev, _w=self._test_runner_window, _orig=_orig_close):
                 try:

@@ -100,8 +100,10 @@ class TestRunnerView(QMainWindow):
         # destination rows, and a results table tall enough for ~15
         # streamed rows without scroll. Min stays modest so the window
         # works on smaller laptop displays.
-        self.resize(1280, 800)
-        self.setMinimumSize(900, 600)
+        # Owner round 5: compact default to match the web app's density;
+        # remembered geometry (QSettings, see phone_shell) still wins.
+        self.resize(1000, 620)
+        self.setMinimumSize(760, 480)
 
         self.callers_edit = _PasteAtEndTextEdit()
         self.callers_edit.setObjectName("TestRunnerPasteBox")

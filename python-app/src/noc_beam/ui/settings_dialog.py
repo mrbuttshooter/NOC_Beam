@@ -74,14 +74,15 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("SettingsDialog")
         self.setWindowTitle("Settings")
-        self.resize(720, 540)
+        # Owner round 5: compact default to match the web app's density.
+        self.resize(620, 470)
         self._settings = settings
         self._account = account
 
         # ---- Left sidebar nav ----------------------------------------
         self._nav = QListWidget(self)
         self._nav.setObjectName("SettingsNav")
-        self._nav.setFixedWidth(180)
+        self._nav.setFixedWidth(150)
         self._nav.setSpacing(0)
         self._nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         for label in self.NAV_ITEMS:
@@ -132,7 +133,7 @@ class SettingsDialog(QDialog):
         apply_btn = QPushButton("Apply")
         apply_btn.setObjectName("PrimaryAction")
         for b in (reset_btn, ok_btn, cancel_btn, apply_btn):
-            b.setMinimumHeight(34)
+            b.setMinimumHeight(28)
 
         ok_btn.clicked.connect(self.accept)
         cancel_btn.clicked.connect(self.reject)
@@ -1196,7 +1197,7 @@ class SettingsDialog(QDialog):
         # (was an orange/indigo PrimaryAction competing with Apply).
         test_btn = QPushButton("Test Register")
         test_btn.setObjectName("SecondaryAction")
-        test_btn.setMinimumHeight(32)
+        test_btn.setMinimumHeight(28)
         # Wired: emit test_register_requested so the host can route
         # through the same flow the standalone AccountDialog uses.
         # Previously the button existed but was a dead control with

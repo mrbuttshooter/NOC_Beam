@@ -120,10 +120,12 @@ let lastLevels = { id: -1, rx: 0, tx: 0 };
 function paintLevels() {
   const clamp = (v) => Math.max(0, Math.min(100, Number(v) || 0));
   const live = state.calls.length > 0 && lastLevels.id !== -1;
+  // Fills read --lvl so the same value drives height (vertical rails
+  // beside the pad) or width (horizontal strip in multi-call compact mode).
   const rx = $("vfill-rx");
   const tx = $("vfill-tx");
-  if (rx) rx.style.height = (live ? clamp(lastLevels.rx) : 0) + "%";
-  if (tx) tx.style.height = (live ? clamp(lastLevels.tx) : 0) + "%";
+  if (rx) rx.style.setProperty("--lvl", (live ? clamp(lastLevels.rx) : 0) + "%");
+  if (tx) tx.style.setProperty("--lvl", (live ? clamp(lastLevels.tx) : 0) + "%");
 }
 
 // ---- Key tones ("old Nokia" feel; owner feedback 2026-07-16.4) ------------
@@ -241,7 +243,9 @@ function renderCalls(calls) {
   const multi = calls.length > 1;
   // Owner design decision: 2+ active calls hide the MAIN dialpad entirely
   // to make room for the stack; each card carries its own compact pad.
-  $("pad-row").hidden = multi;
+  // Owner round 5: with 2+ calls only the PAD disappears -- the RX/TX
+  // meters stay, collapsing into a slim horizontal strip (CSS .compact).
+  $("pad-row").classList.toggle("compact", multi);
   for (const c of calls) box.appendChild(buildCard(c, multi));
   // Restore current meter levels onto the freshly built cards so a state
   // re-render doesn't blank the bars until the next level push.
@@ -374,7 +378,7 @@ function filterMenu(menu, query) {
 // keeps the full Qt windows as escape hatches (bulk ops / add-edit dialogs).
 // BUILD_TAG renders as a muted footer in the menu — bump it on every shipped
 // zip so "which build am I on?" is answerable in two clicks.
-const BUILD_TAG = "build 2026-07-16.4";
+const BUILD_TAG = "build 2026-07-16.5";
 const APP_MENU = [
   ["Settings", "settings"],
   ["Accounts", "accounts"],

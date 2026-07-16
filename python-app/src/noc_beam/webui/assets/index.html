@@ -209,10 +209,19 @@
                     background: var(--raised); overflow: hidden;
                     display: flex; flex-direction: column;
                     justify-content: flex-end; }
-  .vmeter .vfill { width: 100%; height: 0%; border-radius: 2px;
-                   transition: height .12s linear; }
+  .vmeter .vfill { width: 100%; height: var(--lvl, 0%); border-radius: 2px;
+                   transition: height .12s linear, width .12s linear; }
   .vmeter.rx .vfill { background: var(--ok); }
   .vmeter.tx .vfill { background: var(--accent); }
+  /* Multi-call (owner round 5): the PAD hides but the meters stay -- the
+     row collapses into a slim horizontal strip: RX bar left, TX bar right. */
+  .pad-row.compact { gap: 12px; }
+  .pad-row.compact .pad { display: none; }
+  .pad-row.compact .vmeter { flex: 1; flex-direction: row; width: auto;
+                             gap: 6px; align-items: center; }
+  .pad-row.compact .vtrack { flex: 1; width: auto; height: 4px;
+                             flex-direction: row; justify-content: flex-start; }
+  .pad-row.compact .vfill { height: 100%; width: var(--lvl, 0%); }
 
   /* Phase-2 owner feedback: tighter keypad (~31px keys) so the default
      window drops to 360x560 and recents gain the freed space. */
