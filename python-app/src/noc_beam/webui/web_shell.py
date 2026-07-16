@@ -295,6 +295,20 @@ class WebShell(QMainWindow):
             win.resize(*size)
             win.setCentralWidget(view)
             setattr(self, attr, win)
+        # The hosted views come out of the hidden PhoneShell's QStackedWidget,
+        # where every non-current page is EXPLICITLY hidden (the stack calls
+        # hide() on them). setCentralWidget -> setParent PRESERVES that
+        # explicit-hidden flag, so without this show() the pop-out rendered a
+        # bare blank canvas (owner P0 bug, phase 3.1).
+        view.show()
+        # Fresh data on every open: with the shell hidden, none of the
+        # tab-switch/visibility paths that used to refresh these views fire.
+        reload_fn = getattr(view, "reload", None)
+        if callable(reload_fn):
+            try:
+                reload_fn()
+            except Exception:
+                log.exception("pop-out reload failed for %s", title)
         win.show()
         win.raise_()
         win.activateWindow()
