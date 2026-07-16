@@ -74,8 +74,11 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("SettingsDialog")
         self.setWindowTitle("Settings")
-        # Owner round 5: compact default to match the web app's density.
-        self.resize(620, 470)
+        # Owner round 5/6: compact default to match the web app's density.
+        # Round 6 recompacted each pane (tighter margins, side-by-side
+        # blocks); 660x500 fits the denser table/form panes without the
+        # initial min-size jump the 620x470 hint used to cause.
+        self.resize(660, 500)
         self._settings = settings
         self._account = account
 
@@ -210,18 +213,18 @@ class SettingsDialog(QDialog):
         w = QWidget()
         w.setObjectName("SettingsPane")
         layout = QVBoxLayout(w)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
+        # Density pass (owner 2026-07-16.6): margins 24/20->14/12, spacing
+        # 12->8, one-line blurb — the table gets the reclaimed height.
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
 
         title = QLabel("Suppliers / Carriers")
         title.setObjectName("SettingsTitle")
         layout.addWidget(title)
 
         blurb = QLabel(
-            "Shared list of carrier IDs and names. Each account's routing "
-            "format converts the ID into either an auth username (Teles) "
-            "or a dial prefix (Genband). Uncheck a supplier to hide it "
-            "from the dial-bar / Test Runner pickers without deleting it."
+            "Shared carrier list. Uncheck to hide from the dial-bar / Test "
+            "Runner pickers without deleting."
         )
         blurb.setObjectName("SettingsBlurb")
         blurb.setWordWrap(True)
@@ -425,19 +428,18 @@ class SettingsDialog(QDialog):
         w = QWidget()
         w.setObjectName("SettingsPane")
         layout = QVBoxLayout(w)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
+        # Density pass (owner 2026-07-16.6): margins 24/20->14/12, spacing
+        # 12->8, one-line blurb — the table gets the reclaimed height.
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
 
         title = QLabel("Destinations / Test Numbers")
         title.setObjectName("SettingsTitle")
         layout.addWidget(title)
 
         blurb = QLabel(
-            "Saved live test numbers organised by country and sale zone. "
-            "Picked in the Test Runner to skip manual paste. The seed "
-            "catalogue ships 1,400 zones with blank numbers — fill them "
-            "in here as you verify each route. Zones with no number stay "
-            "hidden from the Test Runner picker until populated."
+            "Live test numbers by country / zone, picked in the Test "
+            "Runner. Empty zones stay hidden from its picker until filled."
         )
         blurb.setObjectName("SettingsBlurb")
         blurb.setWordWrap(True)
@@ -501,6 +503,9 @@ class SettingsDialog(QDialog):
         def _attach_delete_button(row: int) -> None:
             btn = QPushButton("Delete")
             btn.setObjectName("DestRowDeleteBtn")
+            # Fixed compact width so ResizeToContents on the column can't
+            # squeeze the label down to "ele!" (clipped) as it did before.
+            btn.setFixedWidth(66)
 
             def _delete_this_row():
                 # Find the current row by walking the table — using a
@@ -654,17 +659,18 @@ class SettingsDialog(QDialog):
         w = QWidget()
         w.setObjectName("SettingsPane")
         layout = QVBoxLayout(w)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(16)
+        # Density pass (owner 2026-07-16.6): margins 24/20->14/12, section
+        # spacing 16->8, one-line blurb, retention spinboxes side-by-side.
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
 
         title = QLabel("False Answer Supervision")
         title.setObjectName("SettingsTitle")
         layout.addWidget(title)
 
         blurb = QLabel(
-            "Detects when a SIP supplier returns 200 OK but the audio is "
-            "fake -- silence, ringback, a looped recording, or hold music. "
-            "Verdicts appear as a badge on each call card and in History."
+            "Flags suppliers that return 200 OK over fake audio "
+            "(silence, ringback, a loop, hold music)."
         )
         blurb.setObjectName("SettingsBlurb")
         blurb.setWordWrap(True)
@@ -673,8 +679,8 @@ class SettingsDialog(QDialog):
         # ---- Enable + sensitivity -----------------------------------
         engine_box = QGroupBox("Engine")
         engine_form = QFormLayout(engine_box)
-        engine_form.setContentsMargins(12, 12, 12, 12)
-        engine_form.setSpacing(8)
+        engine_form.setContentsMargins(10, 8, 10, 8)
+        engine_form.setSpacing(6)
 
         self._fas_enabled = QCheckBox("Enable FAS detection")
         self._fas_enabled.setChecked(bool(fas.enabled))
@@ -693,8 +699,8 @@ class SettingsDialog(QDialog):
         # ---- Recording / retention -----------------------------------
         clips_box = QGroupBox("Audio clip retention")
         clips_form = QFormLayout(clips_box)
-        clips_form.setContentsMargins(12, 12, 12, 12)
-        clips_form.setSpacing(8)
+        clips_form.setContentsMargins(10, 8, 10, 8)
+        clips_form.setSpacing(6)
 
         self._fas_record_clips = QCheckBox(
             "Save short audio clips per analysed call for review"
@@ -706,22 +712,39 @@ class SettingsDialog(QDialog):
         self._fas_clip_count.setRange(0, 5000)
         self._fas_clip_count.setSingleStep(50)
         self._fas_clip_count.setValue(int(fas.clip_retention_count))
-        clips_form.addRow("Keep at most N clips:", self._fas_clip_count)
 
         self._fas_clip_mb = QSpinBox()
         self._fas_clip_mb.setRange(0, 50000)
         self._fas_clip_mb.setSingleStep(100)
         self._fas_clip_mb.setSuffix(" MB")
         self._fas_clip_mb.setValue(int(fas.clip_retention_mb))
-        clips_form.addRow("Total disk budget:", self._fas_clip_mb)
+
+        # Keep-count + disk-budget share one row (both short spinboxes).
+        retention_row = QHBoxLayout()
+        retention_row.setContentsMargins(0, 0, 0, 0)
+        retention_row.setSpacing(12)
+
+        def _retention_field(label_text: str, widget: QWidget) -> QVBoxLayout:
+            box = QVBoxLayout()
+            box.setContentsMargins(0, 0, 0, 0)
+            box.setSpacing(2)
+            lbl = QLabel(label_text)
+            lbl.setObjectName("SettingsRowLabel")
+            box.addWidget(lbl)
+            box.addWidget(widget)
+            return box
+
+        retention_row.addLayout(_retention_field("Keep at most N clips", self._fas_clip_count), 1)
+        retention_row.addLayout(_retention_field("Total disk budget", self._fas_clip_mb), 1)
+        clips_form.addRow(retention_row)
 
         layout.addWidget(clips_box)
 
         # ---- Automation hook ------------------------------------------
         auto_box = QGroupBox("Automation")
         auto_form = QFormLayout(auto_box)
-        auto_form.setContentsMargins(12, 12, 12, 12)
-        auto_form.setSpacing(8)
+        auto_form.setContentsMargins(10, 8, 10, 8)
+        auto_form.setSpacing(6)
 
         self._fas_auto_pause = QSpinBox()
         self._fas_auto_pause.setRange(0, 100)
@@ -745,15 +768,14 @@ class SettingsDialog(QDialog):
         w = QWidget()
         w.setObjectName("SettingsPane")
         layout = QVBoxLayout(w)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(16)
+        # Density pass (owner 2026-07-16.6): margins 24/20->14/12, spacing
+        # 16->8 to match the compact web UI. One-line subtitle.
+        layout.setContentsMargins(14, 12, 14, 12)
+        layout.setSpacing(8)
         title = QLabel("General")
         title.setObjectName("SettingsTitle")
         layout.addWidget(title)
-        subtitle = QLabel(
-            "App-wide preferences. Audio devices, codecs, theme, account "
-            "credentials, and advanced SIP settings live in their own panes."
-        )
+        subtitle = QLabel("App-wide preferences.")
         subtitle.setObjectName("SettingsSubtitle")
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
@@ -769,8 +791,8 @@ class SettingsDialog(QDialog):
         startup_card = QFrame()
         startup_card.setObjectName("SettingsCard")
         s_l = QVBoxLayout(startup_card)
-        s_l.setContentsMargins(18, 16, 18, 16)
-        s_l.setSpacing(6)
+        s_l.setContentsMargins(12, 10, 12, 10)
+        s_l.setSpacing(3)
         s_label = QLabel("STARTUP")
         s_label.setObjectName("SettingsCardLabel")
         s_l.addWidget(s_label)
@@ -798,8 +820,8 @@ class SettingsDialog(QDialog):
         about_card = QFrame()
         about_card.setObjectName("SettingsCard")
         ab_l = QVBoxLayout(about_card)
-        ab_l.setContentsMargins(18, 16, 18, 16)
-        ab_l.setSpacing(8)
+        ab_l.setContentsMargins(12, 10, 12, 10)
+        ab_l.setSpacing(4)
         ab_label = QLabel("ABOUT")
         ab_label.setObjectName("SettingsCardLabel")
         ab_l.addWidget(ab_label)
@@ -815,7 +837,7 @@ class SettingsDialog(QDialog):
         # Open log / data folder shortcuts -- one of the most-requested
         # NOC affordances per the audit.
         link_row = QHBoxLayout()
-        link_row.setContentsMargins(0, 4, 0, 0)
+        link_row.setContentsMargins(0, 2, 0, 0)
         link_row.setSpacing(12)
         open_data_btn = QPushButton("Open user data folder")
         open_data_btn.setObjectName("SettingsLinkBtn")
@@ -844,8 +866,10 @@ class SettingsDialog(QDialog):
         w = QWidget()
         w.setObjectName("SettingsPane")
         outer = QVBoxLayout(w)
-        outer.setContentsMargins(20, 18, 20, 18)
-        outer.setSpacing(10)
+        # Density pass (owner 2026-07-16.6): margins 20/18->14/12, spacing
+        # 10->8. Echo tail + Clock rate share one row (both short spinboxes).
+        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setSpacing(8)
         title = QLabel("Audio")
         title.setObjectName("SettingsTitle")
         outer.addWidget(title)
@@ -878,14 +902,32 @@ class SettingsDialog(QDialog):
         self.clock.setValue(self._settings.audio.clock_rate)
 
         form = QFormLayout()
-        form.setSpacing(8)
+        form.setSpacing(6)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.addRow("Microphone", self.in_combo)
         form.addRow("Speaker", self.out_combo)
         form.addRow("Ringer device", self.ring_combo)
-        form.addRow("Echo cancel tail", self.ec_tail)
-        form.addRow("Clock rate", self.clock)
         outer.addLayout(form)
+
+        # Echo cancel tail + Clock rate side-by-side (short spinboxes that
+        # wasted a full stacked row each before). Label-on-top mini fields.
+        def _mini_field(label_text: str, widget: QWidget) -> QVBoxLayout:
+            box = QVBoxLayout()
+            box.setContentsMargins(0, 0, 0, 0)
+            box.setSpacing(2)
+            lbl = QLabel(label_text)
+            lbl.setObjectName("SettingsRowLabel")
+            box.addWidget(lbl)
+            box.addWidget(widget)
+            return box
+
+        dsp_row = QHBoxLayout()
+        dsp_row.setContentsMargins(0, 2, 0, 0)
+        dsp_row.setSpacing(12)
+        dsp_row.addLayout(_mini_field("Echo cancel tail", self.ec_tail), 1)
+        dsp_row.addLayout(_mini_field("Clock rate", self.clock), 1)
+        dsp_row.addStretch(1)
+        outer.addLayout(dsp_row)
         outer.addStretch(1)
         return w
 
@@ -905,15 +947,17 @@ class SettingsDialog(QDialog):
         w = QWidget()
         w.setObjectName("SettingsPane")
         outer = QVBoxLayout(w)
-        outer.setContentsMargins(24, 20, 24, 20)
-        outer.setSpacing(12)
+        # Density pass (owner 2026-07-16.6): margins 24/20->14/12, spacing
+        # 12->8, one-line subtitle, tighter inter-column gap.
+        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setSpacing(8)
 
         title = QLabel("Codecs")
         title.setObjectName("SettingsTitle")
         outer.addWidget(title)
         subtitle = QLabel(
-            "Drag codecs between the two columns to enable/disable. "
-            "Drag inside ENABLED to reorder — top = highest priority."
+            "Drag between columns to enable/disable; drag inside ENABLED "
+            "to reorder (top = highest priority)."
         )
         subtitle.setObjectName("SettingsSubtitle")
         subtitle.setWordWrap(True)
@@ -922,7 +966,7 @@ class SettingsDialog(QDialog):
         # ---- two-column layout: ENABLED | DISABLED ----
         cols = QHBoxLayout()
         cols.setContentsMargins(0, 0, 0, 0)
-        cols.setSpacing(16)
+        cols.setSpacing(12)
 
         def _make_col(label_text: str) -> tuple[QFrame, QListWidget]:
             col = QFrame()
@@ -1014,8 +1058,9 @@ class SettingsDialog(QDialog):
         w = QWidget()
         w.setObjectName("SettingsPane")
         outer = QVBoxLayout(w)
-        outer.setContentsMargins(20, 18, 20, 18)
-        outer.setSpacing(10)
+        # Density pass (owner 2026-07-16.6): margins 20/18->14/12, spacing 10->8.
+        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setSpacing(8)
         title = QLabel("Appearance")
         title.setObjectName("SettingsTitle")
         outer.addWidget(title)
@@ -1044,7 +1089,7 @@ class SettingsDialog(QDialog):
         rm_hint.setWordWrap(True)
 
         form = QFormLayout()
-        form.setSpacing(8)
+        form.setSpacing(4)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.addRow("", self.high_contrast_chk)
         form.addRow("", hc_hint)
@@ -1064,8 +1109,10 @@ class SettingsDialog(QDialog):
         w = QWidget()
         w.setObjectName("SettingsPane")
         outer = QVBoxLayout(w)
-        outer.setContentsMargins(20, 18, 20, 18)
-        outer.setSpacing(10)
+        # Density pass (owner 2026-07-16.6): margins 20/18->14/12, spacing
+        # 10->8, Identity + Server side-by-side.
+        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setSpacing(8)
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
@@ -1092,32 +1139,45 @@ class SettingsDialog(QDialog):
             outer.addStretch(1)
             return w
 
-        # Identity
-        outer.addWidget(_section_label("IDENTITY"))
+        # Identity + Server side-by-side (both are short read-only forms
+        # that stacked into a tall column before). REGISTRATION stays
+        # full-width below the divider.
+        id_srv_row = QHBoxLayout()
+        id_srv_row.setContentsMargins(0, 0, 0, 0)
+        id_srv_row.setSpacing(20)
+
+        ident_col = QVBoxLayout()
+        ident_col.setContentsMargins(0, 0, 0, 0)
+        ident_col.setSpacing(4)
+        ident_col.addWidget(_section_label("IDENTITY"))
         ident = QFormLayout()
-        ident.setSpacing(6)
+        ident.setSpacing(4)
         ident.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         ident.addRow("Display Name", QLabel(self._account.display_name or "—"))
         ident.addRow("Username",     QLabel(self._account.username or "—"))
         ident.addRow("SIP URI",      QLabel(f"sip:{self._account.username}@{self._account.domain}"))
-        outer.addLayout(ident)
-        outer.addWidget(_hr())
+        ident_col.addLayout(ident)
+        id_srv_row.addLayout(ident_col, 1)
 
-        # Server
-        outer.addWidget(_section_label("SERVER"))
+        server_col = QVBoxLayout()
+        server_col.setContentsMargins(0, 0, 0, 0)
+        server_col.setSpacing(4)
+        server_col.addWidget(_section_label("SERVER"))
         server = QFormLayout()
-        server.setSpacing(6)
+        server.setSpacing(4)
         server.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         server.addRow("Domain / Host", QLabel(self._account.domain or "—"))
         server.addRow("SIP Port",      QLabel(str(self._settings.sip_port) if self._settings.sip_port else "ephemeral"))
         server.addRow("Transport",     QLabel(self._account.transport.upper() if self._account.transport else "UDP"))
-        outer.addLayout(server)
+        server_col.addLayout(server)
+        id_srv_row.addLayout(server_col, 1)
+        outer.addLayout(id_srv_row)
         outer.addWidget(_hr())
 
         # Registration
         outer.addWidget(_section_label("REGISTRATION"))
         reg = QFormLayout()
-        reg.setSpacing(6)
+        reg.setSpacing(4)
         reg.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         status_pill = QLabel("● Unknown")
         status_pill.setObjectName("SettingsRegPill")
@@ -1254,8 +1314,10 @@ class SettingsDialog(QDialog):
         w = QWidget()
         w.setObjectName("SettingsPane")
         outer = QVBoxLayout(w)
-        outer.setContentsMargins(20, 18, 20, 18)
-        outer.setSpacing(10)
+        # Density pass (owner 2026-07-16.6): margins 20/18->14/12, spacing
+        # 10->8, SIP port + Log level side-by-side.
+        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setSpacing(8)
         title = QLabel("Advanced")
         title.setObjectName("SettingsTitle")
         outer.addWidget(title)
@@ -1278,12 +1340,24 @@ class SettingsDialog(QDialog):
         trace_hint.setObjectName("SettingsRowHint")
         trace_hint.setWordWrap(True)
 
-        form = QFormLayout()
-        form.setSpacing(8)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        form.addRow("SIP port", self.sip_port)
-        form.addRow("Log level (0-6)", self.log_level)
-        outer.addLayout(form)
+        # SIP port + Log level side-by-side (both short spinboxes).
+        def _mini_field(label_text: str, widget: QWidget) -> QVBoxLayout:
+            box = QVBoxLayout()
+            box.setContentsMargins(0, 0, 0, 0)
+            box.setSpacing(2)
+            lbl = QLabel(label_text)
+            lbl.setObjectName("SettingsRowLabel")
+            box.addWidget(lbl)
+            box.addWidget(widget)
+            return box
+
+        net_row = QHBoxLayout()
+        net_row.setContentsMargins(0, 0, 0, 0)
+        net_row.setSpacing(12)
+        net_row.addLayout(_mini_field("SIP port", self.sip_port), 1)
+        net_row.addLayout(_mini_field("Log level (0-6)", self.log_level), 1)
+        net_row.addStretch(1)
+        outer.addLayout(net_row)
         outer.addWidget(self.trace_pii_redaction_chk)
         outer.addWidget(trace_hint)
         outer.addStretch(1)
