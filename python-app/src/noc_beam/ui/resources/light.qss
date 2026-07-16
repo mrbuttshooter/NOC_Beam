@@ -3304,3 +3304,41 @@ QLabel#TraceMsgSummary, QLabel#TraceMsgTime, QLabel#TraceMsgDelta {
     font-size: 11px;
 }
 QFrame#TraceMsgRow, QFrame#TraceDialogRow { padding: 1px 4px; }
+
+/* ---- Owner round 6 (2026-07-16.6): per-page recompaction --------------- */
+/* Each Settings pane + the Test Runner tabs were reworked for a denser,
+   better-organised internal layout (tighter margins, side-by-side blocks).
+   These rules trim the type scale + control heights to match. Appended last
+   so they win over the earlier per-window rules. */
+
+/* Settings pane type scale: smaller title + tighter blurbs reclaim the top
+   band that the 22px h1 + multi-line subtitle used to eat. */
+QLabel#SettingsTitle {
+    font-size: 18px;
+    padding-bottom: 0;
+}
+QLabel#SettingsSubtitle { font-size: 11px; padding-bottom: 2px; }
+QLabel#SettingsBlurb    { font-size: 11px; padding-bottom: 4px; }
+QFrame#SettingsCard QLabel#SettingsCardLabel { padding-bottom: 5px; margin-bottom: 3px; }
+QCheckBox#SettingsCheckbox { padding: 1px 0; }
+
+/* Settings inputs: the QDialog rule pins these to min-height 30 + 5px pad
+   (~40px tall). Inside a SettingsPane bring them down toward ~28px so the
+   Audio combos / spinboxes stop wasting a tall row each. */
+QWidget#SettingsPane QComboBox,
+QWidget#SettingsPane QSpinBox,
+QWidget#SettingsPane QLineEdit {
+    min-height: 24px;
+    padding: 3px 10px;
+}
+
+/* Test Runner config band: tighter inputs so the toolbar + routing strip
+   stops dominating over the results table. */
+QWidget#TestRunnerConfigurePage QComboBox,
+QWidget#TestRunnerConfigurePage QSpinBox {
+    min-height: 22px;
+    padding: 3px 8px;
+}
+/* Denser results rows (row height also dropped 36->30 in code). */
+QTableWidget#TestRunnerResults::item { padding: 5px 10px; }
+QTableWidget#TestRunnerResults QHeaderView::section { padding: 6px 10px; }

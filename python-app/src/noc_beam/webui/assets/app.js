@@ -378,7 +378,7 @@ function filterMenu(menu, query) {
 // keeps the full Qt windows as escape hatches (bulk ops / add-edit dialogs).
 // BUILD_TAG renders as a muted footer in the menu — bump it on every shipped
 // zip so "which build am I on?" is answerable in two clicks.
-const BUILD_TAG = "build 2026-07-16.5";
+const BUILD_TAG = "build 2026-07-16.6";
 const APP_MENU = [
   ["Settings", "settings"],
   ["Accounts", "accounts"],
