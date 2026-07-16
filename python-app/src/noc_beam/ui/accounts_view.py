@@ -96,12 +96,18 @@ def _badge(text: str, level: str = "neutral") -> QLabel:
 
 
 class AcctRow(QFrame):
-    """A 3-tier card row in the accounts master pane.
+    """A single tight line in the accounts pane (owner feedback 2026-07-16.3:
+    "one tight line per account").
 
-    Tier 1 (top row):  status dot + name + status text  ........  last-activity
-    Tier 2 (middle):   SIP URI (mono)
-    Tier 3 (bottom):   badges (transport, SRTP, auth, disabled)
-    Hover overlay:     Edit / Test / Disable / Delete action buttons (right)
+      [dot]  Name .................................  [Edit]  [Delete]
+
+    * The SIP URI moved to the row tooltip (was a second mono tier).
+    * Registration state is the dot colour + its tooltip (was a separate
+      status chip + a last-activity stamp + a badges tier).
+    * Edit + Delete are always-visible inline buttons; Test / Unregister /
+      Copy URI live in the right-click menu. Double-click = Edit.
+
+    The whole ~36 px row replaces the former 3-tier hover-action card.
     """
 
     clicked = Signal(str)
@@ -109,8 +115,7 @@ class AcctRow(QFrame):
     test_requested = Signal(str)
     toggle_enabled_requested = Signal(str)
     delete_requested = Signal(str)
-    # Owner feedback (phase 3.1 compact window): Unregister moves off the
-    # inline row into the right-click context menu.
+    # Unregister lives in the right-click context menu.
     unregister_requested = Signal(str)
 
     def __init__(self, account: AccountConfig, parent: QWidget | None = None) -> None:
@@ -120,120 +125,53 @@ class AcctRow(QFrame):
         self.account_id = account.id
         self._enabled = account.enabled
         self._last_activity_ts: float | None = None
-
         self.setProperty("state", "idle")
+        self.setFixedHeight(36)
 
-        # ---- Tier 1: status dot + name + status text + last-activity
+        # ---- Status dot (colour + tooltip carry registration state)
         self.dot = QLabel(self)
         self.dot.setPixmap(_status_dot_pixmap(STATUS_MUTED_LIGHT))
         self.dot.setFixedSize(10, 10)
+        self.dot.setToolTip("Unregistered")
 
-        # Prefer the UI nickname (`label`) so the NOC Accounts list
-        # shows the operator's chosen name; fall back to display_name
-        # (which carries the A-number in operator workflow), then to
-        # the SIP username.
+        # ---- Name (prefer the UI nickname; URI lives in the tooltip)
         display = (
             getattr(account, "label", "")
             or account.display_name
             or account.username
         )
+        self._uri_text = f"sip:{account.username}@{account.domain}"
         self.name = QLabel(display, self)
         self.name.setObjectName("AcctRowName")
+        self.name.setToolTip(self._uri_text)
+        self.name.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        # The row itself carries the URI tooltip too, so hovering anywhere
+        # (not just the name text) reveals it.
+        self.setToolTip(self._uri_text)
 
-        # Registration state renders as the unified dot + status chip
-        # (StatusPill) used everywhere else in the app — was a plain gray
-        # "Unregistered" text label with no chip treatment. Keep the
-        # StatusPill objectName so it picks up the shared chip QSS.
-        self.status_text = StatusPill("Unregistered", "muted", self)
-
-        self.last_activity = QLabel("never", self)
-        self.last_activity.setObjectName("AcctRowMeta")
-        self.last_activity.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-        )
-
-        tier1 = QHBoxLayout()
-        tier1.setContentsMargins(0, 0, 0, 0)
-        tier1.setSpacing(8)
-        tier1.addWidget(self.dot, 0, Qt.AlignmentFlag.AlignVCenter)
-        tier1.addWidget(self.name, 0)
-        tier1.addWidget(self.status_text, 0, Qt.AlignmentFlag.AlignVCenter)
-        tier1.addStretch(1)
-        tier1.addWidget(self.last_activity, 0)
-
-        # ---- Tier 2: URI mono
-        uri_text = f"sip:{account.username}@{account.domain}"
-        self.uri = QLabel(uri_text, self)
-        self.uri.setObjectName("AcctRowUri")
-        # Do NOT enable TextSelectableByMouse here -- on Windows it
-        # makes Qt render the QLabel like a QLineEdit (white inset
-        # box, flat border) which was the "white text field" complaint.
-        # Right-click → Copy URI on the kebab still works for selection.
-        self.uri.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-
-        # ---- Tier 3: badges row
-        self.badges_layout = QHBoxLayout()
-        self.badges_layout.setContentsMargins(0, 0, 0, 0)
-        self.badges_layout.setSpacing(4)
-        # Transport badge
-        transport_level = "info" if account.transport == "tls" else "neutral"
-        self.badges_layout.addWidget(_badge(account.transport, transport_level))
-        # SRTP badge
-        if account.srtp != "disabled":
-            self.badges_layout.addWidget(_badge(f"SRTP {account.srtp}", "ok"))
-        # Auth-different badge
-        if account.auth_user and account.auth_user != account.username:
-            self.badges_layout.addWidget(_badge(f"auth {account.auth_user}", "neutral"))
-        # Disabled badge
-        if not account.enabled:
-            self.badges_layout.addWidget(_badge("disabled", "warn"))
-        self.badges_layout.addStretch(1)
-
-        # ---- Hover-revealed action buttons row (overlay on the right)
-        self.actions = QFrame(self)
-        self.actions.setObjectName("AcctRowActions")
-        self.actions.setVisible(False)  # only on hover
-        # Reserve the action row's height even when hidden so the row
-        # geometry doesn't jump +28px on hover (which used to shove
-        # every row below downward, creating the layout jitter the
-        # round-4/5/6 audits flagged). retainSizeWhenHidden keeps the
-        # layout space allocated.
-        sp = self.actions.sizePolicy()
-        sp.setRetainSizeWhenHidden(True)
-        self.actions.setSizePolicy(sp)
-        ar = QHBoxLayout(self.actions)
-        ar.setContentsMargins(0, 0, 0, 0)
-        ar.setSpacing(2)
-        for icon_name, tooltip, signal in (
-            ("settings",   "Edit account",    self.edit_requested),
-            ("trace",      "Test (OPTIONS)",  self.test_requested),
-            ("close",      "Delete account",  self.delete_requested),
-        ):
-            btn = QToolButton(self.actions)
+        # ---- Always-visible inline actions: Edit + Delete
+        def _action_btn(icon_name: str, tooltip: str, signal: Signal) -> QToolButton:
+            btn = QToolButton(self)
             btn.setObjectName("AcctRowActionBtn")
-            # Use a mid-grey that works on BOTH light (~#FFFFFF bg) and
-            # dark (~#161B22 bg). #57606A was almost invisible on dark.
-            # Tooltip + accessibleName carry semantic intent so colour
-            # is decorative; #9BA8B7 has ~4.5:1 contrast on both
-            # canvases per a quick eyeball.
             btn.setIcon(rail_icon(icon_name, color="#9BA8B7", px=14))
             btn.setIconSize(QSize(14, 14))
             btn.setToolTip(tooltip)
             btn.setAccessibleName(tooltip)
             btn.setAutoRaise(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda _=False, sig=signal: sig.emit(self.account_id))
-            ar.addWidget(btn)
+            return btn
 
-        # Compose tiers in a vertical stack
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(12, 10, 12, 10)
-        outer.setSpacing(4)
-        outer.addLayout(tier1)
-        outer.addWidget(self.uri)
-        outer.addLayout(self.badges_layout)
-        # Action overlay: dock in bottom-right corner of the row via a
-        # secondary QHBoxLayout that gets stretched to push actions right
-        outer.addWidget(self.actions, 0, Qt.AlignmentFlag.AlignRight)
+        self.edit_btn = _action_btn("settings", "Edit account", self.edit_requested)
+        self.delete_btn = _action_btn("close", "Delete account", self.delete_requested)
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(12, 0, 8, 0)
+        row.setSpacing(9)
+        row.addWidget(self.dot, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(self.name, 1, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(self.edit_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(self.delete_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
     # ------------------------------------------------------------------
     def mousePressEvent(self, event):  # noqa: N802, ANN001
@@ -242,7 +180,7 @@ class AcctRow(QFrame):
         super().mousePressEvent(event)
 
     def mouseDoubleClickEvent(self, event):  # noqa: N802, ANN001
-        # Owner feedback (phase 3.1): double-click = the primary action, Edit.
+        # Double-click = the primary action, Edit.
         if event.button() == Qt.MouseButton.LeftButton:
             self.edit_requested.emit(self.account_id)
             event.accept()
@@ -250,9 +188,9 @@ class AcctRow(QFrame):
         super().mouseDoubleClickEvent(event)
 
     def contextMenuEvent(self, event):  # noqa: N802, ANN001
-        # Row overflow: quieter actions that don't earn an inline button
-        # (owner feedback, phase 3.1 compact window). popup() (non-blocking)
-        # + self-parenting keeps the menu alive after this handler returns.
+        # Quieter actions that don't earn an inline button. popup()
+        # (non-blocking) + self-parenting keeps the menu alive after this
+        # handler returns.
         from PySide6.QtWidgets import QApplication, QMenu
 
         menu = QMenu(self)
@@ -263,19 +201,11 @@ class AcctRow(QFrame):
         menu.addSeparator()
         menu.addAction(
             "Copy URI",
-            lambda: QApplication.clipboard().setText(self.uri.text()),
+            lambda: QApplication.clipboard().setText(self._uri_text),
         )
         menu.addSeparator()
         menu.addAction("Delete…", lambda: self.delete_requested.emit(self.account_id))
         menu.popup(event.globalPos())
-
-    def enterEvent(self, event):  # noqa: N802, ANN001
-        self.actions.setVisible(True)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):  # noqa: N802, ANN001
-        self.actions.setVisible(False)
-        super().leaveEvent(event)
 
     def set_focused(self, focused: bool) -> None:
         self.setProperty("state", "focused" if focused else "idle")
@@ -283,31 +213,24 @@ class AcctRow(QFrame):
         self.style().polish(self)
 
     def set_status(self, code: int) -> None:
-        """Update status dot colour + status chip + last-activity stamp.
-
-        Dot colour + chip level come from the single _registration_status
-        mapping so this row renders identically to the main-window account
-        pill and the Settings registration pill.
-        """
+        """Update the status dot colour + its tooltip from the single
+        _registration_status mapping (same source the main-window account
+        pill uses), so the row reads registration state at a glance."""
         level, color, text = _registration_status(code)
         self.dot.setPixmap(_status_dot_pixmap(color, px=10))
-        self.status_text.setText(text)
-        self.status_text.setProperty("level", level)
-        self.status_text.style().unpolish(self.status_text)
-        self.status_text.style().polish(self.status_text)
+        self.dot.setToolTip(text)
         if code != 0:
             self._last_activity_ts = time.time()
-            self.last_activity.setText(_relative_time(self._last_activity_ts))
 
     def refresh_relative_time(self) -> None:
-        """Called by AccountsView's refresh tick to keep the timestamp fresh."""
-        self.last_activity.setText(_relative_time(self._last_activity_ts))
+        """Kept for AccountsView's 30 s tick (last-activity is now a dot
+        tooltip, not a visible label -- nothing to refresh)."""
 
     def matches_filter(self, needle: str) -> bool:
         if not needle:
             return True
         n = needle.lower()
-        return n in self.name.text().lower() or n in self.uri.text().lower()
+        return n in self.name.text().lower() or n in self._uri_text.lower()
 
 
 class AccountsView(QWidget):

@@ -3603,7 +3603,9 @@ class PhoneShell(QMainWindow):
             # separate top-level "NOC_Beam" entry in the taskbar.
             self._accounts_window = QMainWindow(self)
             self._accounts_window.setWindowTitle("NOC_Beam accounts")
-            self._accounts_window.resize(560, 480)
+            # Owner feedback 2026-07-16.3: tighter default now that each
+            # account is a single ~36 px line (was a 3-tier card).
+            self._accounts_window.resize(480, 360)
             self._accounts_window.setCentralWidget(self.accounts_view)
             # accounts_view was constructed as a (never-shown) child of the
             # hidden shell; make sure the reparent leaves it visible.
