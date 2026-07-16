@@ -18,6 +18,23 @@ from noc_beam.sip.call_manager import CallRecord, CallState
 
 
 # ----------------------------------------------------------------------
+# Live RX/TX meter level (bridged from PhoneShell's AudioStrip poll)
+# ----------------------------------------------------------------------
+def clamp_level(value: Any) -> int:
+    """Coerce an audio-meter reading to a 0..100 int for nb.levels().
+
+    PhoneShell's AudioStrip already clamps set_tx_level/set_rx_level to
+    0..100; this defends the JSON push against a None/garbage read so the
+    payload is always a legal 0..100 the web meters can consume.
+    """
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(100, v))
+
+
+# ----------------------------------------------------------------------
 # Peer / number display (mirror ui/quick_dial.py:_short_uri + call_widget)
 # ----------------------------------------------------------------------
 def short_peer(uri: str) -> str:

@@ -193,6 +193,25 @@
   .minipad .mkey:active { transform: scale(.94); background: rgba(102,115,232,.2);
                           border-color: var(--accent); }
 
+  /* Compact RX/TX live-audio meters on each live call card (owner feedback
+     2026-07-16.3: the old Qt header showed always-visible RX/TX meters; the
+     web card had none). Two thin bars, 9px labels, real levels pushed from
+     PhoneShell's AudioStrip poll via nb.levels() at ~6 Hz while a call is
+     active (zero pushes when idle). Only the audio-focused (selected) call
+     carries live values -- others read 0, mirroring the Qt strip which only
+     meters the selected call. */
+  .meters { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; }
+  .live.compact .meters { margin-top: 7px; }
+  .meter { display: flex; align-items: center; gap: 6px; }
+  .meter .ml { font-size: 9px; font-weight: 700; letter-spacing: .6px;
+               color: var(--text-3); width: 15px; flex: 0 0 auto; }
+  .meter .track { flex: 1; height: 3px; border-radius: 2px;
+                  background: var(--raised); overflow: hidden; }
+  .meter .fill { height: 100%; width: 0%; border-radius: 2px;
+                 transition: width .12s linear; }
+  .meter.rx .fill { background: var(--ok); }
+  .meter.tx .fill { background: var(--accent); }
+
   /* Phase-2 owner feedback: tighter keypad (~31px keys) so the default
      window drops to 360x560 and recents gain the freed space. */
   .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -262,6 +281,30 @@
     padding: 4px 10px 2px; font-family: var(--mono); font-size: 9.5px;
     color: var(--text-3); user-select: text; cursor: default;
   }
+  /* Type-to-search filter inside the account / supplier dropdowns (owner
+     feedback 2026-07-16.3: the Qt combos had type-to-filter; catalogs are
+     huge). Sticks to the top of the (scrollable) menu so it stays reachable
+     while the filtered rows scroll under it. */
+  .menu .menu-filter {
+    position: sticky; top: 0; z-index: 1; box-sizing: border-box;
+    width: 100%; margin: 0 0 5px; padding: 6px 9px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 7px; color: var(--text); font-size: 12px;
+    font-family: inherit; outline: none;
+  }
+  .menu .menu-filter:focus { border-color: var(--accent);
+                             box-shadow: 0 0 0 3px rgba(102,115,232,.18); }
+  .menu .menu-filter::placeholder { color: var(--text-3); }
+  /* Per-account edit gear on each account-dropdown row (owner feedback
+     2026-07-16.3). Row click switches account; gear click edits THAT account
+     (stopPropagation), never switching. */
+  .menu .item .gear {
+    flex: 0 0 auto; border: 0; background: transparent; cursor: pointer;
+    color: var(--text-3); font-size: 12.5px; line-height: 1;
+    padding: 2px 5px; border-radius: 5px;
+    transition: color .12s, background .12s;
+  }
+  .menu .item .gear:hover { color: var(--text); background: var(--bg); }
 
   /* ===== Tabbed views (phase 2: History/Contacts/Favorites in-app) ===== */
   .view { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }

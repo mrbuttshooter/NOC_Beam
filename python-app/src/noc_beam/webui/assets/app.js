@@ -108,8 +108,43 @@ function buildMiniPad(callId) {
   return padWrap;
 }
 
+// ---- Compact RX/TX audio meters (per live call card) ----------------------
+// Levels arrive out-of-band via nb.levels() at ~6 Hz while any call is live
+// (see web_shell.py). Only the audio-focused (selected) call carries real
+// values; every other card's meters paint 0 -- exactly what the Qt strip did
+// (it only metered the selected call).
+let lastLevels = { id: -1, rx: 0, tx: 0 };
+
+function buildMeters(callId) {
+  const wrap = el("div", "meters");
+  wrap.dataset.cid = String(callId);
+  for (const dir of ["rx", "tx"]) {
+    const m = el("div", "meter " + dir);
+    m.appendChild(el("span", "ml", dir.toUpperCase()));
+    const track = el("div", "track");
+    const fill = el("div", "fill");
+    fill.dataset.meter = dir;
+    track.appendChild(fill);
+    m.appendChild(track);
+    wrap.appendChild(m);
+  }
+  return wrap;
+}
+
+function paintLevels() {
+  const clamp = (v) => Math.max(0, Math.min(100, Number(v) || 0));
+  for (const wrap of $("calls").querySelectorAll(".meters")) {
+    const on = Number(wrap.dataset.cid) === lastLevels.id;
+    const rx = wrap.querySelector('[data-meter="rx"]');
+    const tx = wrap.querySelector('[data-meter="tx"]');
+    if (rx) rx.style.width = (on ? clamp(lastLevels.rx) : 0) + "%";
+    if (tx) tx.style.width = (on ? clamp(lastLevels.tx) : 0) + "%";
+  }
+}
+
 function buildCard(c, multi) {
   const card = el("div", "live" + (multi ? " compact" : "") + (multi && c.selected ? " sel" : ""));
+  card.dataset.cid = String(c.id);
 
   const top = el("div", "top");
   top.appendChild(el("div", "num", c.peer || ""));
@@ -157,6 +192,9 @@ function buildCard(c, multi) {
     row.appendChild(ctlBtn("end", "End call", "End call", () => bridge && bridge.hangup(c.id)));
     card.appendChild(row);
     if (openPads.has(c.id)) card.appendChild(buildMiniPad(c.id));
+    // Slim always-visible RX/TX meters (owner feedback 2026-07-16.3). They
+    // read 0 until media exists, then track the live audio levels.
+    card.appendChild(buildMeters(c.id));
   }
 
   // Click anywhere on a stacked card (not a button) promotes it to the
@@ -183,6 +221,9 @@ function renderCalls(calls) {
   // to make room for the stack; each card carries its own compact pad.
   $("pad").hidden = multi;
   for (const c of calls) box.appendChild(buildCard(c, multi));
+  // Restore current meter levels onto the freshly built cards so a state
+  // re-render doesn't blank the bars until the next level push.
+  paintLevels();
   // A NEW call (incoming ring or fresh dial) surfaces the Dial view so the
   // card is never hidden behind the History/Contacts tabs.
   const ids = calls.map((c) => c.id).join(",");
@@ -206,10 +247,24 @@ function openAccountMenu() {
   if (!a.accounts.length) {
     menu.appendChild(el("div", "item", "No accounts"));
   } else {
+    // Mirror the supplier dropdown's type-to-search once there's more than
+    // one account to sift (a single account doesn't need a filter, and the
+    // autofocus would needlessly swallow keystrokes).
+    if (a.accounts.length > 1) addMenuFilter(menu, "Filter accounts…");
     for (const acc of a.accounts) {
       const item = el("div", "item" + (acc.id === a.activeId ? " active" : ""));
+      item.dataset.search = (acc.label || "").toLowerCase();
       item.appendChild(el("span", "dot " + (acc.health || "muted")));
       item.appendChild(el("span", "lbl", acc.label));
+      // Per-account edit gear: edits THIS account without switching to it.
+      const gear = el("button", "gear", "⚙");
+      gear.title = "Edit this account";
+      gear.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (bridge) bridge.edit_account(acc.id);
+        closeMenus();
+      });
+      item.appendChild(gear);
       item.addEventListener("click", () => {
         if (bridge) bridge.select_account(acc.id);
         closeMenus();
@@ -242,18 +297,52 @@ function openSupplierMenu() {
   const s = state.suppliers;
   if (!s.suppliers.length) {
     menu.appendChild(el("div", "item", "No suppliers"));
-  } else {
-    for (const sup of s.suppliers) {
-      const item = el("div", "item" + (sup.id === s.activeId ? " active" : ""));
-      item.appendChild(el("span", "lbl", sup.label));
-      item.addEventListener("click", () => {
-        if (bridge) bridge.select_supplier(sup.id);
-        closeMenus();
-      });
-      menu.appendChild(item);
-    }
+    positionMenu(menu, $("supplier-sel"), true);
+    return;
+  }
+  // Type-to-search: supplier catalogs are huge (owner feedback 2026-07-16.3).
+  addMenuFilter(menu, "Filter suppliers…");
+  for (const sup of s.suppliers) {
+    const item = el("div", "item" + (sup.id === s.activeId ? " active" : ""));
+    item.dataset.search = (sup.label || "").toLowerCase();
+    item.appendChild(el("span", "lbl", sup.label));
+    item.addEventListener("click", () => {
+      if (bridge) bridge.select_supplier(sup.id);
+      closeMenus();
+    });
+    menu.appendChild(item);
   }
   positionMenu(menu, $("supplier-sel"), true);
+}
+
+// ---- Shared dropdown type-to-search (account + supplier menus) -------------
+// Only rows tagged with data-search are filtered; action rows (e.g. "Account
+// settings…") carry no data-search and always stay visible.
+function addMenuFilter(menu, placeholder) {
+  const inp = el("input", "menu-filter");
+  inp.type = "text";
+  inp.placeholder = placeholder;
+  inp.spellcheck = false;
+  inp.addEventListener("input", () => filterMenu(menu, inp.value));
+  // A click in the filter must not bubble to the document handler that
+  // dismisses menus.
+  inp.addEventListener("click", (e) => e.stopPropagation());
+  menu.appendChild(inp);
+  return inp;
+}
+
+function filterMenu(menu, query) {
+  const needle = (query || "").trim().toLowerCase();
+  let first = null;
+  for (const item of menu.querySelectorAll(".item")) {
+    if (!item.dataset.search) continue;            // action row -> never hide
+    const show = !needle || item.dataset.search.includes(needle);
+    item.hidden = !show;
+    if (show && !first) first = item;
+  }
+  // Re-seat the keyboard highlight on the first surviving row.
+  for (const i of menu.querySelectorAll(".item.kbd")) i.classList.remove("kbd");
+  if (first) first.classList.add("kbd");
 }
 
 // ==========================================================================
@@ -263,7 +352,7 @@ function openSupplierMenu() {
 // keeps the full Qt windows as escape hatches (bulk ops / add-edit dialogs).
 // BUILD_TAG renders as a muted footer in the menu — bump it on every shipped
 // zip so "which build am I on?" is answerable in two clicks.
-const BUILD_TAG = "build 2026-07-16.2";
+const BUILD_TAG = "build 2026-07-16.3";
 const APP_MENU = [
   ["Settings", "settings"],
   ["Accounts", "accounts"],
@@ -277,7 +366,7 @@ const APP_MENU = [
   ["Quit", "quit"],
 ];
 
-function openAppMenu() {
+function buildAppMenu() {
   const menu = $("app-menu");
   menu.textContent = "";
   for (const [label, target] of APP_MENU) {
@@ -289,7 +378,17 @@ function openAppMenu() {
   }
   menu.appendChild(el("div", "sep"));
   menu.appendChild(el("div", "build-tag", BUILD_TAG));
-  positionMenu(menu, $("btn-menu"), true);
+  return menu;
+}
+
+function openAppMenu() {
+  positionMenu(buildAppMenu(), $("btn-menu"), true);
+}
+
+// Right-click anywhere non-editable opens the app menu AT the cursor (owner
+// feedback 2026-07-16.3: replaces QtWebEngine's stock browser context menu).
+function openAppMenuAt(x, y) {
+  positionMenuAtPoint(buildAppMenu(), x, y);
 }
 
 // ==========================================================================
@@ -334,7 +433,39 @@ function positionMenu(menu, anchor, alignRight) {
   }
   menu.style.left = left + "px";
   menu.style.top = top + "px";
-  menu.focus();
+  focusMenu(menu);
+}
+
+// Position a menu with its top-left near a raw viewport point (right-click).
+// Same free-space clamp + upward-flip logic as positionMenu.
+function positionMenuAtPoint(menu, x, y) {
+  closeMenusExcept(menu);
+  menu.hidden = false;
+  menu.style.maxHeight = "";
+  const mw = menu.offsetWidth;
+  let left = Math.max(6, Math.min(x, window.innerWidth - mw - 6));
+  const below = window.innerHeight - y - 10;
+  const above = y - 10;
+  const want = menu.scrollHeight + 2;
+  let top;
+  if (want <= below || below >= above) {
+    menu.style.maxHeight = Math.max(90, below) + "px";
+    top = y + 4;
+  } else {
+    menu.style.maxHeight = Math.max(90, above) + "px";
+    top = Math.max(6, y - 4 - Math.min(want, above));
+  }
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+  focusMenu(menu);
+}
+
+// Focus the filter input if the menu carries one (type-to-search), else the
+// menu itself so ArrowUp/Down/Enter/Escape land on the keydown handler.
+function focusMenu(menu) {
+  const filt = menu.querySelector(".menu-filter");
+  if (filt) filt.focus();
+  else menu.focus();
 }
 
 // Keyboard navigation: ArrowUp/Down move the highlight (scrolling it into
@@ -342,7 +473,9 @@ function positionMenu(menu, anchor, alignRight) {
 function wireMenuKeys(menu) {
   menu.tabIndex = -1;
   menu.addEventListener("keydown", (e) => {
-    const items = [...menu.querySelectorAll(".item")];
+    // Navigate only the rows the type-to-search filter left visible.
+    const items = [...menu.querySelectorAll(".item")].filter((i) => !i.hidden);
+    if (e.key === "Escape") { closeMenus(); return; }
     if (!items.length) return;
     let idx = items.findIndex((i) => i.classList.contains("kbd"));
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -354,12 +487,11 @@ function wireMenuKeys(menu) {
       items.forEach((i) => i.classList.remove("kbd"));
       items[idx].classList.add("kbd");
       items[idx].scrollIntoView({ block: "nearest" });
-    } else if (e.key === "Enter" && idx >= 0) {
+    } else if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
-      items[idx].click();
-    } else if (e.key === "Escape") {
-      closeMenus();
+      const target = idx >= 0 ? items[idx] : items[0];
+      if (target) target.click();
     }
   });
 }
@@ -525,6 +657,12 @@ window.nb = {
       renderFavorites();
     }
   },
+  // Out-of-band, high-frequency RX/TX level push (web_shell._push_levels).
+  // Kept separate from apply() so it never rebuilds a card / steals focus.
+  levels(p) {
+    lastLevels = p || { id: -1, rx: 0, tx: 0 };
+    paintLevels();
+  },
 };
 
 // ==========================================================================
@@ -569,6 +707,22 @@ function wireControls() {
   $("chrome").addEventListener("dblclick", (e) => {
     if (e.target.closest("button, .account, .menu")) return;
     if (bridge) bridge.toggle_max_restore();
+  });
+
+  // Right-click: kill QtWebEngine's stock browser menu (Back/Forward/Reload/
+  // Save page/View source -- wrong for a product). On a non-editable target we
+  // preventDefault and open the app ☰ menu AT the cursor. On an editable field
+  // (dial input, search boxes, dropdown filters) we do NOT preventDefault, so
+  // the Qt side (web_shell._WebEngineView.contextMenuEvent) shows a minimal
+  // Cut/Copy/Paste/Select-all menu instead. Either way no browser items appear.
+  document.addEventListener("contextmenu", (e) => {
+    const t = e.target;
+    const editable = t && t.closest &&
+      t.closest('input, textarea, [contenteditable="true"], [contenteditable=""]');
+    if (editable) return;   // Qt shows the edit menu for editable fields
+    e.preventDefault();
+    closeMenus();
+    openAppMenuAt(e.clientX, e.clientY);
   });
 
   // Dismiss menus on any outside click / Escape; type-to-dial only while

@@ -234,6 +234,25 @@ class WebBridge(QObject):
             log.exception("bridge.select_supplier failed")
         self._push_account_supplier()
 
+    @Slot(str)
+    def edit_account(self, account_id: str) -> None:
+        """Open the account editor for ONE account -- the per-row gear on the
+        web chrome's account dropdown (owner feedback 2026-07-16.3). Routes to
+        PhoneShell._edit_account_by_id, the same modal the Qt Accounts window's
+        per-row Edit uses, so the delete-in-call guard + re-register handling
+        are shared. Row click still switches the active account; the gear edits
+        THAT account without switching (stopPropagation on the JS side)."""
+        account_id = (account_id or "").strip()
+        if not account_id:
+            return
+        try:
+            self._phone._edit_account_by_id(account_id)
+        except Exception:
+            log.exception("bridge.edit_account failed")
+        # The editor is modal (blocks above); once it returns a renamed or
+        # re-registered account must show through the pill + dropdown.
+        self._push_account_supplier()
+
     def _push_account_supplier(self) -> None:
         try:
             pusher = getattr(self._web, "push_account_and_supplier", None)

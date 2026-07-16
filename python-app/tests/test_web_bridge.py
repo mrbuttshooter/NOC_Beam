@@ -37,6 +37,20 @@ def test_short_peer_strips_scheme_params_and_domain() -> None:
 
 
 # ======================================================================
+# clamp_level (live RX/TX meter push -- owner feedback 2026-07-16.3)
+# ======================================================================
+def test_clamp_level_coerces_and_bounds() -> None:
+    assert S.clamp_level(0) == 0
+    assert S.clamp_level(42) == 42
+    assert S.clamp_level(100) == 100
+    assert S.clamp_level(-5) == 0          # below range clamps up
+    assert S.clamp_level(250) == 100       # above range clamps down
+    assert S.clamp_level(None) == 0        # garbage read -> 0
+    assert S.clamp_level("x") == 0
+    assert S.clamp_level(73.9) == 73        # int-coerced
+
+
+# ======================================================================
 # serialize_call
 # ======================================================================
 def _rec(**kw) -> CallRecord:
@@ -379,6 +393,22 @@ def test_select_account_routes_and_pushes() -> None:
     bridge.select_account("a1")
     phone._set_active_account.assert_called_once_with("a1", "Teles UK")
     web.push_account_and_supplier.assert_called_once()
+
+
+def test_edit_account_routes_and_pushes() -> None:
+    # Owner feedback 2026-07-16.3: the per-account gear on the web account
+    # dropdown edits THAT account (without switching) via the same modal the
+    # Qt Accounts window's per-row Edit uses.
+    phone = _fake_phone()
+    web = MagicMock()
+    bridge = WebBridge(phone, web)
+    bridge.edit_account("a1")
+    phone._edit_account_by_id.assert_called_once_with("a1")
+    web.push_account_and_supplier.assert_called_once()
+    # Empty id is a harmless no-op (never opens a dialog).
+    phone._edit_account_by_id.reset_mock()
+    bridge.edit_account("   ")
+    phone._edit_account_by_id.assert_not_called()
 
 
 def test_select_supplier_sets_combo_index() -> None:

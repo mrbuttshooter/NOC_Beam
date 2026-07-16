@@ -20,8 +20,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QTimer, QUrl, Qt
 from PySide6.QtWebChannel import QWebChannel
+from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QMainWindow
+from PySide6.QtWidgets import QMainWindow, QMenu
 
 from noc_beam import __app_name__
 from noc_beam.sip.events import sip_events
@@ -38,6 +39,51 @@ from noc_beam.webui.serializers import (
 log = logging.getLogger(__name__)
 
 _ASSETS = Path(__file__).resolve().parent / "assets"
+
+
+class _WebEngineView(QWebEngineView):
+    """QWebEngineView that suppresses QtWebEngine's stock browser context
+    menu (Back / Forward / Reload / Save page / View source -- wrong for a
+    product; owner feedback 2026-07-16.3).
+
+    * Editable target (dial input, search boxes, dropdown filters): show a
+      minimal Cut / Copy / Paste / Select-all menu built from the page's own
+      web actions (styled by the app-wide dark QSS).
+    * Anything else: swallow the event entirely. The page's JS already
+      preventDefault()s non-editable right-clicks and opens the app ☰ menu at
+      the cursor, so no menu is wanted here -- this is the belt-and-braces
+      kill in case a build's JS handler didn't run.
+    """
+
+    _EDIT_ACTIONS = (
+        QWebEnginePage.WebAction.Cut,
+        QWebEnginePage.WebAction.Copy,
+        QWebEnginePage.WebAction.Paste,
+        QWebEnginePage.WebAction.SelectAll,
+    )
+
+    def contextMenuEvent(self, event):  # noqa: N802, ANN001
+        editable = False
+        try:
+            req = self.lastContextMenuRequest()
+            if req is not None:
+                editable = bool(req.isContentEditable())
+        except Exception:
+            editable = False
+        if editable:
+            try:
+                menu = QMenu(self)
+                page = self.page()
+                for web_action in self._EDIT_ACTIONS:
+                    act = page.action(web_action)
+                    if act is not None:
+                        menu.addAction(act)
+                if menu.actions():
+                    menu.popup(event.globalPos())
+            except Exception:
+                log.debug("edit context menu build failed", exc_info=True)
+        # Editable or not, never let the default browser menu surface.
+        event.accept()
 
 
 class WebShell(QMainWindow):
@@ -74,7 +120,7 @@ class WebShell(QMainWindow):
         )
 
         # ---- Web view + channel -----------------------------------------
-        self._view = QWebEngineView(self)
+        self._view = _WebEngineView(self)
         self.setCentralWidget(self._view)
         self._channel = QWebChannel(self)
         self._bridge = WebBridge(phone, self, parent=self)
@@ -82,6 +128,17 @@ class WebShell(QMainWindow):
         self._view.page().setWebChannel(self._channel)
         self._view.loadFinished.connect(self._on_load_finished)
         self._view.setUrl(QUrl.fromLocalFile(str(_ASSETS / "index.html")))
+
+        # ---- Live RX/TX meter push (owner feedback 2026-07-16.3) --------
+        # A ~6.7 Hz timer bridges PhoneShell's AudioStrip meter values (fed by
+        # its own 200 ms pjsua2 poll) to the web call cards while a call is
+        # live. Armed on call_added, self-stops when no call is active -- zero
+        # pushes when idle. We read the AudioStrip's already-computed values
+        # rather than re-touch pjsua2, so there's no duplicate native polling.
+        self._level_timer = QTimer(self)
+        self._level_timer.setInterval(150)
+        self._level_timer.timeout.connect(self._push_levels)
+        self._last_levels_key: tuple[int, int, int] | None = None
 
         # ---- Mirror PhoneShell state into the page ----------------------
         self._wire_mirror()
@@ -111,6 +168,59 @@ class WebShell(QMainWindow):
         # ensure_ascii=True escapes U+2028/2029 etc. so the JSON is always a
         # legal JS literal for runJavaScript.
         self._js("window.nb && nb.apply(" + json.dumps(payload) + ");")
+
+    def _apply_levels(self, payload: dict) -> None:
+        self._js("window.nb && nb.levels(" + json.dumps(payload) + ");")
+
+    # ------------------------------------------------------------------
+    # Live RX/TX meters (Python -> UI, out-of-band high-frequency push)
+    # ------------------------------------------------------------------
+    def _arm_level_timer(self, *_args) -> None:
+        """A new call materialised -> start pushing meter levels."""
+        try:
+            if not self._level_timer.isActive():
+                self._last_levels_key = None
+                self._level_timer.start()
+        except Exception:
+            log.debug("level timer arm failed", exc_info=True)
+
+    def _push_levels(self) -> None:
+        """Read the AudioStrip's current RX/TX meter values + the audio-focused
+        call id and push them to the page. Stops (after a single zeroing push)
+        once no call is active."""
+        p = self._phone
+        try:
+            active = p.calls.active()
+        except Exception:
+            active = []
+        if not active:
+            # Final zeroing push so the bars empty, then idle the timer.
+            if self._last_levels_key != (-1, 0, 0):
+                self._apply_levels({"id": -1, "rx": 0, "tx": 0})
+                self._last_levels_key = (-1, 0, 0)
+            try:
+                self._level_timer.stop()
+            except Exception:
+                pass
+            return
+        from noc_beam.webui.serializers import clamp_level
+
+        cid = getattr(p, "_selected_call_id", None)
+        rx = tx = 0
+        try:
+            audio = getattr(p, "audio", None)
+            if audio is not None:
+                rx = clamp_level(audio.rx_bar.value())
+                tx = clamp_level(audio.tx_bar.value())
+        except Exception:
+            rx = tx = 0
+        key = (int(cid) if cid is not None else -1, rx, tx)
+        # Skip redundant pushes (source poll is 5 Hz; we tick faster) so we
+        # don't spam runJavaScript with identical payloads.
+        if key == self._last_levels_key:
+            return
+        self._last_levels_key = key
+        self._apply_levels({"id": key[0], "rx": rx, "tx": tx})
 
     # ------------------------------------------------------------------
     # State pushes (Python -> UI)
@@ -232,6 +342,8 @@ class WebShell(QMainWindow):
         p.calls.call_added.connect(self.push_call)
         p.calls.call_updated.connect(self.push_call)
         p.calls.call_removed.connect(self.push_call)
+        # A new call arms the RX/TX meter push loop (self-stops when idle).
+        p.calls.call_added.connect(self._arm_level_timer)
         # Recents + history refresh after a call ends. Deferred one event-loop
         # tick so PhoneShell._maybe_write_cdr (which appends the CDR on the
         # same synchronous burst) has finished before we re-read the file.
