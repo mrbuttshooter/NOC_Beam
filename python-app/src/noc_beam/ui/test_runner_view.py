@@ -303,8 +303,8 @@ class TestRunnerView(QMainWindow):
         # Zero top margin so the Configure/Running/Results tab strip
         # sits flush against the OS title bar -- no empty gray band
         # above it (was 16 px which read as wasted space).
-        outer.setContentsMargins(12, 0, 12, 8)
-        outer.setSpacing(8)
+        outer.setContentsMargins(12, 0, 12, 6)
+        outer.setSpacing(6)
 
         # In-content title removed -- the OS title bar already says
         # "NOC_Beam test runner", and the old #SettingsTitle h1 was
@@ -324,8 +324,10 @@ class TestRunnerView(QMainWindow):
         # Zero top margin -- the user called out the empty band
         # between the tab strip and the Mode row as wasted space.
         # Configure body now sits flush against the tab strip.
+        # Density pass (owner 2026-07-16.6): configure body spacing 10->6 so
+        # the config band (toolbar + routing + preflight) stops dominating.
         outer_configure.setContentsMargins(0, 0, 0, 0)
-        outer_configure.setSpacing(10)
+        outer_configure.setSpacing(6)
 
         # Redirect the existing `outer` build-out into the Configure
         # page. The footer (Run/Stop/etc) goes on the central layout
@@ -347,9 +349,9 @@ class TestRunnerView(QMainWindow):
         # longest -- carrier names won't fit inline with config).
         from PySide6.QtWidgets import QGridLayout, QSizePolicy as _SP
         tb_l = QGridLayout(toolbar)
-        tb_l.setContentsMargins(14, 10, 14, 10)
-        tb_l.setHorizontalSpacing(14)
-        tb_l.setVerticalSpacing(10)
+        tb_l.setContentsMargins(12, 8, 12, 8)
+        tb_l.setHorizontalSpacing(12)
+        tb_l.setVerticalSpacing(8)
 
         # SUPPLIER picker -- compact, left-anchored. Lives on the SAME
         # row as ORIGINATION + DESTINATION (built lower down). The old
@@ -409,7 +411,7 @@ class TestRunnerView(QMainWindow):
             f = _QWidget()
             fl = QVBoxLayout(f)
             fl.setContentsMargins(0, 0, 0, 0)
-            fl.setSpacing(4)
+            fl.setSpacing(3)
             lbl = QLabel(label_text)
             lbl.setObjectName("TestRunnerToolbarLabel")
             widget.setMinimumWidth(min_width)
@@ -537,7 +539,7 @@ class TestRunnerView(QMainWindow):
         self.origination_row = _QWidget()
         _od_l = QHBoxLayout(self.origination_row)
         _od_l.setContentsMargins(0, 0, 0, 0)
-        _od_l.setSpacing(14)
+        _od_l.setSpacing(10)
         _od_l.addWidget(self.supplier_row)
         (
             _orig_cell,
@@ -574,8 +576,8 @@ class TestRunnerView(QMainWindow):
         preflight = QFrame()
         preflight.setObjectName("TestRunnerPreflight")
         pf_l = QHBoxLayout(preflight)
-        pf_l.setContentsMargins(12, 8, 12, 8)
-        pf_l.setSpacing(10)
+        pf_l.setContentsMargins(12, 6, 12, 6)
+        pf_l.setSpacing(8)
         self._preflight_label = QLabel("Configure targets to preview the run")
         self._preflight_label.setObjectName("TestRunnerPreflightLabel")
         pf_l.addWidget(self._preflight_label, 1)
@@ -666,7 +668,7 @@ class TestRunnerView(QMainWindow):
         right_l.setContentsMargins(0, 0, 0, 0)
         right_l.setSpacing(0)
         results_header = QHBoxLayout()
-        results_header.setContentsMargins(14, 10, 14, 8)
+        results_header.setContentsMargins(12, 6, 12, 4)
         results_label = QLabel("RESULTS")
         results_label.setObjectName("SettingsCardLabel")
         results_header.addWidget(results_label)
@@ -675,7 +677,9 @@ class TestRunnerView(QMainWindow):
         self.table.setObjectName("TestRunnerResults")
         self.table.setShowGrid(False)
         self.table.setAlternatingRowColors(True)
-        self.table.verticalHeader().setDefaultSectionSize(36)
+        # Density pass (owner 2026-07-16.6): row height 36->30 so more
+        # streamed rows fit without scroll (kept readable — pills still fit).
+        self.table.verticalHeader().setDefaultSectionSize(30)
         right_l.addWidget(self.table, 1)
         split.addWidget(right_card)
 
@@ -718,8 +722,8 @@ class TestRunnerView(QMainWindow):
         running_page = QWidget()
         running_page.setObjectName("TestRunnerRunningPage")
         rp_l = QVBoxLayout(running_page)
-        rp_l.setContentsMargins(8, 8, 8, 8)
-        rp_l.setSpacing(8)
+        rp_l.setContentsMargins(8, 6, 8, 6)
+        rp_l.setSpacing(6)
         self._running_list = QListWidget()
         self._running_list.setObjectName("TestRunnerRunningList")
         rp_l.addWidget(self._running_list, 1)
@@ -731,8 +735,8 @@ class TestRunnerView(QMainWindow):
         results_page = QWidget()
         results_page.setObjectName("TestRunnerResultsPage")
         rs_l = QVBoxLayout(results_page)
-        rs_l.setContentsMargins(8, 8, 8, 8)
-        rs_l.setSpacing(8)
+        rs_l.setContentsMargins(8, 6, 8, 6)
+        rs_l.setSpacing(6)
         self._fas_results_view = None
         try:
             # TODO: replace with FasResultsView when Agent D lands
