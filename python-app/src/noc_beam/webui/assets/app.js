@@ -42,6 +42,7 @@ function buildPad() {
     k.appendChild(el("div", "d", d));
     k.appendChild(el("div", "c", c));
     k.addEventListener("click", () => {
+      keyTone(d);
       // Mirror ui/phone_shell.py:_on_digit_pressed -- with exactly one live
       // call, digits are DTMF to it; idle digits build the dial string.
       // (With 2+ calls this pad is hidden; per-card pads take over.)
@@ -101,6 +102,7 @@ function buildMiniPad(callId) {
     const k = el("div", "mkey", d);
     k.addEventListener("click", (e) => {
       e.stopPropagation();
+      keyTone(d);
       if (bridge) bridge.send_dtmf(callId, d);
     });
     padWrap.appendChild(k);
@@ -108,38 +110,59 @@ function buildMiniPad(callId) {
   return padWrap;
 }
 
-// ---- Compact RX/TX audio meters (per live call card) ----------------------
+// ---- RX/TX audio meters (vertical bars flanking the numpad) ---------------
+// Owner feedback 2026-07-16.4: meters moved from the call cards to the SIDES
+// of the keypad -- RX left, TX right -- metering the audio-focused call.
 // Levels arrive out-of-band via nb.levels() at ~6 Hz while any call is live
-// (see web_shell.py). Only the audio-focused (selected) call carries real
-// values; every other card's meters paint 0 -- exactly what the Qt strip did
-// (it only metered the selected call).
+// (see web_shell.py); zero pushes when idle, and the fills drain to 0.
 let lastLevels = { id: -1, rx: 0, tx: 0 };
-
-function buildMeters(callId) {
-  const wrap = el("div", "meters");
-  wrap.dataset.cid = String(callId);
-  for (const dir of ["rx", "tx"]) {
-    const m = el("div", "meter " + dir);
-    m.appendChild(el("span", "ml", dir.toUpperCase()));
-    const track = el("div", "track");
-    const fill = el("div", "fill");
-    fill.dataset.meter = dir;
-    track.appendChild(fill);
-    m.appendChild(track);
-    wrap.appendChild(m);
-  }
-  return wrap;
-}
 
 function paintLevels() {
   const clamp = (v) => Math.max(0, Math.min(100, Number(v) || 0));
-  for (const wrap of $("calls").querySelectorAll(".meters")) {
-    const on = Number(wrap.dataset.cid) === lastLevels.id;
-    const rx = wrap.querySelector('[data-meter="rx"]');
-    const tx = wrap.querySelector('[data-meter="tx"]');
-    if (rx) rx.style.width = (on ? clamp(lastLevels.rx) : 0) + "%";
-    if (tx) tx.style.width = (on ? clamp(lastLevels.tx) : 0) + "%";
-  }
+  const live = state.calls.length > 0 && lastLevels.id !== -1;
+  const rx = $("vfill-rx");
+  const tx = $("vfill-tx");
+  if (rx) rx.style.height = (live ? clamp(lastLevels.rx) : 0) + "%";
+  if (tx) tx.style.height = (live ? clamp(lastLevels.tx) : 0) + "%";
+}
+
+// ---- Key tones ("old Nokia" feel; owner feedback 2026-07-16.4) ------------
+// Standard DTMF dual-tones synthesized with WebAudio -- no assets, ~90ms,
+// low gain. The AudioContext is created lazily on the first key press
+// (a user gesture, so autoplay policy never blocks it). Tones are pure
+// feedback decoration: any failure is swallowed, dialing never depends
+// on them.
+const DTMF_FREQS = {
+  "1": [697, 1209], "2": [697, 1336], "3": [697, 1477],
+  "4": [770, 1209], "5": [770, 1336], "6": [770, 1477],
+  "7": [852, 1209], "8": [852, 1336], "9": [852, 1477],
+  "*": [941, 1209], "0": [941, 1336], "#": [941, 1477],
+};
+let _toneCtx = null;
+
+function keyTone(digit) {
+  const freqs = DTMF_FREQS[digit];
+  if (!freqs) return;
+  try {
+    if (!_toneCtx) _toneCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _toneCtx;
+    if (ctx.state === "suspended") ctx.resume();
+    const t0 = ctx.currentTime;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(0.12, t0 + 0.01);
+    gain.gain.setValueAtTime(0.12, t0 + 0.07);
+    gain.gain.linearRampToValueAtTime(0, t0 + 0.09);
+    gain.connect(ctx.destination);
+    for (const hz of freqs) {
+      const osc = ctx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = hz;
+      osc.connect(gain);
+      osc.start(t0);
+      osc.stop(t0 + 0.1);
+    }
+  } catch (e) { /* decoration only */ }
 }
 
 function buildCard(c, multi) {
@@ -194,7 +217,6 @@ function buildCard(c, multi) {
     if (openPads.has(c.id)) card.appendChild(buildMiniPad(c.id));
     // Slim always-visible RX/TX meters (owner feedback 2026-07-16.3). They
     // read 0 until media exists, then track the live audio levels.
-    card.appendChild(buildMeters(c.id));
   }
 
   // Click anywhere on a stacked card (not a button) promotes it to the
@@ -219,7 +241,7 @@ function renderCalls(calls) {
   const multi = calls.length > 1;
   // Owner design decision: 2+ active calls hide the MAIN dialpad entirely
   // to make room for the stack; each card carries its own compact pad.
-  $("pad").hidden = multi;
+  $("pad-row").hidden = multi;
   for (const c of calls) box.appendChild(buildCard(c, multi));
   // Restore current meter levels onto the freshly built cards so a state
   // re-render doesn't blank the bars until the next level push.
@@ -352,7 +374,7 @@ function filterMenu(menu, query) {
 // keeps the full Qt windows as escape hatches (bulk ops / add-edit dialogs).
 // BUILD_TAG renders as a muted footer in the menu — bump it on every shipped
 // zip so "which build am I on?" is answerable in two clicks.
-const BUILD_TAG = "build 2026-07-16.3";
+const BUILD_TAG = "build 2026-07-16.4";
 const APP_MENU = [
   ["Settings", "settings"],
   ["Accounts", "accounts"],
@@ -674,6 +696,7 @@ function wireControls() {
   $("btn-call").addEventListener("click", placeCall);
   $("num").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); placeCall(); }
+    else if (DTMF_FREQS[e.key]) keyTone(e.key);
   });
 
   // "View all" jumps to the in-app History tab (phase 2).
@@ -737,6 +760,7 @@ function wireControls() {
       switchView("dial");
       $("num").focus();
     } else if (/^[0-9*#+]$/.test(e.key) && !typing && state.calls.length === 0) {
+      keyTone(e.key);
       switchView("dial");
       $("num").focus();
       $("num").value += e.key;

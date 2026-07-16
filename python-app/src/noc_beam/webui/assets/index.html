@@ -193,24 +193,26 @@
   .minipad .mkey:active { transform: scale(.94); background: rgba(102,115,232,.2);
                           border-color: var(--accent); }
 
-  /* Compact RX/TX live-audio meters on each live call card (owner feedback
-     2026-07-16.3: the old Qt header showed always-visible RX/TX meters; the
-     web card had none). Two thin bars, 9px labels, real levels pushed from
-     PhoneShell's AudioStrip poll via nb.levels() at ~6 Hz while a call is
-     active (zero pushes when idle). Only the audio-focused (selected) call
-     carries live values -- others read 0, mirroring the Qt strip which only
-     meters the selected call. */
-  .meters { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; }
-  .live.compact .meters { margin-top: 7px; }
-  .meter { display: flex; align-items: center; gap: 6px; }
-  .meter .ml { font-size: 9px; font-weight: 700; letter-spacing: .6px;
-               color: var(--text-3); width: 15px; flex: 0 0 auto; }
-  .meter .track { flex: 1; height: 3px; border-radius: 2px;
-                  background: var(--raised); overflow: hidden; }
-  .meter .fill { height: 100%; width: 0%; border-radius: 2px;
-                 transition: width .12s linear; }
-  .meter.rx .fill { background: var(--ok); }
-  .meter.tx .fill { background: var(--accent); }
+  /* RX/TX live-audio meters (owner feedback 2026-07-16.4): vertical bars
+     flanking the numpad -- RX left, TX right -- metering the audio-focused
+     call. Real levels pushed from PhoneShell's AudioStrip poll via
+     nb.levels() at ~6 Hz while a call is active; zero pushes when idle.
+     Fills grow bottom-up. The whole pad-row (pad + meters) hides together
+     when 2+ calls are active, same as the pad did. */
+  .pad-row { display: flex; gap: 8px; align-items: stretch; }
+  .pad-row .pad { flex: 1; min-width: 0; }
+  .vmeter { display: flex; flex-direction: column; align-items: center;
+            gap: 4px; width: 16px; flex: 0 0 auto; }
+  .vmeter .ml { font-size: 8.5px; font-weight: 700; letter-spacing: .5px;
+                color: var(--text-3); }
+  .vmeter .vtrack { flex: 1; width: 4px; border-radius: 2px;
+                    background: var(--raised); overflow: hidden;
+                    display: flex; flex-direction: column;
+                    justify-content: flex-end; }
+  .vmeter .vfill { width: 100%; height: 0%; border-radius: 2px;
+                   transition: height .12s linear; }
+  .vmeter.rx .vfill { background: var(--ok); }
+  .vmeter.tx .vfill { background: var(--accent); }
 
   /* Phase-2 owner feedback: tighter keypad (~31px keys) so the default
      window drops to 360x560 and recents gain the freed space. */
@@ -404,7 +406,15 @@
       <!-- Live-call stack: one card per active call, built by app.js. -->
       <div class="calls" id="calls"></div>
 
-      <div class="pad" id="pad"></div>
+      <div class="pad-row" id="pad-row">
+        <div class="vmeter rx"><span class="ml">RX</span>
+          <div class="vtrack"><div class="vfill" id="vfill-rx"></div></div>
+        </div>
+        <div class="pad" id="pad"></div>
+        <div class="vmeter tx"><span class="ml">TX</span>
+          <div class="vtrack"><div class="vfill" id="vfill-tx"></div></div>
+        </div>
+      </div>
 
       <div class="sect"><h2>Recent calls</h2><a id="view-all">View all</a></div>
       <div class="recents" id="recents"></div>
