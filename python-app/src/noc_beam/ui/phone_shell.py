@@ -846,6 +846,12 @@ class PhoneShell(QMainWindow):
         self.accounts_view.edit_requested.connect(self._edit_account_by_id)
         self.accounts_view.test_requested.connect(self._test_account_by_id)
         self.accounts_view.delete_requested.connect(self._remove_account_by_id)
+        # Phase 3.1 compact accounts window: Unregister lives in the row
+        # context menu; the bulk toolbar buttons finally act (they were
+        # emitted-but-unconnected dead buttons before).
+        self.accounts_view.unregister_requested.connect(self._unregister_account_by_id)
+        self.accounts_view.refresh_all_requested.connect(self._refresh_accounts)
+        self.accounts_view.test_all_requested.connect(self._on_test_all_accounts)
 
         self.stack = QStackedWidget(self)
         self.stack.addWidget(dialpad_page)             # 0 DIALPAD
@@ -3580,66 +3586,41 @@ class PhoneShell(QMainWindow):
         self._trace_window.raise_(); self._trace_window.activateWindow()
 
     def _on_open_accounts(self):
-        # Same pattern as _on_open_trace: lift the accounts_view into a
-        # standalone window for power-user multi-account management.
-        # Master pane on the left (accounts_view), detail pane on the right
-        # (accounts_detail) wired through selected_account_changed.
+        # Owner verdict (phase 3.1): the master-detail splitter with the
+        # UPTIME/CALLS/MOS/RTT stat cards was dead weight ("—" everywhere)
+        # -- operators only EDIT accounts here. Single compact pane now:
+        # the AccountsView list already carries dot + name + registration
+        # chip + mono URI + transport badges + quiet hover actions
+        # (Test/Edit/Delete), double-click = Edit, Unregister in the row
+        # context menu. AccountDetail stays in the codebase (accounts_detail
+        # module) but is no longer instantiated here; the per-call quality
+        # plumbing that fed it guards on `_accounts_detail` being absent.
         if not hasattr(self, "_accounts_window"):
-            from PySide6.QtWidgets import QMainWindow, QSplitter
-            from noc_beam.ui.accounts_detail import AccountDetail
+            from PySide6.QtWidgets import QMainWindow
 
             # Parent to self so Windows treats the accounts window as
             # a child of the main shell — otherwise it renders as a
-            # separate top-level "NOC_Beam" entry in the taskbar with
-            # its own chrome (small orphan window).
+            # separate top-level "NOC_Beam" entry in the taskbar.
             self._accounts_window = QMainWindow(self)
             self._accounts_window.setWindowTitle("NOC_Beam accounts")
-            self._accounts_window.resize(1100, 600)
-
-            self._accounts_detail = AccountDetail()
-            splitter = QSplitter(Qt.Orientation.Horizontal)
-            splitter.addWidget(self.accounts_view)
-            splitter.addWidget(self._accounts_detail)
-            splitter.setStretchFactor(0, 0)
-            splitter.setStretchFactor(1, 1)
-            splitter.setSizes([380, 720])
-            self._accounts_window.setCentralWidget(splitter)
-
-            # Track which account is currently shown in the detail
-            # pane so the AccountDetail's parameter-less signals can be
-            # routed to the by-id handlers.
-            self._accounts_detail_id = ""
-            self.accounts_view.selected_account_changed.connect(
-                self._on_accounts_window_selection
-            )
-            # Wire AccountDetail's action buttons (previously dead --
-            # signals emitted but never connected). Each handler dispatches
-            # to the by-id handler using the currently shown account.
-            self._accounts_detail.edit_requested.connect(
-                lambda: self._edit_account_by_id(self._accounts_detail_id)
-            )
-            self._accounts_detail.test_requested.connect(
-                lambda: self._test_account_by_id(self._accounts_detail_id)
-            )
-            self._accounts_detail.unregister_requested.connect(
-                lambda: self._unregister_account_by_id(self._accounts_detail_id)
-            )
-            self._accounts_detail.remove_requested.connect(
-                lambda: self._remove_account_by_id(self._accounts_detail_id)
-            )
+            self._accounts_window.resize(560, 480)
+            self._accounts_window.setCentralWidget(self.accounts_view)
+            # accounts_view was constructed as a (never-shown) child of the
+            # hidden shell; make sure the reparent leaves it visible.
+            self.accounts_view.show()
+        self.accounts_view.populate(self.accounts)
         self._accounts_window.show()
         self._accounts_window.raise_(); self._accounts_window.activateWindow()
 
-    def _on_accounts_window_selection(self, account_id: str) -> None:
-        self._accounts_detail_id = account_id or ""
-        if not account_id:
-            self._accounts_detail.show_empty()
-            return
-        cfg = next((a for a in self.accounts if a.id == account_id), None)
-        if cfg is None:
-            self._accounts_detail.show_empty()
-        else:
-            self._accounts_detail.show_account(cfg)
+    def _on_test_all_accounts(self) -> None:
+        """AccountsView 'Test all' toolbar button -> OPTIONS-probe every
+        enabled account (per-account path reused)."""
+        for acc in self.accounts:
+            if getattr(acc, "enabled", True):
+                try:
+                    self._test_account_by_id(acc.id)
+                except Exception:
+                    log.exception("Test-all probe failed for %s", acc.id)
 
     def _on_open_test_runner(self):
         from noc_beam.ui.test_runner_view import TestRunnerView

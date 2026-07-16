@@ -109,6 +109,9 @@ class AcctRow(QFrame):
     test_requested = Signal(str)
     toggle_enabled_requested = Signal(str)
     delete_requested = Signal(str)
+    # Owner feedback (phase 3.1 compact window): Unregister moves off the
+    # inline row into the right-click context menu.
+    unregister_requested = Signal(str)
 
     def __init__(self, account: AccountConfig, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -238,6 +241,34 @@ class AcctRow(QFrame):
             self.clicked.emit(self.account_id)
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event):  # noqa: N802, ANN001
+        # Owner feedback (phase 3.1): double-click = the primary action, Edit.
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.edit_requested.emit(self.account_id)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def contextMenuEvent(self, event):  # noqa: N802, ANN001
+        # Row overflow: quieter actions that don't earn an inline button
+        # (owner feedback, phase 3.1 compact window). popup() (non-blocking)
+        # + self-parenting keeps the menu alive after this handler returns.
+        from PySide6.QtWidgets import QApplication, QMenu
+
+        menu = QMenu(self)
+        menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        menu.addAction("Edit…", lambda: self.edit_requested.emit(self.account_id))
+        menu.addAction("Test (OPTIONS)", lambda: self.test_requested.emit(self.account_id))
+        menu.addAction("Unregister", lambda: self.unregister_requested.emit(self.account_id))
+        menu.addSeparator()
+        menu.addAction(
+            "Copy URI",
+            lambda: QApplication.clipboard().setText(self.uri.text()),
+        )
+        menu.addSeparator()
+        menu.addAction("Delete…", lambda: self.delete_requested.emit(self.account_id))
+        menu.popup(event.globalPos())
+
     def enterEvent(self, event):  # noqa: N802, ANN001
         self.actions.setVisible(True)
         super().enterEvent(event)
@@ -298,6 +329,7 @@ class AccountsView(QWidget):
     edit_requested = Signal(str)
     test_requested = Signal(str)
     delete_requested = Signal(str)
+    unregister_requested = Signal(str)   # row context menu (phase 3.1)
     refresh_all_requested = Signal()
     test_all_requested = Signal()
 
@@ -418,6 +450,7 @@ class AccountsView(QWidget):
             row.edit_requested.connect(self.edit_requested.emit)
             row.test_requested.connect(self.test_requested.emit)
             row.delete_requested.connect(self.delete_requested.emit)
+            row.unregister_requested.connect(self.unregister_requested.emit)
             self._rows_layout.insertWidget(insert_at, row)
             self._rows.append(row)
             insert_at += 1
