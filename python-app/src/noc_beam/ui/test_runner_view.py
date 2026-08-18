@@ -74,6 +74,12 @@ CSV_HEADER = [
     "B Number",
     "Date",
     "Duration (s)",
+    # Owner request 2026-07-16: the release (SIP response) code that ended
+    # each call. Kept as two columns -- the bare number pivots/filters
+    # cleanly in Excel ("show me every 503"), the reason text stays human
+    # readable next to it.
+    "Release Code",
+    "Release Reason",
     "FAS Verdict",
 ]
 
@@ -1604,10 +1610,12 @@ class TestRunnerView(QMainWindow):
         return username or t
 
     def export_csv(self, path: Path) -> None:
-        """Write the lean 5-column CSV: A Number, B Number, Date,
-        Duration, FAS Verdict. Operator request -- previously this
-        wrote 13 columns including run IDs, RTT, notes, FAS confidence
-        + reasons, which was too much noise for billing review.
+        """Write the lean CSV: A Number, B Number, Date, Duration,
+        Release Code, Release Reason, FAS Verdict. Operator request --
+        previously this wrote 13 columns including run IDs, RTT, notes,
+        FAS confidence + reasons, which was too much noise for billing
+        review; the release code was added back on request because
+        route analysis needs the cause that ended each call.
 
         A number is the originating account (from_account), B number
         is the dialled URI (to_uri).
@@ -1627,12 +1635,23 @@ class TestRunnerView(QMainWindow):
                 # token straight to CSV, so billing review saw UUIDs
                 # instead of the carrier A-numbers.
                 a_num = self._account_a_number(result.from_account)
+                # Release code: the SIP response that ended the call. The
+                # runner uses sip_code=0 for internal outcomes (cancelled,
+                # no matching account, endpoint error) -- those carry no
+                # wire code, so the column stays blank and only the reason
+                # text explains them. That keeps "=COUNTIF(E:E,503)" style
+                # analysis honest instead of counting phantom zeroes.
+                _code = getattr(result, "sip_code", None)
+                code_text = "" if not _code else str(_code)
+                reason_text = getattr(result, "sip_reason", "") or ""
                 writer.writerow(
                     [
                         safe(a_num),
                         safe(b_num),
                         self._format_started_at(started),
                         f"{result.duration_s:.1f}",
+                        safe(code_text),
+                        safe(reason_text),
                         safe(getattr(result, "fas_verdict", "") or ""),
                     ]
                 )

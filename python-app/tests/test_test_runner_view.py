@@ -110,15 +110,53 @@ def test_export_csv_writes_header_and_result_row(
     path = tmp_path / "results.csv"
     view.export_csv(path)
 
-    # CSV was trimmed to 5 columns (operator request — 13-col version
-    # was too noisy for billing review). Header is fixed; the timestamp
-    # is rendered in local time so we just check stable substrings.
+    # CSV was trimmed from 13 columns (too noisy for billing review), then
+    # the release code + reason were added back on owner request 2026-07-16
+    # because route analysis needs the cause that ended each call.
+    # Header is fixed; the timestamp is rendered in local time so we just
+    # check stable substrings.
     contents = path.read_text(encoding="utf-8")
     lines = contents.splitlines()
-    assert lines[0] == "A Number,B Number,Date,Duration (s),FAS Verdict"
+    assert lines[0] == (
+        "A Number,B Number,Date,Duration (s),"
+        "Release Code,Release Reason,FAS Verdict"
+    )
     assert lines[1].startswith("acc-1,2001,")
-    # Date column ends with `,1.2,` (duration + empty FAS verdict).
-    assert lines[1].endswith(",1.2,")
+    # Tail: duration, release code, reason, empty FAS verdict.
+    assert lines[1].endswith(",1.2,180,Ringing,")
+
+    view.close()
+
+
+def test_export_csv_blanks_release_code_for_internal_outcomes(
+    qt_app: QApplication,
+    tmp_path,
+) -> None:
+    """Runner-internal outcomes (cancelled / no account / endpoint error)
+    carry sip_code=0, which is not a wire release code. The column must
+    stay blank so COUNTIF-style analysis doesn't count phantom zeroes --
+    the reason text still explains what happened."""
+    view = RunnerWindow([])
+    view.results = [
+        RunnerResult(
+            call=PlanCall(index=1, caller_number="1001", target_number="2001"),
+            result="FAIL",
+            sip_code=0,
+            sip_reason="Cancelled",
+            rtt_ms=None,
+            duration_s=0.0,
+            notes="",
+            started_at=datetime(2026, 5, 15, 12, 34, 56, tzinfo=UTC).timestamp(),
+            from_account="acc-1",
+            to_uri="sip:2001@example.test",
+        )
+    ]
+
+    path = tmp_path / "internal.csv"
+    view.export_csv(path)
+
+    row = path.read_text(encoding="utf-8").splitlines()[1]
+    assert row.endswith(",0.0,,Cancelled,")
 
     view.close()
 
