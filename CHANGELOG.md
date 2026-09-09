@@ -2,6 +2,48 @@
 
 All notable changes to NOC_Beam are recorded here.
 
+## v1.3.0 — 2026-09-09
+
+The smoothness release. Every window transition was measured in the running
+app (click to first paint) and the slow paths fixed; the SIP engine and
+test-runner backend are untouched.
+
+### Speed (measured before → after)
+- **Settings** 650–750 ms on every open → 38 ms. The Destinations pane built
+  1,400 per-row Delete buttons each time; it now uses a lightweight ✕ cell, and
+  the dialog is prebuilt while the app is idle (with a staleness check so an
+  Apply or account change never shows stale values).
+- **Test runner** first open 190 ms → 33 ms and **SIP trace** 40 ms → 22 ms:
+  both are constructed shortly after launch instead of on first click.
+- **History / Contacts / Favorites pop-outs** 110 ms → 46 ms first open, 75 ms
+  → 18 ms after: rows are pre-loaded and only rebuilt when the file changed.
+- **In-app tabs** no longer paint twice on every switch (data is re-pushed only
+  when the history/contacts file actually changed).
+
+### Feel
+- **Call cards update in place** — mute, hold, codec and SIP state changes no
+  longer replay the slide-in animation; only a new call animates.
+- **Lists keep their scroll position** when a history row is expanded or a
+  search is refined.
+- **Tab switches** get a short fade; timers and clock columns use fixed-width
+  digits so nothing shifts as they tick; text in the dial and search fields is
+  selectable/copyable again.
+- **Native title-bar drag** — the OS move starts on the first pixel instead of
+  after a round trip through the web bridge, so dragging the softphone no
+  longer stutters. Double-click on the bar still maximises/restores.
+
+### Windows
+- **Every aux window gets its own taskbar button** — Settings, Accounts, SIP
+  trace, Test runner, Diagnostics and the History/Contacts/Favorites pop-outs
+  are top-level now, so an open window behind the softphone can always be
+  found and raised from the taskbar.
+
+### Export
+- **Full history CSV** gains **Release Code** and **Release Reason** columns
+  (same as the Test runner export). Normally ended answered calls export as
+  `200 OK`; unanswered calls without a wire code stay blank so counts in Excel
+  never include phantom zeroes.
+
 ## v1.2.0 — 2026-07-16
 
 The interface overhaul release. The Qt widget UI was replaced with a custom
