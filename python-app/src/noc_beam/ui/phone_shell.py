@@ -3431,7 +3431,7 @@ class PhoneShell(QMainWindow):
         try: SipEndpoint.instance().send_dtmf(call, digit, acc_cfg)
         except Exception: log.exception("send_dtmf failed")
 
-    def _on_settings(self):
+    def _pick_settings_account(self):
         # Pass the active account so the Account pane renders its
         # full identity + server + registration sections instead of
         # the empty "Add an account from the brand row" copy when
@@ -3447,7 +3447,57 @@ class PhoneShell(QMainWindow):
                 active_acct = self.accounts[0]
         except Exception:
             active_acct = None
-        dlg = SettingsDialog(self.settings, account=active_acct, parent=self)
+        return active_acct
+
+    def _settings_prewarm_key(self, account) -> tuple:
+        """Everything the SettingsDialog bakes in at construction. A
+        prebuilt dialog is only reused when this still matches, so an
+        Apply / account edit / account switch between prewarm and open can
+        never surface stale widget values."""
+        from dataclasses import asdict, is_dataclass
+
+        def _snap(x):
+            try:
+                return repr(asdict(x)) if is_dataclass(x) else repr(x)
+            except Exception:
+                return repr(x)
+
+        return (_snap(self.settings), getattr(account, "id", None), _snap(account))
+
+    def prewarm_settings_dialog(self) -> None:
+        """Build the next SettingsDialog while idle. Even after the
+        Destinations-pane fix the constructor + stylesheet polish is
+        ~130 ms (170 ms click-to-paint); handing over a prebuilt instance
+        makes Settings open like the other aux windows (~20 ms)."""
+        if getattr(self, "_settings_prebuilt", None) is not None:
+            return
+        acct = self._pick_settings_account()
+        try:
+            dlg = SettingsDialog(self.settings, account=acct, parent=self)
+        except Exception:
+            log.debug("settings prewarm failed", exc_info=True)
+            return
+        self._settings_prebuilt = (self._settings_prewarm_key(acct), dlg)
+
+    def _on_settings(self):
+        active_acct = self._pick_settings_account()
+        dlg = None
+        pre = getattr(self, "_settings_prebuilt", None)
+        self._settings_prebuilt = None
+        if pre is not None:
+            key, cand = pre
+            if key == self._settings_prewarm_key(active_acct):
+                dlg = cand
+            else:
+                try:
+                    cand.deleteLater()
+                except Exception:
+                    pass
+        if dlg is None:
+            dlg = SettingsDialog(self.settings, account=active_acct, parent=self)
+        # Whatever happens in this open, rebuild the spare afterwards
+        # (settings/account values may have changed via Apply/OK).
+        QTimer.singleShot(800, self.prewarm_settings_dialog)
         # Apply-without-close: lets the user click Apply and watch the
         # change land while the dialog stays open. Wrapped because the
         # unit-test FakeDialog stand-in doesn't define apply_requested.
@@ -3574,15 +3624,7 @@ class PhoneShell(QMainWindow):
         # the in-shell Trace tab loses its content). Each TraceView
         # self-wires to sip_events().sip_message in __init__, so
         # both stay live independently.
-        if not hasattr(self, "_trace_window"):
-            from PySide6.QtWidgets import QMainWindow
-            self._trace_window = QMainWindow(self)
-            self._trace_window.setWindowTitle("NOC_Beam SIP trace")
-            # Owner round 5: compact default to match the web app's density.
-            self._trace_window.resize(760, 480)
-            from noc_beam.ui.trace_view import TraceView
-            self._popup_trace_view = TraceView(self._trace_window)
-            self._trace_window.setCentralWidget(self._popup_trace_view)
+        self._ensure_trace_window()
         self._trace_window.show()
         self._trace_window.raise_(); self._trace_window.activateWindow()
 
@@ -3625,7 +3667,45 @@ class PhoneShell(QMainWindow):
                 except Exception:
                     log.exception("Test-all probe failed for %s", acc.id)
 
+    def prewarm_aux_windows(self) -> None:
+        """Build the heavy aux windows while the app is idle (called by
+        WebShell ~1.5 s after the page loads) so the FIRST open is as fast
+        as a repeat open. Measured 2026-09-09: Test runner first open was
+        180-190 ms click-to-paint vs 20 ms warm; Trace 40 ms vs 8 ms.
+        Everything here is guarded -- a failure just means the cold path
+        runs on first click, exactly as before."""
+        for fn in (
+            self._ensure_test_runner_window,
+            self._ensure_trace_window,
+            self.prewarm_settings_dialog,
+        ):
+            try:
+                fn()
+            except Exception:
+                log.debug("aux window prewarm failed", exc_info=True)
+
+    def _ensure_trace_window(self) -> None:
+        if not hasattr(self, "_trace_window"):
+            from PySide6.QtWidgets import QMainWindow
+            self._trace_window = QMainWindow(self)
+            self._trace_window.setWindowTitle("NOC_Beam SIP trace")
+            # Owner round 5: compact default to match the web app's density.
+            self._trace_window.resize(760, 480)
+            from noc_beam.ui.trace_view import TraceView
+            self._popup_trace_view = TraceView(self._trace_window)
+            self._trace_window.setCentralWidget(self._popup_trace_view)
+
     def _on_open_test_runner(self):
+        self._ensure_test_runner_window()
+        self._test_runner_window.accounts = list(self.accounts)
+        try:
+            self._test_runner_window.set_active_account_id(self._active_account_id)
+        except Exception:
+            pass
+        self._test_runner_window.show()
+        self._test_runner_window.raise_(); self._test_runner_window.activateWindow()
+
+    def _ensure_test_runner_window(self) -> None:
         from noc_beam.ui.test_runner_view import TestRunnerView
         from PySide6.QtCore import QSettings, QByteArray
         if not hasattr(self, "_test_runner_window"):
@@ -3659,13 +3739,6 @@ class PhoneShell(QMainWindow):
                     pass
                 _orig(ev)
             self._test_runner_window.closeEvent = _save_geom_on_close
-        self._test_runner_window.accounts = list(self.accounts)
-        try:
-            self._test_runner_window.set_active_account_id(self._active_account_id)
-        except Exception:
-            pass
-        self._test_runner_window.show()
-        self._test_runner_window.raise_(); self._test_runner_window.activateWindow()
 
     def _on_toggle_always_on_top(self, checked=False):
         self._always_on_top = bool(checked)

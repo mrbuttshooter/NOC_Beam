@@ -26,6 +26,13 @@
      otherwise override the UA [hidden]{display:none} and leak the incoming
      Answer/Reject row onto outgoing calls). */
   [hidden] { display: none !important; }
+  /* Text fields must stay selectable/copyable even though the chrome
+     around them is not (the global user-select:none above hits inputs too). */
+  input, textarea { user-select: text; }
+  /* Updating numbers (call timer, clock column, dialed digits) use fixed-
+     width digits so the chip / row never shifts as digits change. */
+  .chip .t, .row .w, .row .n, .live .num, .omni input,
+  .hdetail .v { font-variant-numeric: tabular-nums; }
   html, body { height: 100%; }
   body {
     background: var(--bg);
@@ -121,8 +128,12 @@
                 var(--panel);
     border: 1px solid rgba(102,115,232,.25);
     border-radius: 14px; padding: 14px 16px;
-    animation: rise .25s ease-out;
+    transition: border-color .15s, padding .15s;
   }
+  /* Entrance only for cards that are NEW (app.js tags them .enter and
+     strips it after the animation). Cards are reused/patched in place on
+     state changes, so mute/hold/codec updates no longer replay the slide. */
+  .live.enter { animation: rise .22s ease-out; }
   /* Stacked (2+) cards compact themselves; the selected (audio-focus) card
      carries a stronger border, mirroring the Qt calls_strip selection. */
   .live.compact { padding: 10px 12px; border-radius: 12px; }
@@ -154,7 +165,7 @@
     width: 38px; height: 32px; border-radius: 8px;
     border: 1px solid var(--border); background: var(--raised);
     color: var(--text-2); cursor: pointer; font-size: 14px;
-    transition: all .13s;
+    transition: color .13s, border-color .13s, background .13s, transform .13s;
   }
   .ctl:hover { color: var(--text); border-color: var(--border-strong);
                transform: translateY(-1px); }
@@ -187,7 +198,7 @@
     background: var(--raised); border: 1px solid var(--border);
     border-radius: 6px; padding: 4px 0; text-align: center; cursor: pointer;
     font-family: var(--mono); font-size: 12px; color: var(--text-2);
-    transition: all .12s;
+    transition: color .12s, border-color .12s, background .12s, transform .12s;
   }
   .minipad .mkey:hover { color: var(--text); border-color: var(--border-strong); }
   .minipad .mkey:active { transform: scale(.94); background: rgba(102,115,232,.2);
@@ -229,7 +240,7 @@
   .key {
     background: var(--panel); border: 1px solid var(--border);
     border-radius: 9px; padding: 4px 0 3px; text-align: center; cursor: pointer;
-    transition: all .12s;
+    transition: color .12s, border-color .12s, background .12s, transform .12s;
   }
   .key:hover { background: var(--raised); border-color: var(--border-strong);
                transform: translateY(-1px); }
@@ -318,7 +329,11 @@
   .menu .item .gear:hover { color: var(--text); background: var(--bg); }
 
   /* ===== Tabbed views (phase 2: History/Contacts/Favorites in-app) ===== */
-  .view { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .view { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0;
+          /* Restarts every time the view goes display:none -> flex, i.e. on
+             each tab switch: a short fade+lift instead of a hard cut. */
+          animation: viewIn .14s ease-out; }
+  @keyframes viewIn { from { opacity: 0; transform: translateY(4px); } }
   .tabbar {
     display: flex; gap: 4px; padding-top: 7px;
     border-top: 1px solid var(--border);
@@ -348,7 +363,8 @@
   .mini-btn {
     border: 1px solid var(--border); background: var(--raised);
     color: var(--text-2); border-radius: 9px; padding: 0 14px;
-    font-size: 12px; cursor: pointer; transition: all .13s;
+    font-size: 12px; cursor: pointer;
+    transition: color .13s, border-color .13s, background .13s;
   }
   .mini-btn:hover { color: var(--text); border-color: var(--border-strong); }
 

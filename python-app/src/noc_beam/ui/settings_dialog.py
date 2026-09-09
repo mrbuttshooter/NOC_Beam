@@ -500,33 +500,38 @@ class SettingsDialog(QDialog):
             )
             return item
 
+        # Perf (2026-09-09): the delete affordance used to be a QPushButton
+        # per row via setCellWidget. With the 1,400-row seed catalogue that
+        # was ~580 ms of widget construction + stylesheet polish on EVERY
+        # Settings open (measured 650-750 ms click-to-paint, whole app
+        # frozen). A plain read-only "✕" item + one cellClicked handler
+        # costs ~10 ms for the same 1,400 rows.
         def _attach_delete_button(row: int) -> None:
-            btn = QPushButton("Delete")
-            btn.setObjectName("DestRowDeleteBtn")
-            # Fixed compact width so ResizeToContents on the column can't
-            # squeeze the label down to "ele!" (clipped) as it did before.
-            btn.setFixedWidth(66)
+            item = QTableWidgetItem("✕")
+            item.setFlags(_Qt.ItemFlag.ItemIsEnabled)
+            item.setTextAlignment(_Qt.AlignmentFlag.AlignCenter)
+            item.setToolTip("Delete this row")
+            item.setForeground(_Qt.GlobalColor.gray)
+            table.setItem(row, 3, item)
 
-            def _delete_this_row():
-                # Find the current row by walking the table — using a
-                # captured `row` int goes stale after sorting / deletes.
-                for r in range(table.rowCount()):
-                    if table.cellWidget(r, 3) is btn:
-                        # Re-key extra_numbers around the removed row.
-                        new_extras: dict[int, tuple[str, ...]] = {}
-                        for k, v in extra_numbers.items():
-                            if k < r:
-                                new_extras[k] = v
-                            elif k > r:
-                                new_extras[k - 1] = v
-                        extra_numbers.clear()
-                        extra_numbers.update(new_extras)
-                        table.removeRow(r)
-                        _update_summary()
-                        return
+        def _delete_row(r: int) -> None:
+            if r < 0 or r >= table.rowCount():
+                return
+            # Re-key extra_numbers around the removed row.
+            new_extras: dict[int, tuple[str, ...]] = {}
+            for k, v in extra_numbers.items():
+                if k < r:
+                    new_extras[k] = v
+                elif k > r:
+                    new_extras[k - 1] = v
+            extra_numbers.clear()
+            extra_numbers.update(new_extras)
+            table.removeRow(r)
+            _update_summary()
 
-            btn.clicked.connect(_delete_this_row)
-            table.setCellWidget(row, 3, btn)
+        table.cellClicked.connect(
+            lambda r, c: _delete_row(r) if c == 3 else None
+        )
 
         def _reload() -> None:
             table.blockSignals(True)

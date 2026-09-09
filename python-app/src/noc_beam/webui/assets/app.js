@@ -234,10 +234,15 @@ function buildCard(c, multi) {
 }
 
 let lastCallIds = "";
+// Per-card render signature (call id -> JSON of everything the card shows).
+// A card whose signature is unchanged is left alone; a changed one is
+// rebuilt and swapped in place; only a NEW id gets the entrance animation.
+// Before this, every call_updated (mute, hold, codec, each SIP state step)
+// wiped and rebuilt all cards, replaying the slide-up each time.
+const cardSigs = new Map();
 
 function renderCalls(calls) {
   const box = $("calls");
-  box.textContent = "";
   const live = new Set(calls.map((c) => c.id));
   for (const id of [...openPads]) if (!live.has(id)) openPads.delete(id);
   const multi = calls.length > 1;
@@ -246,7 +251,32 @@ function renderCalls(calls) {
   // Owner round 5: with 2+ calls only the PAD disappears -- the RX/TX
   // meters stay, collapsing into a slim horizontal strip (CSS .compact).
   $("pad-row").classList.toggle("compact", multi);
-  for (const c of calls) box.appendChild(buildCard(c, multi));
+
+  // Drop cards whose call is gone.
+  for (const node of [...box.children]) {
+    const id = Number(node.dataset.cid);
+    if (!live.has(id)) { node.remove(); cardSigs.delete(id); }
+  }
+  // Patch / insert in stack order (ids are monotonic, so order is stable).
+  let cursor = box.firstElementChild;
+  for (const c of calls) {
+    const sig = JSON.stringify([c, multi, openPads.has(c.id)]);
+    const existing = box.querySelector(`.live[data-cid="${c.id}"]`);
+    if (existing && cardSigs.get(c.id) === sig) {
+      cursor = existing.nextElementSibling;
+      continue;
+    }
+    const fresh = buildCard(c, multi);
+    if (existing) {
+      existing.replaceWith(fresh);
+      cursor = fresh.nextElementSibling;
+    } else {
+      fresh.classList.add("enter");
+      fresh.addEventListener("animationend", () => fresh.classList.remove("enter"), { once: true });
+      box.insertBefore(fresh, cursor);
+    }
+    cardSigs.set(c.id, sig);
+  }
   // Restore current meter levels onto the freshly built cards so a state
   // re-render doesn't blank the bars until the next level push.
   paintLevels();
@@ -378,7 +408,7 @@ function filterMenu(menu, query) {
 // keeps the full Qt windows as escape hatches (bulk ops / add-edit dialogs).
 // BUILD_TAG renders as a muted footer in the menu — bump it on every shipped
 // zip so "which build am I on?" is answerable in two clicks.
-const BUILD_TAG = "v1.2.0";
+const BUILD_TAG = "v1.2.1-smooth";
 const APP_MENU = [
   ["Settings", "settings"],
   ["Accounts", "accounts"],
@@ -594,8 +624,21 @@ function buildDetail(d) {
 
 function historyKey(r) { return (r.detail && r.detail.when) + "|" + r.uri; }
 
+// Rebuilding a scrollable list wipes its children, which collapses
+// scrollHeight and snaps scrollTop to 0 -- expanding a row deep in the
+// history used to jump the list back to the top. Capture + restore.
+function withScrollKept(box, fn) {
+  const top = box.scrollTop;
+  fn();
+  box.scrollTop = top;
+}
+
 function renderHistory() {
   const box = $("history-list");
+  withScrollKept(box, () => _renderHistory(box));
+}
+
+function _renderHistory(box) {
   box.textContent = "";
   const q = ($("history-search").value || "").trim().toLowerCase();
   const rows = state.history.filter((r) =>
@@ -650,6 +693,10 @@ function buildContactRow(c) {
 
 function renderContactList(boxId, searchId, favOnly) {
   const box = $(boxId);
+  withScrollKept(box, () => _renderContactList(box, searchId, favOnly));
+}
+
+function _renderContactList(box, searchId, favOnly) {
   box.textContent = "";
   const q = ($(searchId).value || "").trim().toLowerCase();
   const rows = state.contacts.filter((c) =>
@@ -669,15 +716,31 @@ function renderFavorites() { renderContactList("favorites-list", "favorites-sear
 // ==========================================================================
 // State entry point (called from Python via runJavaScript)
 // ==========================================================================
+// Last applied payload per key (as JSON). A push whose data is identical
+// to what is already on screen is dropped instead of re-rendering the
+// same rows (belt-and-braces to web_shell's file-stamp guard: tab
+// switches request a refresh, and the answer is usually "no change").
+const lastApplied = {};
+function changed(key, value) {
+  const j = JSON.stringify(value);
+  if (lastApplied[key] === j) return false;
+  lastApplied[key] = j;
+  return true;
+}
+
 window.nb = {
   apply(patch) {
     if (!patch) return;
     if ("calls" in patch) { state.calls = patch.calls || []; renderCalls(state.calls); }
     if ("accounts" in patch) { state.accounts = patch.accounts; renderAccounts(state.accounts); }
     if ("suppliers" in patch) { state.suppliers = patch.suppliers; renderSuppliers(state.suppliers); }
-    if ("recents" in patch) { state.recents = patch.recents; renderRecents(state.recents); }
-    if ("history" in patch) { state.history = patch.history || []; renderHistory(); }
-    if ("contacts" in patch) {
+    if ("recents" in patch && changed("recents", patch.recents)) {
+      state.recents = patch.recents; renderRecents(state.recents);
+    }
+    if ("history" in patch && changed("history", patch.history)) {
+      state.history = patch.history || []; renderHistory();
+    }
+    if ("contacts" in patch && changed("contacts", patch.contacts)) {
       state.contacts = patch.contacts || [];
       renderContacts();
       renderFavorites();

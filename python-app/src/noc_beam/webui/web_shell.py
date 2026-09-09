@@ -41,6 +41,34 @@ log = logging.getLogger(__name__)
 _ASSETS = Path(__file__).resolve().parent / "assets"
 
 
+def _file_stamp(path: Path) -> tuple[int, int]:
+    """(mtime_ns, size) of a data file, (0, 0) if missing. Used to skip
+    re-reading + re-pushing history/contacts when nothing changed --
+    every tab switch used to re-read the JSON from disk, re-serialize
+    up to 200 rows and re-render the list that was already on screen."""
+    try:
+        st = path.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (0, 0)
+
+
+def _history_stamp() -> tuple[int, int]:
+    try:
+        from noc_beam.config.history import history_file
+        return _file_stamp(history_file())
+    except Exception:
+        return (0, 0)
+
+
+def _contacts_stamp() -> tuple[int, int]:
+    try:
+        from noc_beam.config.contacts import contacts_file
+        return _file_stamp(contacts_file())
+    except Exception:
+        return (0, 0)
+
+
 class _WebEngineView(QWebEngineView):
     """QWebEngineView that suppresses QtWebEngine's stock browser context
     menu (Back / Forward / Reload / Save page / View source -- wrong for a
@@ -139,6 +167,13 @@ class WebShell(QMainWindow):
         self._level_timer.setInterval(150)
         self._level_timer.timeout.connect(self._push_levels)
         self._last_levels_key: tuple[int, int, int] | None = None
+        # Last pushed data-file stamps (see _file_stamp) so tab switches
+        # don't re-push identical history/contacts payloads.
+        self._pushed_history_stamp: tuple[int, int] | None = None
+        self._pushed_contacts_stamp: tuple[int, int] | None = None
+        # Pop-out windows: stamp at last reload, so re-opening a pop-out
+        # doesn't rebuild every row when the file is unchanged.
+        self._popout_stamps: dict[str, tuple[int, int]] = {}
 
         # ---- Mirror PhoneShell state into the page ----------------------
         self._wire_mirror()
@@ -155,6 +190,34 @@ class WebShell(QMainWindow):
         # The page also calls bridge.ready() after the channel handshake;
         # this is a belt-and-braces initial push in case that races.
         QTimer.singleShot(0, self.push_all)
+        # Idle prewarm of the heavy Qt aux windows (Test runner, Trace) so
+        # their first open paints as fast as a repeat open.
+        QTimer.singleShot(1500, self._prewarm_aux_windows)
+
+    def _prewarm_aux_windows(self) -> None:
+        fn = getattr(self._phone, "prewarm_aux_windows", None)
+        if callable(fn):
+            try:
+                fn()
+            except Exception:
+                log.debug("aux window prewarm failed", exc_info=True)
+        # Pre-load the pop-out views (hidden shell children) so their first
+        # open skips the 90-110 ms row rebuild; _popout then sees a matching
+        # stamp and only reloads when the file actually changed.
+        for attr, view_attr, stamp in (
+            ("_history_window", "history_view", _history_stamp),
+            ("_contacts_window", "contacts_view", _contacts_stamp),
+            ("_favorites_window", "favorites_view", _contacts_stamp),
+        ):
+            view = getattr(self._phone, view_attr, None)
+            reload_fn = getattr(view, "reload", None)
+            if callable(reload_fn):
+                try:
+                    s = stamp()
+                    reload_fn()
+                    self._popout_stamps[attr] = s
+                except Exception:
+                    log.debug("pop-out prewarm failed for %s", attr, exc_info=True)
 
     def _js(self, script: str) -> None:
         if not self._page_ready:
@@ -226,6 +289,8 @@ class WebShell(QMainWindow):
     # State pushes (Python -> UI)
     # ------------------------------------------------------------------
     def push_all(self) -> None:
+        self._pushed_history_stamp = _history_stamp()
+        self._pushed_contacts_stamp = _contacts_stamp()
         self._apply(
             {
                 "calls": self._calls_payload(),
@@ -237,10 +302,21 @@ class WebShell(QMainWindow):
             }
         )
 
-    def push_history(self, *_args) -> None:
+    def push_history(self, *_args, force: bool = False) -> None:
+        """Push the history list. Skipped when the history file is
+        unchanged since the last push (tab switches call this on every
+        open); `force=True` bypasses the check (call ended -> CDR written)."""
+        stamp = _history_stamp()
+        if not force and stamp == self._pushed_history_stamp:
+            return
+        self._pushed_history_stamp = stamp
         self._apply({"history": self._history_payload()})
 
-    def push_contacts(self, *_args) -> None:
+    def push_contacts(self, *_args, force: bool = False) -> None:
+        stamp = _contacts_stamp()
+        if not force and stamp == self._pushed_contacts_stamp:
+            return
+        self._pushed_contacts_stamp = stamp
         self._apply({"contacts": self._contacts_payload()})
 
     def push_call(self, *_args) -> None:
@@ -348,11 +424,13 @@ class WebShell(QMainWindow):
         # tick so PhoneShell._maybe_write_cdr (which appends the CDR on the
         # same synchronous burst) has finished before we re-read the file.
         p.calls.call_removed.connect(lambda *_: QTimer.singleShot(0, self.push_recents))
-        p.calls.call_removed.connect(lambda *_: QTimer.singleShot(0, self.push_history))
+        p.calls.call_removed.connect(
+            lambda *_: QTimer.singleShot(0, lambda: self.push_history(force=True))
+        )
         # Contacts edited in the Qt manage window -> refresh the web tab.
         try:
             p.contacts_view.contact_saved.connect(
-                lambda *_: QTimer.singleShot(0, self.push_contacts)
+                lambda *_: QTimer.singleShot(0, lambda: self.push_contacts(force=True))
             )
         except Exception:
             log.debug("contact_saved hook unavailable", exc_info=True)
@@ -413,12 +491,17 @@ class WebShell(QMainWindow):
         # explicit-hidden flag, so without this show() the pop-out rendered a
         # bare blank canvas (owner P0 bug, phase 3.1).
         view.show()
-        # Fresh data on every open: with the shell hidden, none of the
+        # Fresh data on open: with the shell hidden, none of the
         # tab-switch/visibility paths that used to refresh these views fire.
+        # Skipped when the backing file is unchanged since the last reload
+        # (each reload tears down + rebuilds every row widget: 65-110 ms
+        # measured for a small history -- a visible stutter for nothing).
+        stamp = _history_stamp() if attr == "_history_window" else _contacts_stamp()
         reload_fn = getattr(view, "reload", None)
-        if callable(reload_fn):
+        if callable(reload_fn) and self._popout_stamps.get(attr) != stamp:
             try:
                 reload_fn()
+                self._popout_stamps[attr] = stamp
             except Exception:
                 log.exception("pop-out reload failed for %s", title)
         win.show()
