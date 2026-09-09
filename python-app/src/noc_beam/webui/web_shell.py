@@ -18,7 +18,7 @@ import json
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, QUrl, Qt
+from PySide6.QtCore import QEvent, QTimer, QUrl, Qt
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -157,6 +157,17 @@ class WebShell(QMainWindow):
         self._view.loadFinished.connect(self._on_load_finished)
         self._view.setUrl(QUrl.fromLocalFile(str(_ASSETS / "index.html")))
 
+        # ---- Native title-bar drag (owner feedback 2026-09-09) ----------
+        # Mouse presses on the web view land on its focus-proxy child widget
+        # BEFORE the page sees them. We hit-test them against the drag band
+        # + exclusion rects the page reports (bridge.set_drag_zones) and
+        # start the OS move synchronously -- the old JS mousedown ->
+        # QWebChannel -> start_move() path started tens of ms late, so the
+        # first pixels of every drag were dropped and it felt laggy.
+        self._drag_band = 0
+        self._drag_exclude: list[tuple[float, float, float, float]] = []
+        self._drag_filter_target = None
+
         # ---- Live RX/TX meter push (owner feedback 2026-07-16.3) --------
         # A ~6.7 Hz timer bridges PhoneShell's AudioStrip meter values (fed by
         # its own 200 ms pjsua2 poll) to the web call cards while a call is
@@ -193,6 +204,61 @@ class WebShell(QMainWindow):
         # Idle prewarm of the heavy Qt aux windows (Test runner, Trace) so
         # their first open paints as fast as a repeat open.
         QTimer.singleShot(1500, self._prewarm_aux_windows)
+
+    # ------------------------------------------------------------------
+    # Native title-bar drag
+    # ------------------------------------------------------------------
+    def set_drag_zones(self, zones: dict) -> None:
+        try:
+            self._drag_band = float(zones.get("band", 0) or 0)
+            ex = []
+            for r in zones.get("exclude", []) or []:
+                ex.append((float(r["x"]), float(r["y"]), float(r["w"]), float(r["h"])))
+            self._drag_exclude = ex
+        except Exception:
+            log.debug("bad drag zones payload", exc_info=True)
+            self._drag_band = 0
+            self._drag_exclude = []
+        self._install_drag_filter()
+
+    def _install_drag_filter(self) -> None:
+        target = self._view.focusProxy()
+        if target is None or target is self._drag_filter_target:
+            return
+        if self._drag_filter_target is not None:
+            try:
+                self._drag_filter_target.removeEventFilter(self)
+            except Exception:
+                pass
+        target.installEventFilter(self)
+        self._drag_filter_target = target
+
+    def _in_drag_band(self, x: float, y: float) -> bool:
+        if self._drag_band <= 0 or y < 0 or y > self._drag_band:
+            return False
+        for (ex, ey, ew, eh) in self._drag_exclude:
+            if ex <= x <= ex + ew and ey <= y <= ey + eh:
+                return False
+        return True
+
+    def eventFilter(self, obj, event):  # noqa: N802, ANN001
+        try:
+            if obj is self._drag_filter_target:
+                et = event.type()
+                if et in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonDblClick) \
+                        and event.button() == Qt.MouseButton.LeftButton:
+                    pos = event.position()
+                    if self._in_drag_band(pos.x(), pos.y()):
+                        if et == QEvent.Type.MouseButtonDblClick:
+                            self._bridge.toggle_max_restore()
+                        else:
+                            handle = self.windowHandle()
+                            if handle is not None:
+                                handle.startSystemMove()
+                        return True
+        except Exception:
+            log.debug("drag event filter failed", exc_info=True)
+        return super().eventFilter(obj, event)
 
     def _prewarm_aux_windows(self) -> None:
         fn = getattr(self._phone, "prewarm_aux_windows", None)
@@ -480,7 +546,10 @@ class WebShell(QMainWindow):
         is never shown, so lifting the view out of it is invisible + safe."""
         win = getattr(self, attr, None)
         if win is None:
-            win = QMainWindow(self)
+            # Top-level (no parent): a parented/owned window gets no
+            # taskbar button on Windows, so the operator could not find an
+            # open History/Contacts window behind the softphone.
+            win = QMainWindow()
             win.setWindowTitle(title)
             win.resize(*size)
             win.setCentralWidget(view)
@@ -567,10 +636,17 @@ class WebShell(QMainWindow):
             self.hide()
             return
         # Real quit: tear down the hidden host (drops sip subscribers, stops
-        # the endpoint via PhoneShell.closeEvent) then let the app exit.
+        # the endpoint via PhoneShell.closeEvent) then exit explicitly --
+        # quitOnLastWindowClosed is off (aux windows are top-level now).
         try:
             p._really_quitting = True
             p.close()
         except Exception:
             log.exception("hidden PhoneShell close failed during quit")
         super().closeEvent(event)
+        try:
+            from PySide6.QtWidgets import QApplication
+
+            QApplication.instance().quit()
+        except Exception:
+            log.exception("QApplication.quit() failed during WebShell close")

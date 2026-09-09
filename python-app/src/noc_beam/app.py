@@ -157,6 +157,11 @@ def run(argv: list[str]) -> int:
 
     app = QApplication(argv)
     app.setWindowIcon(_load_icon())
+    # Aux windows (Settings, Accounts, Trace, Test runner, pop-outs) are
+    # top-level so each gets its own taskbar button (owner feedback
+    # 2026-09-09). Quitting is an explicit act (menu Quit / close without a
+    # tray), so closing the last visible window must never end the process.
+    app.setQuitOnLastWindowClosed(False)
 
     # Application typeface: Segoe UI Variable (OS-provided on Win11) with
     # graceful fallbacks. Set on the QApplication so native-styled widgets

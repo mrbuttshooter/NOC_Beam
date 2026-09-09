@@ -786,8 +786,21 @@ function wireControls() {
   $("supplier-sel").addEventListener("click", (e) => { e.stopPropagation(); toggleMenu("supplier-menu", openSupplierMenu); });
   for (const id of MENU_IDS) wireMenuKeys($(id));
 
-  // Title-bar drag: mousedown on the chrome (but not on a button) hands the
-  // move to the OS via bridge.start_move() (brief §web_shell).
+  // Title-bar drag. Primary path (2026-09-09): report the chrome band and
+  // its control rects to Qt, which hit-tests the raw mouse press and starts
+  // the OS move synchronously (see web_shell.eventFilter). The mousedown
+  // handler below stays as the fallback when Qt has no filter installed.
+  const reportDragZones = () => {
+    if (!bridge || !bridge.set_drag_zones) return;
+    const chrome = $("chrome").getBoundingClientRect();
+    const rect = (el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
+    bridge.set_drag_zones(JSON.stringify({
+      band: chrome.bottom,
+      exclude: [rect($("account-pill")), rect($("btn-menu")), rect($("btn-min")), rect($("btn-close"))],
+    }));
+  };
+  window.addEventListener("resize", reportDragZones);
+  window.__reportDragZones = reportDragZones;
   $("chrome").addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     if (e.target.closest("button, .account, .menu")) return;
@@ -853,6 +866,11 @@ function boot() {
   new QWebChannel(qt.webChannelTransport, (channel) => {
     bridge = channel.objects.bridge;
     bridge.ready();
+    if (window.__reportDragZones) {
+      window.__reportDragZones();
+      // Account label / fonts settle after the first state push.
+      setTimeout(window.__reportDragZones, 500);
+    }
   });
 }
 

@@ -305,6 +305,22 @@ class WebBridge(QObject):
         except Exception:
             log.exception("bridge.close_win failed")
 
+    @Slot(str)
+    def set_drag_zones(self, payload: str) -> None:
+        """The page reports the title-bar band + the rectangles of its
+        interactive controls (account pill, menu, window buttons) as JSON
+        `{"band": h, "exclude": [{x,y,w,h}, ...]}` in CSS px. WebShell
+        hit-tests mouse presses against these synchronously so the OS move
+        starts on the very first pixel instead of after the async
+        JS -> QWebChannel -> start_move() round trip that made dragging feel
+        laggy (owner feedback 2026-09-09)."""
+        try:
+            import json
+
+            self._web.set_drag_zones(json.loads(payload or "{}"))
+        except Exception:
+            log.debug("bridge.set_drag_zones ignored", exc_info=True)
+
     @Slot()
     def start_move(self) -> None:
         try:

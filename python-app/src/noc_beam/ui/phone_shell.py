@@ -3473,7 +3473,9 @@ class PhoneShell(QMainWindow):
             return
         acct = self._pick_settings_account()
         try:
-            dlg = SettingsDialog(self.settings, account=acct, parent=self)
+            # Top-level (no parent) so Settings gets its own taskbar button
+            # like every other aux window; _open_modal keeps it app-modal.
+            dlg = SettingsDialog(self.settings, account=acct, parent=None)
         except Exception:
             log.debug("settings prewarm failed", exc_info=True)
             return
@@ -3494,7 +3496,20 @@ class PhoneShell(QMainWindow):
                 except Exception:
                     pass
         if dlg is None:
-            dlg = SettingsDialog(self.settings, account=active_acct, parent=self)
+            dlg = SettingsDialog(self.settings, account=active_acct, parent=None)
+        # Parentless dialogs default to screen-centre; sit it over the
+        # softphone (the active window) instead so it opens where the
+        # operator is looking.
+        try:
+            from PySide6.QtWidgets import QApplication
+
+            anchor = QApplication.activeWindow()
+            if anchor is not None and anchor is not dlg:
+                g = anchor.frameGeometry()
+                dlg.adjustSize()
+                dlg.move(g.center().x() - dlg.width() // 2, g.center().y() - dlg.height() // 2)
+        except Exception:
+            log.debug("settings dialog placement skipped", exc_info=True)
         # Whatever happens in this open, rebuild the spare afterwards
         # (settings/account values may have changed via Apply/OK).
         QTimer.singleShot(800, self.prewarm_settings_dialog)
@@ -3606,11 +3621,11 @@ class PhoneShell(QMainWindow):
     def _on_diagnostics(self):
         from noc_beam.ui.diagnostics_view import DiagnosticsView
         if not hasattr(self, "_diagnostics_window"):
-            # Parent to self so Windows treats the diagnostics window as
-            # a child of the main shell — otherwise it renders as a
-            # separate top-level "NOC_Beam" entry in the taskbar with
-            # its own chrome (small orphan window).
-            self._diagnostics_window = DiagnosticsView(self)
+            # Top-level on purpose (owner feedback 2026-09-09): an owned
+            # window gets NO taskbar button, so an open aux window hiding
+            # behind the softphone was impossible to find. The shell is
+            # hidden anyway, so there is nothing to be a child of.
+            self._diagnostics_window = DiagnosticsView()
             self._diagnostics_window.setWindowTitle("NOC_Beam diagnostics")
             self._diagnostics_window.resize(900, 600)
         self._diagnostics_window.update_accounts(self.accounts)
@@ -3641,10 +3656,8 @@ class PhoneShell(QMainWindow):
         if not hasattr(self, "_accounts_window"):
             from PySide6.QtWidgets import QMainWindow
 
-            # Parent to self so Windows treats the accounts window as
-            # a child of the main shell — otherwise it renders as a
-            # separate top-level "NOC_Beam" entry in the taskbar.
-            self._accounts_window = QMainWindow(self)
+            # Top-level so it gets its own taskbar button (see _on_diagnostics).
+            self._accounts_window = QMainWindow()
             self._accounts_window.setWindowTitle("NOC_Beam accounts")
             # Owner feedback 2026-07-16.3: tighter default now that each
             # account is a single ~36 px line (was a 3-tier card).
@@ -3687,7 +3700,8 @@ class PhoneShell(QMainWindow):
     def _ensure_trace_window(self) -> None:
         if not hasattr(self, "_trace_window"):
             from PySide6.QtWidgets import QMainWindow
-            self._trace_window = QMainWindow(self)
+            # Top-level so it gets its own taskbar button (see _on_diagnostics).
+            self._trace_window = QMainWindow()
             self._trace_window.setWindowTitle("NOC_Beam SIP trace")
             # Owner round 5: compact default to match the web app's density.
             self._trace_window.resize(760, 480)
@@ -3709,9 +3723,10 @@ class PhoneShell(QMainWindow):
         from noc_beam.ui.test_runner_view import TestRunnerView
         from PySide6.QtCore import QSettings, QByteArray
         if not hasattr(self, "_test_runner_window"):
+            # Top-level so it gets its own taskbar button (see _on_diagnostics).
             self._test_runner_window = TestRunnerView(
                 self.accounts,
-                self,
+                None,
                 active_account_id=self._active_account_id,
             )
             # Persist Test Runner window geometry across launches: the
