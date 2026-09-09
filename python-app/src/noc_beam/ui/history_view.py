@@ -852,7 +852,8 @@ class HistoryView(QWidget):
 
         Save-As dialog opens at Documents/NOC_BEAM/ with an auto-named
         filename; the user can navigate elsewhere or rename. Schema:
-        A Number, B Number, Date, Duration (s), FAS Verdict.
+        A Number, B Number, Date, Duration (s), Release Code,
+        Release Reason, FAS Verdict.
         """
         chosen = [r._entry for r in self._rows if r.is_checked()]
         if not chosen:
@@ -875,16 +876,28 @@ class HistoryView(QWidget):
         try:
             with out_path.open("w", encoding="utf-8", newline="") as fh:
                 writer = csv.writer(fh, lineterminator="\n")
-                writer.writerow(["A Number", "B Number", "Date", "Duration (s)", "FAS Verdict"])
+                # Owner request 2026-09-09: same two columns the Test runner
+                # CSV gained (commit 41d06b0) -- the bare SIP release code
+                # (pivot/filter friendly) and its reason text. Mirrors the
+                # row badge: an answered call that ended normally carries
+                # no stored code, so it exports as 200 OK rather than blank.
+                writer.writerow([
+                    "A Number", "B Number", "Date", "Duration (s)",
+                    "Release Code", "Release Reason", "FAS Verdict",
+                ])
                 for e in chosen:
                     a, b = _ab_numbers(e)
                     when = e.started_at or e.ended_at or 0
                     date_str = _dt.fromtimestamp(when).strftime("%Y-%m-%d %H:%M:%S") if when else ""
+                    code = e.end_code or (200 if e.was_answered else 0)
+                    reason = e.end_reason or ("OK" if code == 200 else "")
                     writer.writerow([
                         _csv_safe(a),
                         _csv_safe(b),
                         date_str,
                         f"{e.duration_s:.1f}",
+                        str(code) if code else "",
+                        _csv_safe(reason),
                         _csv_safe(e.fas_verdict or ""),
                     ])
             log.info("History CSV exported: %s (%d rows)", out_path, len(chosen))
