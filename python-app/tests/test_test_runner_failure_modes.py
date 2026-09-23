@@ -268,7 +268,7 @@ def test_endpoint_pjsip_invalidurI_surfaces_in_notes() -> None:
 def test_no_matching_account_for_caller_number_does_not_dispatch() -> None:
     events = SipEvents()
     endpoint = StubEndpoint()
-    s = spec(callers=["9999"], targets=["2001"])
+    s = spec(callers=["not-an-account"], targets=["2001"])
     runner = Runner(s, [account(username="1001")], endpoint=endpoint, events=events)
     results: list[RunnerResult] = []
     runner.call_completed.connect(results.append)

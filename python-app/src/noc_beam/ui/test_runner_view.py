@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import logging
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -47,10 +49,29 @@ class _PasteAtEndTextEdit(QTextEdit):
         text = source.text() if source is not None else ""
         if not text:
             return
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            # Paste over a selection REPLACES it (Select All + Paste swaps
+            # the whole list). The old code ignored the selection and
+            # appended, so the previous list was dialled again. Plain
+            # replace semantics -- no forced newline mid-document, which
+            # would split a number when fixing a few digits in place.
+            at_end = cursor.selectionEnd() >= len(self.toPlainText())
+            if at_end and not text.endswith("\n"):
+                text += "\n"
+            cursor.insertText(text)
+            self.setTextCursor(cursor)
+            self.ensureCursorVisible()
+            return
         if not text.endswith("\n"):
             text += "\n"
-        cursor = self.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
+        # Start the pasted chunk on its own line. A hand-typed last line
+        # has no trailing newline; appending straight onto it glued two
+        # numbers into one bogus target ("2001" + "2002" -> "20012002").
+        existing = self.toPlainText()
+        if existing and not existing.endswith("\n"):
+            text = "\n" + text
         cursor.insertText(text)
         self.setTextCursor(cursor)
         # Ensure visible focus stays on the new bottom line.
@@ -65,8 +86,23 @@ from noc_beam.testing.runner import TestResult as RunnerResult
 from noc_beam.testing.runner import TestRunner as Runner
 from noc_beam.ui.supplier_dropdown import SupplierDropdown
 
+log = logging.getLogger(__name__)
+
 # Parallel is internally pinned to 10 (boss directive 2026-05-25). UI hidden.
 _PINNED_PARALLEL = 10
+
+# Runner outcomes that carry no route verdict: the call was never placed
+# (queued when Stop / FAS auto-pause hit, or no account resolved) or was
+# aborted by the operator mid-setup. The runner reports them as FAIL with
+# sip_code 0; counting them as "failed" blamed the route for calls that
+# never reached it ("Stop after 1 of 5" showed "5 failed").
+_NO_VERDICT_REASONS = frozenset({"Cancelled", "Auto-paused", "No matching account"})
+
+# A leading "+" is a formula trigger in Excel, but E.164 numbers start
+# with it too. Only a value that is entirely "+digits" (spaces allowed)
+# is a phone number; anything else after the "+" (e.g. "+1+cmd|...") is
+# still guarded.
+_PLUS_PHONE_RE = re.compile(r"\+\d[\d ]*")
 
 
 CSV_HEADER = [
@@ -100,6 +136,27 @@ class TestRunnerView(QMainWindow):
         self.results: list[RunnerResult] = []
         self.runner: Runner | None = None
         self._row_by_call_index: dict[int, int] = {}
+        # Calls that emitted call_started this run, and the subset still in
+        # flight. "running" is len(_in_flight): it only drops for calls that
+        # actually started (never-dialled FAILs used to decrement it too).
+        self._started_indexes: set[int] = set()
+        self._in_flight: set[int] = set()
+        self._running_count = 0
+        # Status note shown ahead of the preflight text (run blocked,
+        # FAS auto-pause). Block notes clear once the operator fixes the
+        # supplier; run notes clear on the next Run / Clear.
+        self._status_note = ""
+        self._status_kind = ""
+        self._last_preflight_text = ""
+        # Close requested while a run was active: finish cancelling, then close.
+        self._close_after_run = False
+        # True while the SUPPLIER picker is shown (teles / genband account).
+        self._supplier_picker_active = False
+        self._supplier_filtering_text = False
+        # Old Teles usernames -> account id. A supplier switch renames the
+        # account (U070 -> U080); caller tokens naming the old username must
+        # still resolve to that account instead of "No matching account".
+        self._teles_aliases: dict[str, str] = {}
 
         self.setWindowTitle("NOC_Beam test runner")
         # Default ~1280x800 so the operator sees the full toolbar, both
@@ -824,50 +881,131 @@ class TestRunnerView(QMainWindow):
                 return self._account_label(account)
         return token
 
-    def _materialize_active_teles_account(self) -> None:
+    @staticmethod
+    def _live_call_count(account: AccountConfig) -> int:
+        """Live SIP calls on this account (SipAccount.calls drops a call on
+        DISCONNECTED). Mirrors PhoneShell._active_calls_on_account, which
+        the Test Runner can't reach (it is a parentless top-level)."""
+        try:
+            from noc_beam.sip.endpoint import SipEndpoint
+
+            sip_acc = SipEndpoint.instance().get_account(account.id)
+            return len(list(getattr(sip_acc, "calls", None) or []))
+        except Exception:
+            return 0
+
+    def _materialize_active_teles_account(self) -> tuple[bool, dict[str, str]]:
+        """Switch the active Teles account to the picked supplier identity.
+
+        Returns ``(ok, caller_aliases)``. ``ok`` False means the Run must
+        not start (the reason is already on the status line): dialling
+        anyway would go out under the OLD supplier identity.
+        ``caller_aliases`` maps usernames this account had before a rename
+        to its stable id, so caller tokens naming them still resolve.
+        """
         account = self._selected_batch_account()
         if account is None:
-            return
+            return True, {}
         kind = (getattr(account, "switch_type", "other") or "other").lower()
         routing_fmt = (getattr(account, "routing_format", "") or "").strip()
         if kind != "teles" or not self._batch_supplier_id:
-            return
+            return True, {}
         needs_supplier = "{id}" in routing_fmt.lower() or routing_fmt in {"U", "N"}
         if not needs_supplier:
-            return
+            return True, {}
+        sid = self._batch_supplier_id
+        label = self._account_label(account)
         try:
             from noc_beam.config.suppliers import load_suppliers
             from noc_beam.sip.endpoint import SipEndpoint
-        except Exception:
-            return
+
+            supplier = next((s for s in load_suppliers() if s.id == sid), None)
+        except Exception as exc:
+            log.exception("Failed to load suppliers for Teles Test Runner run")
+            self._set_status_note(
+                f"Run blocked: could not load suppliers ({exc}). No calls were dialled.",
+                kind="block",
+            )
+            return False, {}
+        if supplier is None:
+            self._set_status_note(
+                f"Run blocked: supplier C{sid} is not in the suppliers list.",
+                kind="block",
+            )
+            return False, {}
+        if "{id}" in routing_fmt.lower():
+            new_uid = self._render_supplier_template(routing_fmt, supplier.id)
+        elif routing_fmt in {"U", "N"}:
+            new_uid = f"{routing_fmt}{supplier.id}"
+        else:
+            new_uid = supplier.routed(routing_fmt)
+        if not new_uid:
+            self._set_status_note(
+                f"Run blocked: could not build the {label} identity for supplier C{sid}.",
+                kind="block",
+            )
+            return False, {}
+        old_user = account.username
+        old_auth = account.auth_user
+        if old_user == new_uid and old_auth == new_uid:
+            return True, self._current_teles_aliases()
+        # Same guard + message as PhoneShell's supplier swap (phone_shell
+        # _on_supplier_changed): update_account is remove + re-add, which
+        # drops a live call's media without a BYE.
+        live = self._live_call_count(account)
+        if live:
+            self._set_status_note(
+                f"{account.username}@{account.domain} has {live} active "
+                "call(s). End them before switching supplier — the swap "
+                "re-registers and would drop the call mid-conversation.",
+                kind="block",
+            )
+            return False, {}
+        account.username = new_uid
+        account.auth_user = new_uid
         try:
-            supplier = next(
-                (s for s in load_suppliers() if s.id == self._batch_supplier_id),
-                None,
-            )
-            if supplier is None:
-                return
-            if "{id}" in routing_fmt.lower():
-                new_uid = self._render_supplier_template(routing_fmt, supplier.id)
-            elif routing_fmt in {"U", "N"}:
-                new_uid = f"{routing_fmt}{supplier.id}"
-            else:
-                new_uid = supplier.routed(routing_fmt)
-            if not new_uid:
-                return
-            if account.username == new_uid and account.auth_user == new_uid:
-                return
-            account.username = new_uid
-            account.auth_user = new_uid
-            parent = self.parent()
-            if parent is not None and hasattr(parent, "_save_accounts_or_warn"):
-                parent._save_accounts_or_warn(self.accounts)
             SipEndpoint.instance().update_account(account)
-        except Exception:
-            import logging as _logging
-            _logging.getLogger(__name__).exception(
-                "Failed to materialize Teles account for Test Runner"
+        except Exception as exc:
+            log.exception("Failed to materialize Teles account for Test Runner")
+            # Roll back so the in-memory identity matches what we tell the
+            # operator (best-effort re-register of the old identity).
+            account.username = old_user
+            account.auth_user = old_auth
+            try:
+                SipEndpoint.instance().update_account(account)
+            except Exception:
+                log.exception("Restoring the previous Teles identity failed")
+            self._set_status_note(
+                f"Run blocked: could not switch {label} to supplier C{sid} "
+                f"({exc}). No calls were dialled.",
+                kind="block",
             )
+            return False, {}
+        for token in (old_user, old_auth):
+            token = (token or "").strip()
+            if token and token != new_uid:
+                self._teles_aliases[token] = account.id
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "_save_accounts_or_warn"):
+            try:
+                parent._save_accounts_or_warn(self.accounts)
+            except Exception:
+                log.exception("Saving accounts after Teles supplier switch failed")
+        return True, self._current_teles_aliases()
+
+    def _current_teles_aliases(self) -> dict[str, str]:
+        """Aliases still worth applying: an old username only maps to its
+        account while no configured account currently owns that name."""
+        live_names = set()
+        for acc in self.accounts:
+            live_names.add(getattr(acc, "username", "") or "")
+            live_names.add(getattr(acc, "id", "") or "")
+        known_ids = {getattr(acc, "id", "") for acc in self.accounts}
+        return {
+            old: acc_id
+            for old, acc_id in self._teles_aliases.items()
+            if old not in live_names and acc_id in known_ids
+        }
 
     def _refresh_supplier_picker(self) -> None:
         """Show/hide + populate the supplier picker based on the active
@@ -884,6 +1022,7 @@ class TestRunnerView(QMainWindow):
             if sep is not None:
                 sep.setVisible(False)
             self._batch_supplier_id = ""
+            self._supplier_picker_active = False
             return
         try:
             from noc_beam.config.suppliers import load_valid_suppliers
@@ -891,7 +1030,9 @@ class TestRunnerView(QMainWindow):
             suppliers = load_valid_suppliers()
         except Exception:
             self.supplier_row.setVisible(False)
+            self._supplier_picker_active = False
             return
+        self._supplier_picker_active = True
         self.supplier_combo.blockSignals(True)
         self._all_suppliers = [(s.display(), str(s.id)) for s in suppliers]
         self.supplier_combo.set_items(self._all_suppliers, self._batch_supplier_id)
@@ -916,7 +1057,40 @@ class TestRunnerView(QMainWindow):
             sep.setVisible(False)
 
     def _on_supplier_return_pressed(self) -> None:
-        self._commit_supplier_text(focus_targets=True)
+        if not self._commit_supplier_text(focus_targets=True):
+            self._set_status_note(self._supplier_problem_text(), kind="block")
+
+    def _supplier_problem_text(self) -> str:
+        try:
+            text = self.supplier_combo.lineEdit().text().strip()
+        except Exception:
+            text = ""
+        if not text:
+            return "Run blocked: pick a supplier from the SUPPLIER list."
+        _sid, problem = self._resolve_supplier_text(text)
+        return f"Run blocked: {problem} — pick one from the SUPPLIER list."
+
+    def _resolve_supplier_text(self, text: str) -> tuple[str, str]:
+        """Resolve typed supplier text to exactly one supplier id.
+
+        Returns ``(supplier_id, "")`` on a unique match, else ``("", why)``.
+        Exact display / C-code matches win; a substring must be unambiguous
+        -- silently taking the first of several matches would route the
+        batch through a supplier the operator never picked.
+        """
+        text_lower = (text or "").strip().lower()
+        if not text_lower:
+            return "", "no supplier selected"
+        code_text = text_lower[1:] if text_lower.startswith("c") else text_lower
+        for display, sid in self._all_suppliers:
+            if display.lower() == text_lower or str(sid).lower() in (text_lower, code_text):
+                return str(sid), ""
+        hits = [str(sid) for display, sid in self._all_suppliers if text_lower in display.lower()]
+        if len(hits) == 1:
+            return hits[0], ""
+        if len(hits) > 1:
+            return "", f"{text.strip()!r} matches {len(hits)} suppliers"
+        return "", f"no supplier matches {text.strip()!r}"
 
     def _supplier_id_from_text(self, text: str) -> str:
         text_lower = (text or "").strip().lower()
@@ -932,20 +1106,32 @@ class TestRunnerView(QMainWindow):
                 return str(sid)
         return ""
 
-    def _commit_supplier_text(self, *, focus_targets: bool = False) -> None:
+    def _commit_supplier_text(self, *, focus_targets: bool = False) -> bool:
+        """Commit whatever the supplier box shows as the batch supplier.
+
+        Returns False (nothing committed) when the text resolves to no
+        single supplier. Previously the resolved index was set while the
+        search-filter flag was still up, so _on_supplier_changed dropped it
+        and the runner dialled via the OLD supplier while the box showed
+        the new one.
+        """
         try:
             text = self.supplier_combo.lineEdit().text().strip()
         except Exception:
-            return
-        if not text:
-            return
-        target_id = self._supplier_id_from_text(text)
+            return True
+        target_id, _problem = self._resolve_supplier_text(text)
         if not target_id:
-            return
+            return False
+        # Drop the filter flag BEFORE moving the index so the change isn't
+        # ignored, and commit explicitly: setCurrentIndex emits nothing
+        # when the index is unchanged.
+        self._supplier_filtering_text = False
         resolved_idx = self.supplier_combo.findData(target_id)
         if resolved_idx >= 0:
             self.supplier_combo.setCurrentIndex(resolved_idx)
+        self._batch_supplier_id = target_id
         try:
+            self.supplier_combo.set_filter("")
             self.supplier_combo.hidePopup()
         except Exception:
             pass
@@ -954,8 +1140,9 @@ class TestRunnerView(QMainWindow):
                 self.targets_edit.setFocus(Qt.FocusReason.TabFocusReason)
             except Exception:
                 pass
-        self._supplier_filtering_text = False
+        self._clear_block_note()
         self._refresh_plan_preview()
+        return True
 
     def _on_supplier_text_edited(self, text: str) -> None:
         if not text:
@@ -1033,11 +1220,12 @@ class TestRunnerView(QMainWindow):
         if getattr(self, "_supplier_filtering_text", False):
             return
         self._batch_supplier_id = self.supplier_combo.itemData(index) or ""
+        self._clear_block_note()
         # Reflect new supplier in the preflight line.
         try:
             self._refresh_plan_preview()
         except Exception:
-            pass
+            log.exception("Preflight refresh after supplier change failed")
 
     @staticmethod
     def _add_labeled_control(layout: QHBoxLayout, label: str, widget: QWidget) -> None:
@@ -1309,11 +1497,10 @@ class TestRunnerView(QMainWindow):
         )
         self._refresh_tab_titles()
         self.run_btn.setEnabled(count > 0 and self.runner is None)
-        # Update the targets-tab badge with the live count.
+        # Targets-tab badge = number of targets pasted (was the expanded
+        # CALL count, so 2 targets x times=3 read "Targets (6)").
         if hasattr(self, "_tab_targets_btn"):
-            self._tab_targets_btn.setText(
-                "Targets (1)" if count == 1 else f"Targets ({count})"
-            )
+            self._tab_targets_btn.setText(f"Targets ({len(spec.targets)})")
         # Update Callers tab badge -- "(auto)" when blank, otherwise count.
         if hasattr(self, "_tab_callers_btn"):
             caller_lines = [
@@ -1328,8 +1515,29 @@ class TestRunnerView(QMainWindow):
                 "1 call" if count == 1 else f"{count} calls"
             )
         # Pre-flight summary -- the headline.
-        if hasattr(self, "_preflight_label"):
-            self._preflight_label.setText(self._preflight_text(count, spec))
+        self._last_preflight_text = self._preflight_text(count, spec)
+        self._render_status_line()
+
+    # ------------------------------------------------------------------
+    # Status line (preflight label): run-blocked / auto-pause notes
+    # ------------------------------------------------------------------
+    def _render_status_line(self) -> None:
+        if not hasattr(self, "_preflight_label"):
+            return
+        note = self._status_note
+        base = self._last_preflight_text
+        self._preflight_label.setText(f"{note}  ·  {base}" if note and base else (note or base))
+
+    def _set_status_note(self, text: str, *, kind: str = "info") -> None:
+        """kind: "block" (Run refused; clears when the supplier is fixed),
+        "autopause" (kept in sync by _refresh_summary), "info"."""
+        self._status_note = text or ""
+        self._status_kind = kind if text else ""
+        self._render_status_line()
+
+    def _clear_block_note(self) -> None:
+        if self._status_kind == "block":
+            self._set_status_note("")
 
     def _preflight_text(self, count: int, spec) -> str:
         if count == 0:
@@ -1381,13 +1589,25 @@ class TestRunnerView(QMainWindow):
         self.hold_spin.setEnabled(self.pass_combo.currentData() == "full-call")
 
     def _on_run_clicked(self) -> None:
-        self._commit_supplier_text()
-        self._materialize_active_teles_account()
-        spec = self._spec_from_ui()
-        calls = expand(spec)
-        if not calls or self.runner is not None:
+        if self.runner is not None or not expand(self._spec_from_ui()):
             self._refresh_plan_preview()
             return
+        # The supplier the box SHOWS is the one the runner gets. Typed /
+        # Enter text used to be resolved but never committed (filter flag
+        # swallowed the change), so the batch dialled via the old supplier.
+        if self._supplier_picker_active and not self._commit_supplier_text():
+            self._set_status_note(self._supplier_problem_text(), kind="block")
+            return
+        ok, caller_aliases = self._materialize_active_teles_account()
+        if not ok:
+            return
+        self._set_status_note("")
+        spec = self._spec_from_ui()
+        if caller_aliases:
+            # Caller tokens naming the Teles account's pre-switch username
+            # (U070 after a switch to U080) resolve to the account id.
+            spec.callers = [caller_aliases.get(c, c) for c in spec.callers]
+        calls = expand(spec)
 
         self.results = []
         self._row_by_call_index = {}
@@ -1397,12 +1617,11 @@ class TestRunnerView(QMainWindow):
         for call in calls:
             self._append_call_row(call)
 
-        # Reset the integer running counter at the start of every run.
-        # If a stale call_started signal from a previous run arrived
-        # after run_complete (queued Qt signals + deferred deleteLater
-        # of the parent-pinned runner), _running_count could leak a
-        # non-zero baseline into the new run -- the "running" chip
-        # would be wrong from the first tick.
+        # Reset the running bookkeeping at the start of every run so a
+        # stale call_started from a previous run can't leak a non-zero
+        # baseline into the new one.
+        self._started_indexes = set()
+        self._in_flight = set()
         self._running_count = 0
 
         self.export_btn.setEnabled(False)
@@ -1459,9 +1678,9 @@ class TestRunnerView(QMainWindow):
             # for badge text "RUNNING") never matched, so the "running"
             # chip was stuck at 0 throughout the run.
             self._set_result_badge(row, "running")
-        # Integer counter -- see _refresh_summary docstring for why
-        # this beats scanning every table row's findChild on each event.
-        self._running_count = getattr(self, "_running_count", 0) + 1
+        self._started_indexes.add(call_index)
+        self._in_flight.add(call_index)
+        self._running_count = len(self._in_flight)
         self._refresh_summary()
 
     def _on_call_completed(self, result: RunnerResult) -> None:
@@ -1471,7 +1690,11 @@ class TestRunnerView(QMainWindow):
             row = self._append_call_row(result.call)
         self._populate_result_row(row, result)
         self.export_btn.setEnabled(True)
-        self._running_count = max(0, getattr(self, "_running_count", 0) - 1)
+        # Only a call that actually started leaves "running". Never-dialled
+        # results (no account / cancelled or auto-paused while queued) used
+        # to decrement it too, under-reporting calls still in flight.
+        self._in_flight.discard(result.call.index)
+        self._running_count = len(self._in_flight)
         # Mark Results tab dirty unless the operator is already there.
         if hasattr(self, "tabs"):
             if self.tabs.currentIndex() != getattr(self, "_results_tab_index", -1):
@@ -1492,11 +1715,17 @@ class TestRunnerView(QMainWindow):
                 pass
         self.runner = None
         # Reset the running counter for the next cycle.
+        self._in_flight = set()
         self._running_count = 0
         self.stop_btn.setEnabled(False)
         self.export_btn.setEnabled(bool(self.results))
         self._refresh_plan_preview()
         self._refresh_summary()
+        if self._close_after_run:
+            # Close was requested mid-run: the cancel has now finished
+            # unwinding, so honour it instead of leaving the window open.
+            self._close_after_run = False
+            QTimer.singleShot(0, self.close)
 
     def _on_cancel_clicked(self) -> None:
         # Disable Stop immediately so a double-click can't re-trigger
@@ -1515,14 +1744,30 @@ class TestRunnerView(QMainWindow):
         self.results = []
         self._row_by_call_index = {}
         self.table.setRowCount(0)
+        # Also reset the Running tab (title + start log), the Results dot
+        # and any run note -- they kept showing the cleared run.
+        if hasattr(self, "_running_list"):
+            self._running_list.clear()
+        self._started_indexes = set()
+        self._in_flight = set()
+        self._running_count = 0
+        self._results_dirty = False
+        self._set_status_note("")
         self.export_btn.setEnabled(False)
         self._refresh_summary()
+        self._refresh_tab_titles()
 
     def closeEvent(self, event) -> None:  # noqa: N802, ANN001
         if self.runner is not None:
+            # Cancel, then close for real once run_complete arrives (see
+            # _on_run_complete). Set the flag BEFORE cancel(): cancel can
+            # emit run_complete synchronously when nothing is in flight.
+            self._close_after_run = True
+            self.stop_btn.setEnabled(False)
             self.runner.cancel()
             event.ignore()
             return
+        self._close_after_run = False
         super().closeEvent(event)
 
     def _on_export_clicked(self) -> None:
@@ -1568,9 +1813,26 @@ class TestRunnerView(QMainWindow):
         if value is None:
             return ""
         s = str(value)
-        if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+        if s and s[0] in ("=", "-", "@", "\t", "\r"):
+            return "'" + s
+        # "+" only when it isn't an E.164 number: "'+447700900123" showed
+        # the apostrophe literally in Excel and broke number lookups.
+        if s.startswith("+") and not _PLUS_PHONE_RE.fullmatch(s):
             return "'" + s
         return s
+
+    @staticmethod
+    def _entered_b_number(result) -> str:
+        """B Number as the operator entered it in Targets -- before the
+        account dial prefix / Genband supplier prefix the runner adds to
+        to_uri ("080447700900123" for "447700900123"). A target entered as
+        a URI is kept verbatim."""
+        call = getattr(result, "call", None)
+        entered = (getattr(call, "target_number", "") or "").strip()
+        if entered:
+            return entered
+        from noc_beam.ui.history_view import _peer_userpart
+        return _peer_userpart(result.to_uri) or result.to_uri
 
     def _account_a_number(self, token: str) -> str:
         """Resolve a from_account token to the operator's A-number for CSV.
@@ -1620,16 +1882,17 @@ class TestRunnerView(QMainWindow):
         A number is the originating account (from_account), B number
         is the dialled URI (to_uri).
         """
-        from noc_beam.ui.history_view import _peer_userpart
         safe = self._csv_safe
-        with path.open("w", encoding="utf-8", newline="") as handle:
+        # utf-8-sig: Excel only decodes a CSV as UTF-8 when it has a BOM;
+        # without it non-ASCII release reasons / names came out garbled.
+        with path.open("w", encoding="utf-8-sig", newline="") as handle:
             writer = csv.writer(handle, lineterminator="\n")
             writer.writerow(CSV_HEADER)
             for result in self.results:
                 started = self._started_at_datetime(result.started_at)
-                # B Number: strip sip:/sips:/tel:, ;params, and @domain
-                # so the CSV shows '96109901' not 'sip:96109901@host'.
-                b_num = _peer_userpart(result.to_uri) or result.to_uri
+                # B Number: the number as entered in Targets (not the
+                # prefixed wire userpart of to_uri).
+                b_num = self._entered_b_number(result)
                 # A Number: resolve from_account (may be a UUID) to the
                 # operator's display_name. Previously this wrote the raw
                 # token straight to CSV, so billing review saw UUIDs
@@ -1694,7 +1957,13 @@ class TestRunnerView(QMainWindow):
         }
         for column, value in text_columns.items():
             self._set_text(row, column, value)
-        self._set_result_badge(row, result.result)
+        outcome = self._outcome(result)
+        if outcome == "not_dialled":
+            self._set_result_badge(row, "queued", text="NOT DIALLED")
+        elif outcome == "cancelled":
+            self._set_result_badge(row, "queued", text="CANCELLED")
+        else:
+            self._set_result_badge(row, result.result)
         self._set_fas_badge(
             row,
             getattr(result, "fas_verdict", "") or "",
@@ -1734,7 +2003,22 @@ class TestRunnerView(QMainWindow):
         wl.addWidget(badge)
         self.table.setCellWidget(row, 4, wrapper)
 
-    def _set_result_badge(self, row: int, result: str) -> None:
+    def _outcome(self, result: RunnerResult) -> str:
+        """pass / fail / error, or -- for runner FAILs that carry no route
+        verdict (sip_code 0 + Cancelled / Auto-paused / No matching
+        account) -- "not_dialled" (never started) or "cancelled" (started,
+        then stopped by the operator)."""
+        if result.result == "PASS":
+            return "pass"
+        if result.result == "ERROR":
+            return "error"
+        if not result.sip_code and (result.sip_reason or "") in _NO_VERDICT_REASONS:
+            if result.call.index in self._started_indexes:
+                return "cancelled"
+            return "not_dialled"
+        return "fail"
+
+    def _set_result_badge(self, row: int, result: str, *, text: str | None = None) -> None:
         """Render the RESULT column as a coloured pill badge."""
         # Normalise the level for QSS branching.
         level = result.lower() if result else "queued"
@@ -1742,7 +2026,7 @@ class TestRunnerView(QMainWindow):
             level = "queued"
         # Clear any previous text item so the cell widget owns the cell.
         self.table.takeItem(row, 3)
-        badge = QLabel(result.upper() if result else "QUEUED")
+        badge = QLabel(text or (result.upper() if result else "QUEUED"))
         badge.setObjectName("TestRunnerBadge")
         badge.setProperty("level", level)
         badge.setAlignment(__import__("PySide6.QtCore", fromlist=["Qt"]).Qt.AlignmentFlag.AlignCenter)
@@ -1754,20 +2038,24 @@ class TestRunnerView(QMainWindow):
         self.table.setCellWidget(row, 3, wrapper)
 
     def _refresh_summary(self) -> None:
-        passed = sum(1 for result in self.results if result.result == "PASS")
-        failed = sum(1 for result in self.results if result.result == "FAIL")
+        outcomes = [self._outcome(result) for result in self.results]
+        passed = outcomes.count("pass")
+        failed = outcomes.count("fail")
         # Transport/local failures (PJ_EEOF connection drops etc.) are NOT
         # supplier rejects, so they're counted separately and kept out of
         # the "failed" total -- otherwise the scorecard blames the route
         # for a dropped TCP connection.
-        errored = sum(1 for result in self.results if result.result == "ERROR")
-        # Running count maintained as an integer (incremented in
-        # _on_call_started, decremented in _on_call_completed). Was
-        # scanning every table row's findChild(QLabel) on every signal
-        # tick -- O(N) per event, quadratic over the whole run.
-        running = getattr(self, "_running_count", 0)
-        completed = passed + failed + errored + running
+        errored = outcomes.count("error")
+        # Same for calls with no route verdict: never dialled (cancelled /
+        # auto-paused while queued, no matching account) or stopped
+        # mid-setup. They get their own muted count next to "pending".
+        not_dialled = outcomes.count("not_dialled")
+        cancelled = outcomes.count("cancelled")
+        # Running = calls that emitted call_started and haven't completed.
+        running = len(self._in_flight)
+        completed = passed + failed + errored + not_dialled + cancelled + running
         pending = max(0, self.table.rowCount() - completed)
+        self._sync_autopause_note()
         self._set_counter(self.summary_passed, f"{passed} passed", passed == 0)
         # Surface errors next to failed without folding them in, so real
         # supplier rejects stay distinguishable from transport drops.
@@ -1777,7 +2065,27 @@ class TestRunnerView(QMainWindow):
             failed == 0 and errored == 0,
         )
         self._set_counter(self.summary_running, f"{running} running", running == 0)
-        self._set_counter(self.summary_pending, f"{pending} pending", pending == 0)
+        self._set_counter(
+            self.summary_pending,
+            f"{pending} pending"
+            + (f" · {not_dialled} not dialled" if not_dialled else "")
+            + (f" · {cancelled} cancelled" if cancelled else ""),
+            pending == 0 and not_dialled == 0 and cancelled == 0,
+        )
+
+    def _sync_autopause_note(self) -> None:
+        """Say on the status line when the runner's FAS auto-pause stopped
+        the run -- previously the only trace was per-row notes on FAIL rows."""
+        paused = [r for r in self.results if (r.sip_reason or "") == "Auto-paused"]
+        if paused:
+            why = (paused[0].notes or "consecutive FAS verdicts").strip()
+            n = len(paused)
+            self._set_status_note(
+                f"Run {why} — {n} queued call{'s' if n != 1 else ''} not dialled",
+                kind="autopause",
+            )
+        elif self._status_kind == "autopause":
+            self._set_status_note("")
 
     @staticmethod
     def _set_counter(label: QLabel, text: str, is_zero: bool) -> None:

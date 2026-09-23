@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import random
+import re
 import time
+import weakref
 from collections import deque
 from dataclasses import dataclass
 from typing import Literal
@@ -38,6 +41,12 @@ class _ActiveCall:
     call: TestCall
     account: AccountConfig
     target_uri: str
+    # Zero-arg callable returning the live SipCall or None (see _call_ref).
+    # The runner must NEVER own a pjsua2 Call: pjsua2's Call destructor acts
+    # on the call-id SLOT, so destroying a finished Call after PJSIP reused
+    # its slot hangs up the unrelated call now in it (proven on the native
+    # engine). The account drops its Call inside the DISCONNECTED callback,
+    # the one sanctioned place; the runner only borrows it.
     sip_call: object
     call_id: int
     started_at_mono: float
@@ -58,6 +67,57 @@ class _ActiveCall:
 
 
 CLEANUP_FALLBACK_SECONDS = 1.0
+
+# When PJSIP has no free call slot (PJ_ETOOMANY) the dial is not a route
+# result: re-queue it and retry. Slots are held by manual/incoming calls and
+# by runner calls still tearing down after the runner already freed its own
+# slot (CLEANUP_FALLBACK_SECONDS), so they come back on their own. Give up
+# with an ERROR (not a supplier FAIL) after SLOT_WAIT_MAX_TRIES.
+SLOT_WAIT_SECONDS = 0.5
+SLOT_WAIT_MAX_TRIES = 120          # ~60 s per call
+_PJ_ETOOMANY = 70010               # PJ_ERRNO_START_STATUS + 10
+
+
+_NUMBER_RE = re.compile(r"\+?\d[\d\s().\-]{2,31}")
+
+
+def _looks_like_number(token: str) -> bool:
+    """A dialable phone number (E.164-ish, optional separators)."""
+    return bool(_NUMBER_RE.fullmatch(token or "")) and sum(c.isdigit() for c in token) >= 3
+
+
+def _call_ref(call: object):  # type: ignore[no-untyped-def]
+    """Weak reference to a SipCall (see _ActiveCall.sip_call). Test doubles
+    that can't be weakly referenced fall back to a plain closure."""
+    try:
+        return weakref.ref(call)
+    except TypeError:
+        return lambda c=call: c
+
+
+def _retire_timer(timer: QTimer | None) -> None:
+    """Stop a single-shot runner timer.
+
+    Deliberately NOT deleteLater(): this is often called from inside the
+    timer's own timeout slot, and _fill_slots pumps processEvents() from
+    there, which can run the deferred delete while the timer's emission is
+    still on the stack (reproduced: Fatal "Aborted" on the first dispatch).
+    Timers are children of the runner and go away with it when the view
+    deletes the finished runner; what mattered was that they no longer pin
+    pjsua2 Calls (see _call_ref and the weak cleanup closure)."""
+    if timer is None:
+        return
+    try:
+        timer.stop()
+    except RuntimeError:
+        pass  # C++ side already gone
+
+
+def _is_slot_exhausted(exc: BaseException) -> bool:
+    if getattr(exc, "status", None) == _PJ_ETOOMANY:
+        return True
+    text = str(exc)
+    return "PJ_ETOOMANY" in text or "Too many objects" in text
 
 
 def _render_supplier_template(template: str, supplier_id: str) -> str:
@@ -165,6 +225,11 @@ class TestRunner(QObject):
         # the verdict into TestResult at completion time (CallManager
         # record is dropped on DISCONNECTED before we finalise).
         self._fas_by_call_id: dict[int, tuple[str, float, str]] = {}
+        # Per-call count of "no free PJSIP call slot" retries (TestCall.index).
+        self._slot_waits: dict[int, int] = {}
+        # FAS-sweep cooling-off: target URI -> monotonic time it may be
+        # probed again (see _complete_active / _pick_next_dispatchable_call).
+        self._target_ready_at: dict[str, float] = {}
         try:
             from noc_beam.config.store import load_settings
 
@@ -286,7 +351,10 @@ class TestRunner(QObject):
                     # Every queued call collides with an active target.
                     # A completion event will re-trigger _fill_slots.
                     return
-                self._dispatch_one_call(call)
+                if not self._dispatch_one_call(call):
+                    # No free PJSIP call slot: the call went back to the
+                    # head of the queue and a retry is armed.
+                    return
                 self._last_dispatch_mono = time.monotonic()
                 self._yield_to_event_loop()
         finally:
@@ -308,11 +376,7 @@ class TestRunner(QObject):
         completing while a pacing tick is already pending would otherwise
         stack a second QTimer (timer + connection leak, and a double
         _fill_slots burst that defeats the CPS cap)."""
-        if self._pacing_timer is not None:
-            try:
-                self._pacing_timer.stop()
-            except Exception:
-                pass
+        _retire_timer(self._pacing_timer)
         timer = self._make_timer(wait_s)
         timer.timeout.connect(self._fill_slots)
         self._pacing_timer = timer
@@ -343,8 +407,10 @@ class TestRunner(QObject):
             return None
         # Build the active-target set once; small (bounded by parallel).
         active_targets = {a.target_uri for a in self._active.values()}
-        if not active_targets:
+        if not active_targets and not self._target_ready_at:
             return self._queue.popleft()
+        now = time.monotonic()
+        earliest_ready: float | None = None
         for idx, candidate in enumerate(self._queue):
             account = self._resolve_account(candidate.caller_number)
             target_uri = (
@@ -352,12 +418,25 @@ class TestRunner(QObject):
                 if account is not None
                 else candidate.target_number
             )
-            if target_uri not in active_targets:
-                del self._queue[idx]
-                return candidate
+            if target_uri in active_targets:
+                continue
+            # FAS-sweep cooling-off: this target was probed recently.
+            ready_at = self._target_ready_at.get(target_uri, 0.0)
+            if ready_at > now:
+                earliest_ready = ready_at if earliest_ready is None else min(earliest_ready, ready_at)
+                continue
+            del self._queue[idx]
+            return candidate
+        if earliest_ready is not None:
+            # Only cooling-off holds the queue back: no completion event
+            # is coming, so wake up when the first target is ready again.
+            self._arm_paced_refill(earliest_ready - now)
         return None
 
-    def _dispatch_one_call(self, call: TestCall) -> None:
+    def _dispatch_one_call(self, call: TestCall) -> bool:
+        """Dial one call. Returns False only when PJSIP had no free call
+        slot and the call was re-queued for a retry; True when the call
+        was dialled or resolved to a result."""
         account = self._resolve_account(call.caller_number)
         started_at_mono = time.monotonic()
         started_at_wall = time.time()
@@ -374,7 +453,7 @@ class TestRunner(QObject):
                 from_account=call.caller_number,
                 to_uri=call.target_number,
             )
-            return
+            return True
 
         target_uri = self._build_target_uri(call.target_number, account)
         try:
@@ -385,8 +464,31 @@ class TestRunner(QObject):
                 origin_meta={
                     "supplier_id": self._supplier_id,
                 },
+                a_number=self._a_number_for(call.caller_number, account),
             )
         except Exception as exc:
+            if _is_slot_exhausted(exc):
+                waits = self._slot_waits.get(call.index, 0) + 1
+                if waits <= SLOT_WAIT_MAX_TRIES:
+                    self._slot_waits[call.index] = waits
+                    self._queue.appendleft(call)
+                    self._arm_paced_refill(SLOT_WAIT_SECONDS)
+                    return False
+                self._emit_result(
+                    call=call,
+                    result="ERROR",
+                    sip_code=0,
+                    sip_reason="No free call slot",
+                    rtt_ms=None,
+                    duration_s=time.monotonic() - started_at_mono,
+                    notes=f"no free PJSIP call slot after "
+                          f"{SLOT_WAIT_MAX_TRIES * SLOT_WAIT_SECONDS:.0f} s "
+                          f"(other calls holding every slot)",
+                    started_at=started_at_wall,
+                    from_account=account.id,
+                    to_uri=target_uri,
+                )
+                return True
             text = str(exc)
             notes = (
                 "pjsua2 not available"
@@ -405,7 +507,7 @@ class TestRunner(QObject):
                 from_account=account.id,
                 to_uri=target_uri,
             )
-            return
+            return True
 
         try:
             call_id = int(sip_call.getInfo().id)
@@ -430,14 +532,14 @@ class TestRunner(QObject):
                 to_uri=target_uri,
             )
             self._hangup(sip_call)
-            return
+            return True
 
         timeout_timer = self._make_timer(self.spec.timeout_seconds)
         active = _ActiveCall(
             call=call,
             account=account,
             target_uri=target_uri,
-            sip_call=sip_call,
+            sip_call=_call_ref(sip_call),
             call_id=call_id,
             started_at_mono=started_at_mono,
             started_at_wall=started_at_wall,
@@ -446,7 +548,9 @@ class TestRunner(QObject):
         self._active[call_id] = active
         timeout_timer.timeout.connect(lambda cid=call_id: self._on_timeout(cid))
         timeout_timer.start()
+        self._slot_waits.pop(call.index, None)
         self.call_started.emit(call.index)
+        return True
 
     def _on_call_state_changed(
         self,
@@ -658,9 +762,17 @@ class TestRunner(QObject):
             sip_call_id=active.call_id,
         )
         self._maybe_auto_pause_for_fas(test_result)
+        # FAS sweep: give this target a cooling-off window before its next
+        # probe. spec.jitter_low_s/high_s were collected by the UI but never
+        # read, so a sweep re-dialled each target back-to-back (only the
+        # CPS cap between dials) instead of 30-120 s apart.
+        if self.spec.mode == "fas-sweep" and self.spec.jitter_high_s > 0:
+            self._target_ready_at[active.target_uri] = time.monotonic() + random.uniform(
+                self.spec.jitter_low_s, self.spec.jitter_high_s
+            )
 
         if hangup:
-            self._hangup(active.sip_call)
+            self._hangup(active.sip_call() if active.sip_call is not None else None)
 
         if self._active.get(active.call_id) is active:
             self._start_cleanup_timer(active, fill_slots=fill_slots)
@@ -669,11 +781,18 @@ class TestRunner(QObject):
         if self._active.pop(active.call_id, None) is None:
             return
         self._fas_by_call_id.pop(active.call_id, None)
-        active.timeout_timer.stop()
-        if active.hold_timer is not None:
-            active.hold_timer.stop()
-        if active.cleanup_timer is not None:
-            active.cleanup_timer.stop()
+        # Retire this call's timers and drop its pjsua2 Call reference.
+        # Every call used to leave 2-3 single-shot QTimers parented to the
+        # runner (a 30-call run ended with 52), and PySide kept the cleanup
+        # lambda -- and through it this record and its SipCall -- alive
+        # even after the runner was deleted. Those Call objects then got
+        # destroyed after libDestroy at process exit (access violation),
+        # and a long sweep accumulated thousands of dead timers and Calls.
+        for timer in (active.timeout_timer, active.hold_timer, active.cleanup_timer):
+            _retire_timer(timer)
+        active.hold_timer = None
+        active.cleanup_timer = None
+        active.sip_call = None
         if fill_slots:
             self._fill_slots()
         self._maybe_emit_run_complete()
@@ -686,9 +805,17 @@ class TestRunner(QObject):
     ) -> None:
         cleanup_timer = self._make_timer(CLEANUP_FALLBACK_SECONDS)
         active.cleanup_timer = cleanup_timer
-        cleanup_timer.timeout.connect(
-            lambda a=active, fs=fill_slots: self._release_active(a, fill_slots=fs)
-        )
+        # Weak reference: the lambda must identify THIS record (a reused
+        # call-id may already map to a newer call) without keeping it, and
+        # its SipCall, alive for the life of the connection.
+        ref = weakref.ref(active)
+
+        def _fire(ref=ref, fs=fill_slots) -> None:
+            target = ref()
+            if target is not None:
+                self._release_active(target, fill_slots=fs)
+
+        cleanup_timer.timeout.connect(_fire)
         cleanup_timer.start()
 
     def _hold_closing_slot(self) -> None:
@@ -703,7 +830,7 @@ class TestRunner(QObject):
         timer = self._closing_slots.pop(token, None)
         if timer is None:
             return
-        timer.stop()
+        _retire_timer(timer)
         self._fill_slots()
         self._maybe_emit_run_complete()
 
@@ -849,24 +976,47 @@ class TestRunner(QObject):
         token = (caller_number or "").strip()
         # Empty / wildcard -> first enabled account
         if not token or token in ("*", "auto", "any"):
-            if self._active_account_id:
-                for account in self.accounts:
-                    if (
-                        getattr(account, "id", None) == self._active_account_id
-                        and getattr(account, "enabled", True)
-                    ):
-                        return account
-            for account in self.accounts:
-                if getattr(account, "enabled", True):
-                    return account
-            return self.accounts[0]
+            return self._default_account()
         for account in self.accounts:
             if account.username == token:
                 return account
         for account in self.accounts:
             if getattr(account, "id", None) == token:
                 return account
+        # A phone number that isn't an account is an ORIGINATION A-number
+        # (design spec: "one origin number sweeps a target list"): dial from
+        # the active account and present it as caller ID (_a_number_for).
+        # The ORIGINATION picker fills Callers with exactly these, and every
+        # one used to fail "No matching account" without a single INVITE.
+        if _looks_like_number(token):
+            return self._default_account()
         return None
+
+    def _default_account(self) -> AccountConfig:
+        if self._active_account_id:
+            for account in self.accounts:
+                if (
+                    getattr(account, "id", None) == self._active_account_id
+                    and getattr(account, "enabled", True)
+                ):
+                    return account
+        for account in self.accounts:
+            if getattr(account, "enabled", True):
+                return account
+        return self.accounts[0]
+
+    @staticmethod
+    def _a_number_for(caller_number: str, account: AccountConfig) -> str:
+        """The A-number to present for this caller token, or "" to keep the
+        account's own identity (wildcards and account usernames/ids)."""
+        token = (caller_number or "").strip()
+        if not token or token in ("*", "auto", "any"):
+            return ""
+        if token == getattr(account, "username", None) or token == getattr(account, "id", None):
+            return ""
+        if _looks_like_number(token):
+            return re.sub(r"[\s().\-]", "", token)
+        return ""
 
     def _build_target_uri(self, target: str, account: AccountConfig) -> str:
         if target.startswith(("sip:", "sips:", "tel:")):
@@ -877,9 +1027,15 @@ class TestRunner(QObject):
         # supplier's routed prefix. The active supplier id is set on the
         # account-bound runner -- if absent we just prepend dial_prefix.
         target = _apply_routing_to_target(target, account, self._supplier_id)
-        return f"sip:{target}@{account.domain}"
+        # Include the account's custom port (same host the account
+        # registers to). Without it every batch call to a bare number on
+        # an account with a non-default port went to domain:5060 and
+        # timed out as a fake 408.
+        return f"sip:{target}@{SipEndpoint._account_host(account)}"
 
     def _hangup(self, call: object) -> None:
+        if call is None:
+            return  # already disconnected and released by its account
         try:
             self.endpoint.hangup_call(call)
         except Exception:

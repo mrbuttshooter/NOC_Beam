@@ -115,7 +115,9 @@ def test_export_csv_writes_header_and_result_row(
     # because route analysis needs the cause that ended each call.
     # Header is fixed; the timestamp is rendered in local time so we just
     # check stable substrings.
-    contents = path.read_text(encoding="utf-8")
+    # Written as utf-8-sig so Excel decodes non-ASCII; read it back the same way.
+    assert path.read_bytes().startswith(b"\xef\xbb\xbf")
+    contents = path.read_text(encoding="utf-8-sig")
     lines = contents.splitlines()
     assert lines[0] == (
         "A Number,B Number,Date,Duration (s),"
@@ -155,7 +157,7 @@ def test_export_csv_blanks_release_code_for_internal_outcomes(
     path = tmp_path / "internal.csv"
     view.export_csv(path)
 
-    row = path.read_text(encoding="utf-8").splitlines()[1]
+    row = path.read_text(encoding="utf-8-sig").splitlines()[1]
     assert row.endswith(",0.0,,Cancelled,")
 
     view.close()
@@ -1004,5 +1006,355 @@ def test_tabwidget_has_configure_running_results(qt_app):
         assert labels[0] == 'Configure'
         assert labels[1].startswith('Running')
         assert labels[2].startswith('Results')
+    finally:
+        view.close()
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: supplier commit, paste box, counters, Teles switch, CSV,
+# close-during-run, Clear, Targets badge (audit 2026-09-23).
+# ---------------------------------------------------------------------------
+
+from noc_beam.config.suppliers import Supplier  # noqa: E402
+
+_SUPPLIERS = [Supplier("070", "Alpha"), Supplier("080", "Bravo"), Supplier("303", "Telecom Egypt")]
+
+
+class _SignalRunner(QtCore.QObject):
+    """Stand-in Runner exposing the real signal surface; records its args."""
+
+    call_started = QtCore.Signal(int)
+    call_completed = QtCore.Signal(object)
+    run_complete = QtCore.Signal(object)
+
+    def __init__(self, spec, accounts, parent=None, *, supplier_id="", active_account_id=""):
+        super().__init__(parent)
+        self.spec = spec
+        self.supplier_id = supplier_id
+        self.cancelled = False
+        _SignalRunner.made.append(self)
+
+    def start(self) -> None:
+        pass
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+
+_SignalRunner.made = []
+
+
+@pytest.fixture
+def signal_runner(monkeypatch):
+    _SignalRunner.made = []
+    monkeypatch.setattr(test_runner_view_module, "Runner", _SignalRunner)
+    monkeypatch.setattr(
+        test_runner_view_module.destinations_module, "load_destinations", lambda: []
+    )
+    monkeypatch.setattr(
+        "noc_beam.config.suppliers.load_valid_suppliers", lambda: list(_SUPPLIERS)
+    )
+    monkeypatch.setattr("noc_beam.config.suppliers.load_suppliers", lambda: list(_SUPPLIERS))
+    return _SignalRunner.made
+
+
+class _EndpointStub:
+    def __init__(self, live_calls: int = 0, fail_update: bool = False) -> None:
+        self.live_calls = live_calls
+        self.fail_update = fail_update
+        self.updates: list[str] = []
+
+    def get_account(self, _account_id):
+        return type("SipAcc", (), {"calls": [object()] * self.live_calls})()
+
+    def update_account(self, cfg) -> None:
+        self.updates.append(cfg.username)
+        if self.fail_update:
+            raise RuntimeError("Endpoint not started")
+
+
+def _stub_endpoint(monkeypatch, stub: _EndpointStub) -> None:
+    from noc_beam.sip import endpoint as endpoint_module
+
+    monkeypatch.setattr(endpoint_module.SipEndpoint, "instance", staticmethod(lambda: stub))
+
+
+def _genband_account() -> AccountConfig:
+    return AccountConfig(id="g1", username="1000", domain="sbc.test", switch_type="genband")
+
+
+def _teles_account() -> AccountConfig:
+    return AccountConfig(
+        id="t1", username="U070", auth_user="U070", domain="teles.test",
+        switch_type="teles", routing_format="U{id}",
+    )
+
+
+def _res(index, result="PASS", code=180, reason="Ringing", *, target="2001",
+         to_uri="sip:2001@sbc.test", notes="", from_account="g1") -> RunnerResult:
+    return RunnerResult(
+        call=PlanCall(index=index, caller_number="*", target_number=target),
+        result=result, sip_code=code, sip_reason=reason, rtt_ms=None,
+        duration_s=1.0, notes=notes,
+        started_at=datetime(2026, 5, 15, 12, 34, 56, tzinfo=UTC).timestamp(),
+        from_account=from_account, to_uri=to_uri,
+    )
+
+
+def _type_supplier(view, text: str) -> None:
+    line = view.supplier_combo.lineEdit()
+    line.setText(text)
+    view._on_supplier_text_edited(text)  # what textEdited drives while typing
+    view.supplier_combo.hidePopup()
+
+
+def test_run_uses_supplier_typed_in_search_box(qt_app, signal_runner):
+    view = RunnerWindow([_genband_account()], active_account_id="g1")
+    try:
+        assert view._batch_supplier_id == "070"
+        _type_supplier(view, "C080")
+        view.targets_edit.setPlainText("447700900123\n")
+        view._on_run_clicked()
+        # Box shows Bravo -> the runner must get Bravo (was the old "070").
+        assert view.supplier_combo.lineEdit().text() == "Bravo — C080"
+        assert signal_runner[-1].supplier_id == "080"
+        view._on_run_complete([])
+        # Enter in the box (popup hidden) commits too.
+        _type_supplier(view, "303")
+        view._on_supplier_return_pressed()
+        assert view._batch_supplier_id == "303"
+        view._on_run_clicked()
+        assert signal_runner[-1].supplier_id == "303"
+        view._on_run_complete([])
+    finally:
+        view.close()
+
+
+def test_run_blocked_when_typed_supplier_matches_nothing(qt_app, signal_runner):
+    view = RunnerWindow([_genband_account()], active_account_id="g1")
+    try:
+        view.targets_edit.setPlainText("447700900123\n")
+        _type_supplier(view, "C999")
+        view._on_run_clicked()
+        assert signal_runner == []
+        assert view.runner is None
+        status = view._preflight_label.text()
+        assert "Run blocked" in status and "C999" in status
+        # Ambiguous substring is refused too, not silently the first match.
+        _type_supplier(view, "a")
+        view._on_run_clicked()
+        assert signal_runner == []
+        assert "matches" in view._preflight_label.text()
+    finally:
+        view.close()
+
+
+def test_paste_starts_on_own_line_and_replaces_selection(qt_app):
+    view = RunnerWindow([])
+    try:
+        edit = view.targets_edit
+        edit.setPlainText("2001")  # typed by hand: no trailing newline
+        mime = QtCore.QMimeData()
+        mime.setText("2002")
+        edit.insertFromMimeData(mime)
+        assert test_runner_view_module.normalise_lines(edit.toPlainText()) == ["2001", "2002"]
+
+        edit.setPlainText("1111\n2222\n")
+        edit.selectAll()
+        mime2 = QtCore.QMimeData()
+        mime2.setText("3333\n4444")
+        edit.insertFromMimeData(mime2)
+        assert test_runner_view_module.normalise_lines(edit.toPlainText()) == ["3333", "4444"]
+        assert view.run_btn.text() == "Run 2 calls"
+    finally:
+        view.close()
+
+
+def test_running_counter_ignores_results_that_never_started(qt_app, signal_runner):
+    view = RunnerWindow([_genband_account()], active_account_id="g1")
+    try:
+        view.targets_edit.setPlainText("2001\n2002\n2003\n")
+        view._on_run_clicked()
+        view._on_call_started(1)
+        view._on_call_started(2)
+        # Call 3 fails before dialling (no call_started) -> 2 still running.
+        view._on_call_completed(_res(3, "FAIL", 0, "No matching account", target="2003"))
+        assert view.summary_running.text() == "2 running"
+        assert view.summary_failed.text() == "0 failed"
+        view._on_call_completed(_res(1))
+        assert view.summary_running.text() == "1 running"
+    finally:
+        view.runner = None
+        view.close()
+
+
+def test_never_dialled_calls_are_not_counted_as_failed(qt_app, signal_runner):
+    view = RunnerWindow([_genband_account()], active_account_id="g1")
+    try:
+        view.targets_edit.setPlainText("".join(f"{2000 + i}\n" for i in range(1, 6)))
+        view._on_run_clicked()
+        view._on_call_started(1)
+        # Stop: the in-flight call and the 4 queued ones come back as
+        # FAIL/Cancelled with sip_code 0.
+        results = [_res(i, "FAIL", 0, "Cancelled", target=str(2000 + i)) for i in range(1, 6)]
+        for r in results:
+            view._on_call_completed(r)
+        view._on_run_complete(results)
+        assert view.summary_failed.text() == "0 failed"
+        assert view.summary_pending.text() == "0 pending · 4 not dialled · 1 cancelled"
+        assert view.summary_running.text() == "0 running"
+    finally:
+        view.close()
+
+
+def test_fas_auto_pause_is_reported_on_status_line(qt_app, signal_runner):
+    view = RunnerWindow([_genband_account()], active_account_id="g1")
+    try:
+        view.targets_edit.setPlainText("2001\n2002\n2003\n2004\n")
+        view._on_run_clicked()
+        view._on_call_started(1)
+        note = "auto-paused after 1 consecutive FAS verdicts"
+        results = [_res(1)] + [
+            _res(i, "FAIL", 0, "Auto-paused", target=str(2000 + i), notes=note)
+            for i in (2, 3, 4)
+        ]
+        for r in results:
+            view._on_call_completed(r)
+        view._on_run_complete(results)
+        status = view._preflight_label.text()
+        assert "auto-paused after 1 consecutive FAS verdicts" in status
+        assert "3 queued calls not dialled" in status
+        assert view.summary_failed.text() == "0 failed"
+    finally:
+        view.close()
+
+
+def test_teles_supplier_switch_keeps_old_username_caller_resolving(
+    qt_app, signal_runner, monkeypatch
+):
+    stub = _EndpointStub()
+    _stub_endpoint(monkeypatch, stub)
+    acc = _teles_account()
+    view = RunnerWindow([acc], active_account_id="t1")
+    try:
+        view.supplier_combo._on_item_activated(view.supplier_combo.view().item(1))
+        assert view._batch_supplier_id == "080"
+        view.callers_edit.setPlainText("U070\n")
+        view.targets_edit.setPlainText("447700900123\n")
+        view._on_run_clicked()
+        assert acc.username == "U080" and stub.updates == ["U080"]
+        # "U070" no longer names any account; it must still reach t1.
+        # (TestRunner._resolve_account matches an exact account id.)
+        assert signal_runner[-1].spec.callers == ["t1"]
+    finally:
+        view.runner = None
+        view.close()
+
+
+def test_teles_supplier_switch_refused_while_account_has_live_call(
+    qt_app, signal_runner, monkeypatch
+):
+    stub = _EndpointStub(live_calls=1)
+    _stub_endpoint(monkeypatch, stub)
+    acc = _teles_account()
+    view = RunnerWindow([acc], active_account_id="t1")
+    try:
+        view.supplier_combo._on_item_activated(view.supplier_combo.view().item(1))
+        view.targets_edit.setPlainText("447700900123\n")
+        view._on_run_clicked()
+        assert signal_runner == []
+        assert acc.username == "U070" and stub.updates == []
+        assert "1 active call(s)" in view._preflight_label.text()
+    finally:
+        view.close()
+
+
+def test_teles_supplier_switch_failure_blocks_run(qt_app, signal_runner, monkeypatch):
+    stub = _EndpointStub(fail_update=True)
+    _stub_endpoint(monkeypatch, stub)
+    acc = _teles_account()
+    view = RunnerWindow([acc], active_account_id="t1")
+    try:
+        view.supplier_combo._on_item_activated(view.supplier_combo.view().item(1))
+        view.targets_edit.setPlainText("447700900123\n")
+        view._on_run_clicked()
+        assert signal_runner == []
+        # Rolled back, not left half-switched; and the operator is told.
+        assert acc.username == "U070" and acc.auth_user == "U070"
+        assert "Run blocked" in view._preflight_label.text()
+        assert "No calls were dialled" in view._preflight_label.text()
+    finally:
+        view.close()
+
+
+def test_export_csv_b_number_is_entered_number_and_plus_not_quoted(qt_app, tmp_path):
+    acc = AccountConfig(id="g2", username="1000", display_name="+33415835", domain="sbc.test")
+    view = RunnerWindow([acc])
+    try:
+        view.results = [
+            # Runner prefixed the wire number with the supplier (080).
+            _res(1, target="447700900123", to_uri="sip:080447700900123@sbc.test",
+                 from_account="g2"),
+            _res(2, target="+447700900123", to_uri="sip:+447700900123@sbc.test",
+                 reason="Não disponível", from_account="g2"),
+            _res(3, target="sip:alice@example.test", to_uri="sip:alice@example.test",
+                 reason="+1+cmd|' /C calc'!A0", from_account="g2"),
+        ]
+        path = tmp_path / "b.csv"
+        view.export_csv(path)
+        assert path.read_bytes().startswith(b"\xef\xbb\xbf")
+        import csv as _csv
+        rows = list(_csv.reader(path.open(encoding="utf-8-sig", newline="")))
+        assert rows[1][:2] == ["+33415835", "447700900123"]
+        assert rows[2][1] == "+447700900123"
+        assert rows[2][5] == "Não disponível"
+        assert rows[3][1] == "sip:alice@example.test"
+        assert rows[3][5] == "'+1+cmd|' /C calc'!A0"  # real formula still guarded
+    finally:
+        view.close()
+
+
+def test_close_during_run_closes_after_run_completes(qt_app, signal_runner):
+    view = RunnerWindow([_genband_account()], active_account_id="g1")
+    try:
+        view.targets_edit.setPlainText("2001\n")
+        view.show()
+        view._on_run_clicked()
+        runner = view.runner
+        view.close()
+        assert view.isVisible() and runner.cancelled
+        assert not view.stop_btn.isEnabled()
+        view._on_run_complete([])
+        qt_app.processEvents()
+        assert not view.isVisible()
+    finally:
+        view.runner = None
+        view.close()
+
+
+def test_clear_resets_running_tab_and_results_dot(qt_app, signal_runner):
+    view = RunnerWindow([_genband_account()], active_account_id="g1")
+    try:
+        view.targets_edit.setPlainText("2001\n")
+        view._on_run_clicked()
+        view._on_call_started(1)
+        view._on_call_completed(_res(1))
+        view._on_run_complete(list(view.results))
+        assert view.tabs.tabText(view._running_tab_index) == "Running 1/1"
+        view._on_clear_clicked()
+        assert view.tabs.tabText(view._running_tab_index) == "Running 0/0"
+        assert view._running_list.count() == 0
+        assert view.tabs.tabText(view._results_tab_index) == "Results"
+    finally:
+        view.close()
+
+
+def test_targets_badge_counts_targets_not_calls(qt_app):
+    view = RunnerWindow([])
+    try:
+        view.targets_edit.setPlainText("2001\n2002\n")
+        view.times_spin.setValue(3)
+        assert view.run_btn.text() == "Run 6 calls"
+        assert view._tab_targets_btn.text() == "Targets (2)"
     finally:
         view.close()

@@ -236,10 +236,12 @@ def test_fails_on_404() -> None:
 
 
 def test_fails_without_matching_account() -> None:
+    # A non-numeric token that names no account still fails without dialling.
+    # (A phone number is an ORIGINATION A-number -- see the test below.)
     events = SipEvents()
     endpoint = StubEndpoint()
     runner = Runner(
-        spec(callers=["9999"]),
+        spec(callers=["no-such-user"]),
         [account()],
         endpoint=endpoint,
         events=events,
@@ -598,3 +600,145 @@ def test_three_distinct_targets_cycle_three_wide_not_ten() -> None:
     assert endpoint.max_active == 3, (
         f"expected max 3 concurrent calls (one per distinct target), saw {endpoint.max_active}"
     )
+
+
+def test_numeric_caller_is_an_origination_a_number() -> None:
+    """ORIGINATION numbers in Callers dial from the active account and are
+    presented as the call's A-number (they used to fail "No matching
+    account" without a single INVITE)."""
+    seen: list[dict] = []
+
+    class _Recording(StubEndpoint):
+        def make_call(self, account_id, target_uri, **kwargs):
+            seen.append({"account": account_id, **kwargs})
+            return super().make_call(account_id, target_uri, **kwargs)
+
+    events = SipEvents()
+    endpoint = _Recording()
+    acc = account()
+    runner = Runner(spec(callers=["+20 100-123-4567"]), [acc], endpoint=endpoint, events=events)
+    runner.start()
+    assert seen and seen[0]["account"] == acc.id
+    assert seen[0]["a_number"] == "+201001234567"
+
+
+def test_account_username_caller_keeps_account_identity() -> None:
+    seen: list[dict] = []
+
+    class _Recording(StubEndpoint):
+        def make_call(self, account_id, target_uri, **kwargs):
+            seen.append(kwargs)
+            return super().make_call(account_id, target_uri, **kwargs)
+
+    acc = account()
+    runner = Runner(spec(callers=[acc.username]), [acc], endpoint=_Recording(), events=SipEvents())
+    runner.start()
+    assert seen and seen[0]["a_number"] == ""
+
+
+# ---------------------------------------------------------------------------
+# 2026-09 runner fixes (each reproduced on the native engine first; see
+# tools/runner_loopback_check.py)
+# ---------------------------------------------------------------------------
+def test_target_uri_carries_the_account_port() -> None:
+    """A bare number on an account with a custom port went to domain:5060."""
+    acc = account()
+    acc.port = 5080
+    runner = Runner(spec(), [acc], endpoint=StubEndpoint(), events=SipEvents())
+    assert runner._build_target_uri("2001", acc) == "sip:2001@pbx.example.test:5080"
+    acc.port = 0
+    assert runner._build_target_uri("2001", acc) == "sip:2001@pbx.example.test"
+
+
+class _SlotError(Exception):
+    status = 70010  # PJ_ETOOMANY
+
+    def __str__(self) -> str:
+        return "Too many objects of the specified type (PJ_ETOOMANY)"
+
+
+def test_no_free_call_slot_requeues_instead_of_recording_a_fake_fail(monkeypatch) -> None:
+    monkeypatch.setattr(runner_module, "SLOT_WAIT_SECONDS", 0.02)
+
+    class _BusyThenFree(StubEndpoint):
+        def __init__(self) -> None:
+            super().__init__()
+            self.refusals = 3
+
+        def make_call(self, account_id, target_uri, **kwargs):
+            if self.refusals:
+                self.refusals -= 1
+                raise _SlotError()
+            return super().make_call(account_id, target_uri, **kwargs)
+
+    events = SipEvents()
+    endpoint = _BusyThenFree()
+    runner = Runner(spec(), [account()], endpoint=endpoint, events=events)
+    results: list[RunnerResult] = []
+    runner.call_completed.connect(results.append)
+    runner.start()
+    wait_until(lambda: bool(endpoint.calls), timeout_ms=2000)
+    assert results == []                    # no fake FAIL for the refusals
+    emit_state(events, endpoint, first_call_id(endpoint), "EARLY", 180, "Ringing")
+    wait_until(lambda: len(results) == 1)
+    assert results[0].result == "PASS"
+
+
+def test_slot_wait_gives_up_as_error_not_supplier_fail(monkeypatch) -> None:
+    monkeypatch.setattr(runner_module, "SLOT_WAIT_SECONDS", 0.01)
+    monkeypatch.setattr(runner_module, "SLOT_WAIT_MAX_TRIES", 2)
+
+    class _NeverFree(StubEndpoint):
+        def make_call(self, account_id, target_uri, **kwargs):
+            raise _SlotError()
+
+    runner = Runner(spec(), [account()], endpoint=_NeverFree(), events=SipEvents())
+    results: list[RunnerResult] = []
+    runner.call_completed.connect(results.append)
+    runner.start()
+    wait_until(lambda: len(results) == 1, timeout_ms=2000)
+    assert results[0].result == "ERROR" and results[0].sip_reason == "No free call slot"
+
+
+def test_fas_sweep_waits_the_jitter_before_reprobing_a_target() -> None:
+    dialled_at: list[float] = []
+
+    class _Timed(StubEndpoint):
+        def make_call(self, account_id, target_uri, **kwargs):
+            dialled_at.append(time.monotonic())
+            return super().make_call(account_id, target_uri, **kwargs)
+
+    events = SipEvents()
+    endpoint = _Timed()
+    s = RunnerSpec(callers=["1001"], targets=["2001"], mode="fas-sweep",
+                   pass_criterion="reachability", parallel=4, hold_seconds=0.01,
+                   timeout_seconds=5, tries_per_pair=2, jitter_low_s=0.3, jitter_high_s=0.3)
+    runner = Runner(s, [account()], endpoint=endpoint, events=events)
+    results: list[RunnerResult] = []
+    runner.call_completed.connect(results.append)
+    runner.start()
+    first = first_call_id(endpoint)
+    emit_state(events, endpoint, first, "DISCONNECTED", 486, "Busy Here")
+    wait_until(lambda: len(results) == 1)
+    completed_at = time.monotonic()
+    wait_until(lambda: len(dialled_at) == 2, timeout_ms=2000)
+    assert dialled_at[1] - completed_at >= 0.25   # cooled off, not back-to-back
+
+
+def test_runner_does_not_keep_finished_calls_alive() -> None:
+    """The runner must never own a pjsua2 Call: releasing one after PJSIP
+    reused its slot hangs up the call now in that slot."""
+    import gc
+    import weakref
+
+    events = SipEvents()
+    endpoint = StubEndpoint()
+    runner = Runner(spec(), [account()], endpoint=endpoint, events=events)
+    runner.start()
+    cid = first_call_id(endpoint)
+    probe = weakref.ref(endpoint.calls[cid][2])
+    emit_state(events, endpoint, cid, "DISCONNECTED", 486, "Busy Here")
+    wait_until(lambda: runner._run_complete_emitted, timeout_ms=2000)
+    endpoint.calls.clear()   # the account drops it on DISCONNECTED
+    gc.collect()
+    assert probe() is None

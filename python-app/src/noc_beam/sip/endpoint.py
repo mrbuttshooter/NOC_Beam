@@ -207,7 +207,13 @@ class SipEndpoint:
 
                 ep_cfg = pj.EpConfig()
                 ep_cfg.uaConfig.userAgent = settings.user_agent
-                ep_cfg.uaConfig.maxCalls = 16
+                # 32 = PJSUA_MAX_CALLS of the bundled build (33 aborts
+                # libInit). It used to be 16 -- exactly the Test Runner's
+                # max parallelism -- so a 16-wide batch left no slot for a
+                # manual call, an incoming call, or a runner call still
+                # tearing down after its CANCEL: the next dial failed with
+                # PJ_ETOOMANY and was recorded as a fake FAIL.
+                ep_cfg.uaConfig.maxCalls = 32
                 for stun_server in collect_stun_servers(accounts):
                     ep_cfg.uaConfig.stunServer.append(stun_server)
                 ep_cfg.uaConfig.stunIgnoreFailure = True
@@ -800,7 +806,12 @@ class SipEndpoint:
         *,
         origin: str = "manual",
         origin_meta: dict[str, str] | None = None,
+        a_number: str = "",
     ) -> SipCall:
+        """Place a call. `a_number`, when given, is presented as this
+        call's caller ID (the From display name, Eyebeam style) instead of
+        the account's display name -- the Test Runner's ORIGINATION
+        numbers use this."""
         # Resolve everything we need under the lock, then RELEASE the
         # lock before invoking pjsua2.makeCall. makeCall does
         # synchronous DNS (A-record / NAPTR), which on a slow corp
@@ -811,14 +822,18 @@ class SipEndpoint:
             acc = self._accounts.get(account_id)
             if acc is None:
                 raise ValueError(f"Unknown account {account_id}")
-            target_uri = self._normalize_dial_target(target_uri, acc.cfg.domain)
+            # Host WITH the account's custom port: a bare number used to
+            # become sip:N@domain, so an account on e.g. :5080 registered
+            # to domain:5080 but sent every INVITE to domain:5060 (proven
+            # on loopback: 408 timeout instead of reaching the far end).
+            target_uri = self._normalize_dial_target(target_uri, self._account_host(acc.cfg))
             call = SipCall(acc, account_id=account_id)
             call.origin = origin or "manual"
             if origin_meta:
                 for key, value in origin_meta.items():
                     setattr(call, key, value)
             prm = pj.CallOpParam(True)
-            local_uri = self._format_invite_local_uri(acc.cfg)
+            local_uri = self._format_invite_local_uri(acc.cfg, display_override=a_number)
             if local_uri:
                 self._set_call_tx_local_uri(prm, local_uri)
             # Append to acc.calls under the lock so concurrent
@@ -887,7 +902,7 @@ class SipEndpoint:
         return f"sip:{t}@{account_domain}"
 
     @staticmethod
-    def _format_invite_local_uri(cfg: AccountConfig) -> str:
+    def _format_invite_local_uri(cfg: AccountConfig, display_override: str = "") -> str:
         """Build an optional per-INVITE From URI carrying the A-number.
 
         PJSIP's AccountConfig.idUri must stay as a bare SIP URI on this
@@ -898,7 +913,9 @@ class SipEndpoint:
 
             "96171488860" <sip:U080@208.87.170.99>
         """
-        display = SipEndpoint._sanitize_display_name(getattr(cfg, "display_name", ""))
+        display = SipEndpoint._sanitize_display_name(
+            display_override or getattr(cfg, "display_name", "")
+        )
         if not display:
             return ""
         user = SipEndpoint._sanitize_uri_user(getattr(cfg, "username", ""))
@@ -1105,7 +1122,7 @@ class SipEndpoint:
         acc = self._accounts.get(account_id) if account_id else None
         if acc is None:
             raise ValueError("Plain number requires an account context for the domain")
-        return f"sip:{target}@{acc.cfg.domain}"
+        return f"sip:{target}@{self._account_host(acc.cfg)}"
 
     def _ensure_thread_registered(self) -> None:
         """Register the calling thread with PJSIP if it isn't already.
