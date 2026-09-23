@@ -148,6 +148,9 @@ class SipEndpoint:
         # operator explicitly muted (the focus re-wire used to clobber the
         # mute -> silent mic leakage).
         self._muted_call_ids: set[int] = set()
+        # Conference-bridge clock rate (EpConfig.medConfig.clockRate), so
+        # per-call media clocks join the bridge without resampling.
+        self._conf_clock_rate = 16000
         # Reap a call's mute flag when it disconnects. pjsua2 RE-USES
         # call-id slots, so a stale "muted" entry left behind by a hung-up
         # call would make the NEXT call that inherits that slot start with a
@@ -228,6 +231,7 @@ class SipEndpoint:
                 ep_cfg.logConfig.level = settings.log_level
                 ep_cfg.logConfig.consoleLevel = settings.log_level
                 ep_cfg.medConfig.clockRate = settings.audio.clock_rate
+                self._conf_clock_rate = int(settings.audio.clock_rate or 16000)
                 ep_cfg.medConfig.ecTailLen = settings.audio.ec_tail_ms
 
                 # Hook log writer for SIP trace viewer
@@ -973,10 +977,24 @@ class SipEndpoint:
         BYE", which emits a clean CANCEL for early dialogs.
         """
         explicit = code is not None
+        # role: PJSIP_ROLE_UAC=0 (we placed the call), PJSIP_ROLE_UAS=1
+        # (we received it). The state number alone can't tell the two
+        # apart: once we've sent 180 Ringing an INCOMING call is in EARLY
+        # (3) -- the same number as an outbound early dialog -- so the old
+        # state-only check sent a ringing incoming call down the CANCEL
+        # branch, where statusCode 0 makes PJSIP answer 603 Decline
+        # instead of the intended 486 Busy Here (proven on the native
+        # engine with a loopback call).
+        role = -1
         try:
             # int() wrap is defensive: some pjsua2 SWIG/Cython builds
             # return a wrapped enum whose __eq__ vs int returns False.
-            state = int(call.getInfo().state)
+            info = call.getInfo()
+            state = int(info.state)
+            try:
+                role = int(info.role)
+            except Exception:
+                role = -1
         except Exception:
             state = -1
 
@@ -989,6 +1007,13 @@ class SipEndpoint:
             call.hangup(prm)
             return
 
+        # We are the callee and haven't answered (INCOMING, or EARLY after
+        # our 180) -> polite busy, whatever the ring stage.
+        if role == 1 and state in (2, 3):
+            prm.statusCode = 486
+            log.info("hangup_call: ringing incoming (state=%s) -> 486 Busy Here", state)
+            call.hangup(prm)
+            return
         # pjsua2 PJSIP_INV_STATE_* numbers: 1=CALLING 3=EARLY 4=CONNECTING.
         # Only CALLING/EARLY are cancellable: a bare CANCEL is valid only
         # before the final 2xx. CONNECTING (4) means a 2xx has already been
@@ -1015,34 +1040,24 @@ class SipEndpoint:
         call.setHold(pj.CallOpParam(True))
 
     def resume_call(self, call: SipCall) -> None:
-        """Take a held call off hold.
+        """Take a held call off hold with a sendrecv re-INVITE.
 
-        pjsua2 has two ways to unhold:
-          1. `call.setHold(prm)` with prm.opt.flag = PJSUA_CALL_UNHOLD
-          2. `call.reinvite(prm)` with prm.opt.flag = PJSUA_CALL_UNHOLD
+        PJSIP unholds ONLY through `reinvite()` (or `update()`) with
+        PJSUA_CALL_UNHOLD in `prm.opt.flag`. `setHold()` never unholds:
+        pjsua_call_set_hold2 always builds a hold offer and ignores
+        `opt.flag`. The previous implementation called setHold() here,
+        which put a SECOND `a=sendonly` re-INVITE on the wire, raised
+        nothing, and let the UI flip the card back to "Connected" while
+        both legs stayed held (proven on the native engine with a loopback
+        call: caller LOCAL_HOLD / callee REMOTE_HOLD after "resume").
 
-        The first works reliably against every PBX we've tested
-        (Asterisk, FreeSWITCH, Kamailio, CUCM). The second's
-        UNHOLD flag is ignored by some pjsua2 builds when passed
-        to reinvite -- the SDP just gets re-sent with sendrecv but
-        Asterisk in particular keeps the remote in held state until
-        an explicit unhold re-INVITE. setHold path also has the
-        nice property of being symmetric with hold_call() above.
+        Errors propagate so the caller keeps the record in HELD instead of
+        claiming a resume that never happened.
         """
         prm = pj.CallOpParam(True)
-        try:
-            prm.opt.flag = getattr(pj, "PJSUA_CALL_UNHOLD", 1)
-            prm.opt.audioCount = 1
-        except Exception:
-            pass
-        try:
-            call.setHold(prm)
-        except Exception:
-            # Old builds may not honour UNHOLD via setHold; fall
-            # back to the reinvite path. At least one of them will
-            # do the right thing on every PJSIP build out there.
-            log.exception("setHold(UNHOLD) failed; falling back to reinvite")
-            call.reinvite(prm)
+        prm.opt.flag = getattr(pj, "PJSUA_CALL_UNHOLD", 1)
+        prm.opt.audioCount = 1
+        call.reinvite(prm)
 
     def reinvite_call(self, call: SipCall) -> None:
         prm = pj.CallOpParam(True)
@@ -1168,6 +1183,11 @@ class SipEndpoint:
                         aud = call.getAudioMedia(mi.index)
                     except Exception:
                         continue
+                    # Every call -- focused or not -- keeps a silent source
+                    # on the bridge, so an unfocused call's stream is still
+                    # serviced (RFC 2833 digits actually leave; see
+                    # _ensure_call_clock).
+                    self._ensure_call_clock(call, aud)
                     if is_focused:
                         # Respect an operator-set per-call mute: only wire
                         # the mic if this call isn't muted. Previously the
@@ -1276,14 +1296,23 @@ class SipEndpoint:
         method = (account_cfg.dtmf_method or "rfc2833").lower()
         if method == "info":
             self._send_dtmf_info(call, digits)
+        elif method == "inband":
+            self._send_dtmf_inband(call, digits)
         else:
-            # RFC2833 / inband path. pjsua2's dialDtmf raises pjsua2.Error
+            # RFC2833 path. pjsua2's dialDtmf raises pjsua2.Error
             # when the negotiated media has no telephone-event (RFC 4733)
             # format -- common on IP-trunk routes that answer with an
             # early-media announcement and never offer telephone-event.
             # Field logs showed every keypress dying as "send_dtmf failed"
             # with no digit ever reaching the IVR. Fall back to SIP INFO so
             # the digit still gets out instead of being silently dropped.
+            #
+            # dialDtmf only QUEUES the digit; the stream emits it from its
+            # conference put_frame. Make sure the call has its media clock
+            # attached first, or a call without audio focus never sends it.
+            aud = self._active_audio_media(call)
+            if aud is not None:
+                self._ensure_call_clock(call, aud)
             try:
                 call.dialDtmf(digits)
             except Exception:
@@ -1292,6 +1321,93 @@ class SipEndpoint:
                     "falling back to SIP INFO for %d digit(s)", len(digits),
                 )
                 self._send_dtmf_info(call, digits)
+
+    @staticmethod
+    def _active_audio_media(call: SipCall):  # type: ignore[no-untyped-def]
+        """The call's first active audio media, or None."""
+        try:
+            # Bind CallInfo to a name first: iterating `call.getInfo().media`
+            # directly lets SWIG free the temporary CallInfo while its media
+            # vector is still being read (garbage type/status values).
+            info = call.getInfo()
+            for mi in info.media:
+                if mi.type == 1 and mi.status == 1:   # audio + active
+                    return call.getAudioMedia(mi.index)
+        except Exception:
+            log.debug("call audio media unavailable", exc_info=True)
+        return None
+
+    def _ensure_call_clock(self, call: SipCall, aud):  # type: ignore[no-untyped-def]
+        """Keep one idle ToneGenerator wired into the call's audio.
+
+        PJMEDIA's conference bridge only services a call's stream while
+        that port has at least one connection. set_call_audio_focus cuts
+        BOTH directions on every call that isn't focused -- a non-selected
+        multi-call card, every test-runner call -- which left those
+        streams unserviced: dialDtmf queued RFC 2833 digits that were
+        never put on the wire (proven on the native engine: a keypad
+        "159#" to an unfocused call reached the far end as "" while the
+        same call with any bridge connection delivered "159#" every time).
+
+        The generator is silent while idle, so this does not leak audio or
+        un-mute anything; it only keeps the stream clocked. It is also the
+        source for in-band DTMF tones. One per call, created on first use
+        and released with the call (SipCall.onCallState DISCONNECTED).
+        startTransmit is idempotent and re-issued on every call because a
+        re-INVITE (hold/resume, codec change) can rebuild the call's slot.
+        """
+        if not PJSUA2_AVAILABLE or aud is None:
+            return None
+        tonegen = getattr(call, "_media_clock", None)
+        try:
+            if tonegen is None:
+                self._ensure_thread_registered()
+                tonegen = pj.ToneGenerator()
+                tonegen.createToneGenerator(int(self._conf_clock_rate or 16000), 1)
+                call._media_clock = tonegen
+            tonegen.startTransmit(aud)
+        except Exception:
+            log.warning("could not attach media clock to call", exc_info=True)
+        return tonegen
+
+    # Tone timing for in-band DTMF: 100 ms on / 60 ms off sits comfortably
+    # above the ITU-T Q.24 minimums (40 ms tone, 40 ms pause) that IVR
+    # detectors are built for, and still keeps a keypad burst snappy.
+    _INBAND_ON_MS = 100
+    _INBAND_OFF_MS = 60
+
+    def _send_dtmf_inband(self, call: SipCall, digits: str) -> None:
+        """Play real DTMF dual tones INTO the call's audio stream.
+
+        pjsua2's dialDtmf is RFC 2833 only, so the "inband" account
+        setting used to send telephone-events exactly like "rfc2833"
+        (and, on a route with no telephone-event, fell back to SIP INFO).
+        A carrier or IVR that only listens for tones in the audio never
+        heard a digit. Proven on the native engine: with "inband" the
+        far end's received audio carried no tones at all.
+
+        The tones come from the call's media-clock ToneGenerator (see
+        _ensure_call_clock), which is already wired into the call.
+        """
+        aud = self._active_audio_media(call)
+        if aud is None:
+            log.warning("in-band DTMF: no active audio on the call; %d digit(s) not sent",
+                        len(digits))
+            return
+        tonegen = self._ensure_call_clock(call, aud)
+        if tonegen is None:
+            log.warning("in-band DTMF: no tone generator for the call; %d digit(s) not sent",
+                        len(digits))
+            return
+        seq = pj.ToneDigitVector()
+        for d in digits:
+            td = pj.ToneDigit()
+            td.digit = d
+            td.on_msec = self._INBAND_ON_MS
+            td.off_msec = self._INBAND_OFF_MS
+            td.volume = 0   # 0 = PJMEDIA default tone level
+            seq.append(td)
+        tonegen.playDigits(seq)
 
     def _send_dtmf_info(self, call: SipCall, digits: str) -> None:
         """One SIP INFO per digit with an `application/dtmf-relay` body.

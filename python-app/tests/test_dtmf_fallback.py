@@ -34,8 +34,29 @@ def _stub_self():
     """A minimal object exposing only what send_dtmf touches."""
     s = types.SimpleNamespace()
     s.info_calls = []
+    s.clocked = []
     s._send_dtmf_info = lambda call, digits: s.info_calls.append((call, digits))
+    # RFC 2833 path attaches the call's media clock before dialDtmf.
+    s._active_audio_media = lambda call: "aud"
+    s._ensure_call_clock = lambda call, aud: s.clocked.append((call, aud))
     return s
+
+
+def test_rfc2833_attaches_media_clock_before_dialing() -> None:
+    """dialDtmf only queues; the digit leaves from the stream's bridge
+    put_frame, which never runs on a call with no bridge connection
+    (a non-focused call). The clock must be on before the digit."""
+    s = _stub_self()
+    order: list[str] = []
+    s._ensure_call_clock = lambda call, aud: order.append("clock")
+
+    class _OrderCall(_Call):
+        def dialDtmf(self, digits: str) -> None:  # noqa: N802
+            order.append("dial")
+            super().dialDtmf(digits)
+
+    SipEndpoint.send_dtmf(s, _OrderCall(dial_raises=False), "3", _StubCfg("rfc2833"))
+    assert order == ["clock", "dial"]
 
 
 def test_rfc2833_success_does_not_fall_back() -> None:

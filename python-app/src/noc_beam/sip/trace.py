@@ -139,11 +139,30 @@ def redact_sip_body(body: str) -> str:
     out = _TEL_USER_RE.sub(lambda m: f"{m.group(1)}<redacted>", out)
     out = _DISPLAY_NAME_RE.sub('"<redacted>" ', out)
     return out
-# PJSIP 2.10+ dropped the literal "packet" word in some builds. Match
-# both the historical "RX 451 bytes packet from UDP 1.2.3.4:5060"
-# format and the newer "RX 451 bytes from UDP 1.2.3.4:5060" form.
-_DIR_RX = re.compile(r"\.?RX\s+(\d+)\s+bytes(?:\s+packet)?\s+from\s+(\S+)")
-_DIR_TX = re.compile(r"\.?TX\s+(\d+)\s+bytes(?:\s+packet)?\s+to\s+(\S+)")
+# Direction preamble PJSIP logs just before each message on the wire.
+# Three shapes are in the field:
+#   older builds:   "RX 451 bytes packet from UDP 1.2.3.4:5060:"
+#   some 2.10+:     "RX 451 bytes from UDP 1.2.3.4:5060:"
+#   2.14 (bundled): "RX 1351 bytes Request msg INVITE/cseq=23508
+#                    (rdata000002841F2D6FE8) from UDP 127.0.0.1:5098:"
+# The 2.14 form puts a message summary between "bytes" and "from/to".
+# The old patterns required "from"/"to" right after "bytes", so on the
+# bundled engine NOTHING matched: every trace message was tagged "?"
+# with peer "?", the rows all rendered as TX, and unticking either the
+# RX or TX filter hid the whole trace. Skip anything up to the
+# transport, and capture transport + address (the old pattern captured
+# only the word "UDP" as the peer).
+_DIR_RX = re.compile(
+    r"\bRX\s+(\d+)\s+bytes\b.*?\sfrom\s+([A-Za-z0-9]+)\s+(\S+?):?\s*$"
+)
+_DIR_TX = re.compile(
+    r"\bTX\s+(\d+)\s+bytes\b.*?\sto\s+([A-Za-z0-9]+)\s+(\S+?):?\s*$"
+)
+
+
+def _preamble_peer(m: re.Match) -> str:
+    """'UDP 10.0.0.5:5060' from a matched direction preamble."""
+    return f"{m.group(2)} {m.group(3)}"
 
 
 # pjsua2's LogConfig.writer setter is type-checked at the SWIG layer:
@@ -205,14 +224,14 @@ class TraceLogWriter(_LogWriterBase):
         if m_rx:
             self._flush()
             self._direction = "RX"
-            self._peer = m_rx.group(2)
+            self._peer = _preamble_peer(m_rx)
             self._capturing = True
             return
         m_tx = _DIR_TX.search(line)
         if m_tx:
             self._flush()
             self._direction = "TX"
-            self._peer = m_tx.group(2)
+            self._peer = _preamble_peer(m_tx)
             self._capturing = True
             return
 

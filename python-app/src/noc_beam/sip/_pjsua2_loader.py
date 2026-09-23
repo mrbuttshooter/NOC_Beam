@@ -76,4 +76,38 @@ def _make_stub() -> Any:
     )
 
 
+def _pj_error_str(self: Any) -> str:
+    """Readable text for a pjsua2.Error.
+
+    SWIG's pjsua2.Error stringifies to "" -- the detail lives in its
+    `reason` / `title` / `status` attributes. Every `log.exception(...)`
+    in the app therefore ended with a bare "pjsua2.Error" line, and the
+    "Call failed" dialog showed "Error (no message)". Render e.g.
+    "INVITE session already terminated (PJSIP_ESESSIONTERMINATED)
+    [pjsua_call_answer2, status 171140]".
+    """
+    try:
+        reason = str(getattr(self, "reason", "") or "").strip()
+        title = str(getattr(self, "title", "") or "").strip()
+        status = int(getattr(self, "status", 0) or 0)
+    except Exception:
+        return "pjsua2 error"
+    func = title.split("(", 1)[0].strip() if title else ""
+    detail = ", ".join(p for p in (func, f"status {status}" if status else "") if p)
+    text = reason or "pjsua2 error"
+    return f"{text} [{detail}]" if detail else text
+
+
+def _install_error_str(module: Any) -> None:
+    err = getattr(module, "Error", None)
+    if not isinstance(err, type):
+        return
+    try:
+        err.__str__ = _pj_error_str
+    except Exception:
+        log.debug("could not attach readable __str__ to pjsua2.Error", exc_info=True)
+
+
 pj, PJSUA2_AVAILABLE, PJSUA2_SOURCE, PJSUA2_LOAD_ERROR = _try_load()
+if PJSUA2_AVAILABLE:
+    _install_error_str(pj)

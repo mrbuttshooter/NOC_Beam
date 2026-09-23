@@ -93,6 +93,13 @@ if PJSUA2_AVAILABLE:
                         acc.calls.remove(self)
                 except Exception:
                     log.exception("Could not remove disconnected SipCall from acc.calls")
+                # Release the per-call media clock / in-band tone generator
+                # (SipEndpoint._ensure_call_clock) now, while the library is
+                # alive; its C++ destructor must not run after libDestroy.
+                try:
+                    self._media_clock = None
+                except Exception:
+                    log.debug("media clock release failed", exc_info=True)
 
         def onCallMediaState(self, prm) -> None:  # noqa: N802, ANN001
             # This callback runs on the PJSIP worker thread. It MUST NOT
