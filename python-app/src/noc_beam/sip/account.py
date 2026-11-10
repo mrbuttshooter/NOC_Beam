@@ -60,11 +60,15 @@ if PJSUA2_AVAILABLE:
 
     class SipAccount(pj.Account):  # type: ignore[misc, name-defined]
         def __init__(self, cfg: AccountConfig, transports: dict[str, int],
-                     local_sip_port: int = 5060) -> None:
+                     local_sip_port: int = 5060,
+                     transport_ports: dict[str, int] | None = None) -> None:
             super().__init__()
             self.cfg = cfg
             self._transports = transports
             self._local_sip_port = int(local_sip_port or 5060)
+            # Real bound port per transport kind (SipEndpoint reads them
+            # after binding); the forced Contact must advertise THESE.
+            self._transport_ports = dict(transport_ports or {})
             self.calls: list[SipCall] = []
             # Set by configure() when the requested transport isn't
             # bound; consumed by SipEndpoint.add_account after the
@@ -133,6 +137,23 @@ if PJSUA2_AVAILABLE:
                 ac.callConfig.timerUse = pj.PJSUA_SIP_TIMER_INACTIVE
             except Exception:
                 pass
+
+            # Do NOT "lock" the codec with an extra re-INVITE/UPDATE. With
+            # lockCodecEnabled (PJSIP default) every SDP answer that lists
+            # more than one codec makes PJSIP fire ANOTHER re-INVITE in the
+            # same millisecond it ACKs: after our hold, after our resume,
+            # and after the switch's own SDP-less unhold. A B2BUA still
+            # completing that hold/unhold on its other leg rejects the
+            # instant extra INVITE (RFC 3261 14.2 -> 500 Server Internal
+            # Error) and drops the call -- the "hold/unhold drops the call,
+            # switch logs 500" field report. Proven with an independent
+            # strict SIP peer against this account config. eyeBeam never
+            # sends a codec-lock re-INVITE; the stream simply uses the
+            # first codec of the answer.
+            try:
+                ac.mediaConfig.lockCodecEnabled = False
+            except Exception:
+                log.warning("lockCodecEnabled not available on this pjsua2 build")
 
             # Append :port when the user set a non-default port. Without
             # this the per-account port field in the dialog was decorative.
@@ -344,9 +365,18 @@ if PJSUA2_AVAILABLE:
                     # to the phantom IP, NOC_Beam never told, call hung). Force
                     # Contact to the correct egress; guarded for older pjsua2.
                     try:
+                        # The port the account's transport is REALLY bound
+                        # to. Advertising the configured `sip_port or 5060`
+                        # sent every switch-initiated request (hold re-INVITE,
+                        # BYE) to a closed port whenever sip_port was 0
+                        # (the default: random bind).
+                        _contact_port = (
+                            self._transport_ports.get(transport)
+                            or self._local_sip_port
+                        )
                         _forced = (
                             f"<sip:{_safe_user}@{media_address}:"
-                            f"{self._local_sip_port}{transport_param}>"
+                            f"{_contact_port}{transport_param}>"
                         )
                         ac.sipConfig.contactForced = _forced
                         log.info("Account %s forcing Contact %s", cfg.id, _forced)

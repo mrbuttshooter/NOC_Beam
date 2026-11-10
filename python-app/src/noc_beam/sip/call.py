@@ -7,6 +7,7 @@ them — we emit on SipEvents and let Qt deliver on the main thread.
 from __future__ import annotations
 
 import logging
+import time
 
 from noc_beam.sip._pjsua2_loader import PJSUA2_AVAILABLE, pj
 from noc_beam.sip.events import sip_events
@@ -42,6 +43,11 @@ if PJSUA2_AVAILABLE:
             self._account = account
             self._account_id = account_id
             self.remote_uri = ""
+            # INVITE-transaction bookkeeping for SipEndpoint.hold_call /
+            # resume_call: a re-INVITE must not go out while one is open,
+            # nor right on the heels of one (B2BUAs answer 500).
+            self._invite_tsx_open = False
+            self._invite_done_at = 0.0
             super().__init__(account, call_id)
 
         # ------------------------------------------------------------------
@@ -144,6 +150,26 @@ if PJSUA2_AVAILABLE:
                         break
             except Exception:
                 log.exception("onCallMediaState error")
+
+        def onCallTsxState(self, prm) -> None:  # noqa: N802, ANN001
+            # Track whether an INVITE transaction (ours or the switch's
+            # re-INVITE) is open, and when the last one finished. PJSIP
+            # thread: only plain attribute writes here.
+            try:
+                e = prm.e
+                if e.type != pj.PJSIP_EVENT_TSX_STATE:
+                    return
+                tsx = e.body.tsxState.tsx
+                if tsx.method != "INVITE":
+                    return
+                if tsx.state in (pj.PJSIP_TSX_STATE_CALLING, pj.PJSIP_TSX_STATE_TRYING,
+                                 pj.PJSIP_TSX_STATE_PROCEEDING):
+                    self._invite_tsx_open = True
+                elif tsx.state >= pj.PJSIP_TSX_STATE_COMPLETED:
+                    self._invite_tsx_open = False
+                    self._invite_done_at = time.monotonic()
+            except Exception:
+                log.debug("onCallTsxState bookkeeping failed", exc_info=True)
 
         def onDtmfDigit(self, prm) -> None:  # noqa: N802, ANN001
             try:

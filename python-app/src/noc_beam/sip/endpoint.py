@@ -139,6 +139,8 @@ class SipEndpoint:
         self._accounts: dict[str, SipAccount] = {}
         self._transports: dict[str, int] = {}
         self._sip_port = 5060
+        # transport kind ("udp"/"tcp"/"tls") -> port it is really bound to.
+        self._transport_ports: dict[str, int] = {}
         self._started = False
         self._lock = threading.RLock()
         self._log_writer = None
@@ -148,6 +150,11 @@ class SipEndpoint:
         # operator explicitly muted (the focus re-wire used to clobber the
         # mute -> silent mic leakage).
         self._muted_call_ids: set[int] = set()
+        # Hold / resume requested while the call still had an INVITE
+        # transaction open (PJSIP refuses a second re-INVITE with
+        # PJ_EINVALIDOP). call-id -> (op, attempts); the latest request
+        # wins and is retried once the open transaction completes.
+        self._pending_media_ops: dict[int, tuple[str, int]] = {}
         # Conference-bridge clock rate (EpConfig.medConfig.clockRate), so
         # per-call media clocks join the bridge without resampling.
         self._conf_clock_rate = 16000
@@ -181,6 +188,9 @@ class SipEndpoint:
         """
         try:
             self._muted_call_ids.discard(int(call_id))
+            # A queued hold/resume must not fire on the NEXT call that
+            # inherits this call-id slot.
+            self._pending_media_ops.pop(int(call_id), None)
         except Exception:
             log.debug("mute-flag cleanup skipped for call %r", call_id)
 
@@ -348,6 +358,7 @@ class SipEndpoint:
                 # scratch, so any lingering id here would false-mute a
                 # brand-new call that happens to reuse the number.
                 self._muted_call_ids.clear()
+                self._pending_media_ops.clear()
                 self._started = False
                 sip_events().endpoint_stopped.emit()
 
@@ -420,6 +431,28 @@ class SipEndpoint:
             )
         except Exception:
             log.warning("TLS transport unavailable (PJSIP built without TLS?)")
+
+        # The port each transport ACTUALLY listens on. With the default
+        # sip_port=0 every transport binds a random port (UDP and TCP get
+        # different ones), but the forced Contact used to advertise
+        # `port or 5060` -- so every in-dialog request from the switch
+        # (its hold/unhold re-INVITE, its BYE) went to a port nobody
+        # listens on, timed out, and the switch tore the call down
+        # (field trace: zero switch requests ever received, BYE -> 481).
+        self._transport_ports = {}
+        for kind, tid in self._transports.items():
+            port_bound = self._bound_port(tid)
+            if port_bound:
+                self._transport_ports[kind] = port_bound
+                log.info("SIP %s transport listening on port %d", kind.upper(), port_bound)
+
+    def _bound_port(self, tid: int) -> int:
+        try:
+            name = self._ep.transportGetInfo(tid).localName
+            return int(str(name).rsplit(":", 1)[1])
+        except Exception:
+            log.warning("Could not read bound port of transport %s", tid, exc_info=True)
+            return 0
 
     @staticmethod
     def _sip_advertised_address(accounts: list[AccountConfig] | None) -> str:
@@ -675,7 +708,8 @@ class SipEndpoint:
                 raise RuntimeError("Endpoint not started")
             if cfg.id in self._accounts:
                 self.remove_account(cfg.id)
-            acc = SipAccount(cfg, self._transports, self._sip_port)
+            acc = SipAccount(cfg, self._transports, self._sip_port,
+                             transport_ports=dict(self._transport_ports))
             ac_cfg = acc.configure()
             try:
                 acc.create(ac_cfg)
@@ -1053,10 +1087,39 @@ class SipEndpoint:
         log.info("hangup_call: state=%s -> BYE", state)
         call.hangup(prm)
 
-    def hold_call(self, call: SipCall) -> None:
+    # PJ_EINVALIDOP: pjsua refuses a re-INVITE while the call's previous
+    # INVITE transaction (our hold, the switch's re-INVITE, ...) is open.
+    _INVITE_BUSY_STATUS = 70013
+    # A B2BUA answers a re-INVITE that lands right after the previous one
+    # finished with 500 (it is still re-negotiating its other leg), so hold
+    # / resume also wait this long after the last INVITE transaction.
+    _INVITE_SETTLE_S = 0.6
+    _MEDIA_RETRY_MS = 250
+    _MEDIA_GIVE_UP_S = 8.0
+
+    @classmethod
+    def _is_invite_busy(cls, exc: BaseException) -> bool:
+        return (getattr(exc, "status", None) == cls._INVITE_BUSY_STATUS
+                or "PJ_EINVALIDOP" in str(exc))
+
+    @classmethod
+    def _invite_wait_s(cls, call: SipCall) -> float:
+        """Seconds until `call` may send a re-INVITE (0 = now).
+
+        Fed by SipCall.onCallTsxState; objects without that bookkeeping
+        (stubs, foreign Call objects) are never delayed.
+        """
+        if getattr(call, "_invite_tsx_open", False):
+            return cls._MEDIA_RETRY_MS / 1000.0
+        done = getattr(call, "_invite_done_at", 0.0) or 0.0
+        return max(0.0, cls._INVITE_SETTLE_S - (time.monotonic() - done))
+
+    @staticmethod
+    def _send_hold(call: SipCall) -> None:
         call.setHold(pj.CallOpParam(True))
 
-    def resume_call(self, call: SipCall) -> None:
+    @staticmethod
+    def _send_resume(call: SipCall) -> None:
         """Take a held call off hold with a sendrecv re-INVITE.
 
         PJSIP unholds ONLY through `reinvite()` (or `update()`) with
@@ -1067,14 +1130,100 @@ class SipEndpoint:
         nothing, and let the UI flip the card back to "Connected" while
         both legs stayed held (proven on the native engine with a loopback
         call: caller LOCAL_HOLD / callee REMOTE_HOLD after "resume").
-
-        Errors propagate so the caller keeps the record in HELD instead of
-        claiming a resume that never happened.
         """
         prm = pj.CallOpParam(True)
         prm.opt.flag = getattr(pj, "PJSUA_CALL_UNHOLD", 1)
         prm.opt.audioCount = 1
         call.reinvite(prm)
+
+    def hold_call(self, call: SipCall) -> None:
+        SipEndpoint._media_op(self, call, "hold")
+
+    def resume_call(self, call: SipCall) -> None:
+        """Resume a held call (see _send_resume).
+
+        Pressing Resume while the hold re-INVITE is still unanswered (a
+        slow switch), or a split second after it completed, used to fail
+        with PJ_EINVALIDOP (call silently left held) or reach the switch
+        while it was still bridging the hold (500, call dropped). Both are
+        now queued and sent once the call's INVITE traffic has settled.
+        Any OTHER error still propagates so the caller keeps the record in
+        HELD instead of claiming a resume that never happened.
+        """
+        SipEndpoint._media_op(self, call, "resume")
+
+    def _media_op(self, call: SipCall, op: str) -> None:
+        # Called unbound with a stub `self` by the unit tests -- only touch
+        # endpoint state on the deferral path, which stubs never reach.
+        send = SipEndpoint._send_hold if op == "hold" else SipEndpoint._send_resume
+        if SipEndpoint._invite_wait_s(call) > 0:
+            self._defer_media_op(call, op)
+            return
+        try:
+            send(call)
+        except Exception as exc:
+            if not SipEndpoint._is_invite_busy(exc):
+                raise
+            self._defer_media_op(call, op)
+            return
+        pending = getattr(self, "_pending_media_ops", None)
+        if pending:
+            try:
+                pending.pop(int(call.getId()), None)
+            except Exception:
+                pass
+
+    def _defer_media_op(self, call: SipCall, op: str) -> None:
+        """Queue `op` until the call's INVITE traffic has settled.
+
+        Keyed by call-id, never by the SipCall object: a strong reference
+        held past DISCONNECTED would outlive the call (see SipCall). The
+        retry re-resolves the id with find_call and _on_call_ended_cleanup
+        drops the entry, so a recycled slot never inherits it. The latest
+        request wins (Hold then Resume while busy sends only the resume).
+        """
+        call_id = int(call.getId())
+        first = call_id not in self._pending_media_ops
+        deadline = time.monotonic() + self._MEDIA_GIVE_UP_S
+        self._pending_media_ops[call_id] = (op, deadline)
+        log.info("%s for call %s queued until its INVITE traffic settles", op, call_id)
+        if first:
+            self._schedule_media_retry(call_id, self._invite_wait_s(call))
+
+    def _schedule_media_retry(self, call_id: int, wait_s: float) -> None:
+        from PySide6.QtCore import QTimer
+        ms = max(50, int(wait_s * 1000) + 20)
+        QTimer.singleShot(ms, lambda cid=call_id: self._retry_media_op(cid))
+
+    def _retry_media_op(self, call_id: int) -> None:
+        entry = self._pending_media_ops.get(call_id)
+        if entry is None:
+            return
+        op, deadline = entry
+        call = self.find_call(call_id)
+        if call is None:
+            self._pending_media_ops.pop(call_id, None)
+            return
+        if time.monotonic() > deadline:
+            self._pending_media_ops.pop(call_id, None)
+            log.warning("queued %s for call %s gave up: INVITE traffic never settled", op, call_id)
+            return
+        wait = self._invite_wait_s(call)
+        if wait > 0:
+            self._schedule_media_retry(call_id, wait)
+            return
+        self._ensure_thread_registered()
+        try:
+            (SipEndpoint._send_hold if op == "hold" else SipEndpoint._send_resume)(call)
+        except Exception as exc:
+            if self._is_invite_busy(exc):
+                self._schedule_media_retry(call_id, self._MEDIA_RETRY_MS / 1000.0)
+                return
+            self._pending_media_ops.pop(call_id, None)
+            log.warning("queued %s for call %s failed: %s", op, call_id, exc)
+            return
+        self._pending_media_ops.pop(call_id, None)
+        log.info("queued %s for call %s sent", op, call_id)
 
     def reinvite_call(self, call: SipCall) -> None:
         prm = pj.CallOpParam(True)

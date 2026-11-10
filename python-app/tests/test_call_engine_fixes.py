@@ -267,3 +267,75 @@ def test_media_clock_is_one_idle_generator_per_call(monkeypatch) -> None:
     assert first is second and len(_FakeToneGen.instances) == 1
     assert first.played == []                 # idle: silence only
     assert first.targets == [call.audio, call.audio]
+
+
+# --------------------------------------------------------------------------
+# hold / unhold drops (2026-11 field trace, TCP account on a B2BUA switch)
+#   * the forced Contact advertised `sip_port or 5060` while the default
+#     sip_port=0 binds a random port: every switch-initiated in-dialog
+#     request (its hold re-INVITE, its BYE) went to a closed port and the
+#     switch released the call.
+#   * PJSIP's codec-lock fired an extra re-INVITE the instant it ACKed a
+#     multi-codec answer (B2BUA -> 500).
+#   * Hold/Resume pressed while an INVITE was still open raised
+#     PJ_EINVALIDOP and the call stayed held.
+# --------------------------------------------------------------------------
+@needs_pjsua2
+def test_contact_advertises_the_real_bound_port_and_no_codec_lock() -> None:
+    from noc_beam.config.store import AccountConfig
+    from noc_beam.sip.account import SipAccount
+
+    cfg = AccountConfig(id="t", label="t", username="noc", domain="127.0.0.1",
+                        transport="tcp", register=False)
+    acc = SipAccount(cfg, {"udp": 0, "tcp": 1}, 5060,
+                     transport_ports={"udp": 53324, "tcp": 61725})
+    ac = acc.configure()
+    assert ac.sipConfig.contactForced.endswith(":61725;transport=tcp>")
+    assert not ac.mediaConfig.lockCodecEnabled
+
+
+class _MediaOpCall:
+    def __init__(self, *, open_tsx=False, busy=False) -> None:
+        self._invite_tsx_open = open_tsx
+        self._invite_done_at = 0.0
+        self.busy = busy
+        self.sent: list[str] = []
+
+    def getId(self) -> int:  # noqa: N802
+        return 7
+
+    def setHold(self, prm) -> None:  # noqa: N802
+        if self.busy:
+            raise endpoint_module.pj.Error(70013, "Invalid operation (PJ_EINVALIDOP)",
+                                           "", "pjsua_call_set_hold2", 0)
+        self.sent.append("hold")
+
+
+def _queueing_endpoint():
+    ep = SipEndpoint.__new__(SipEndpoint)
+    ep._pending_media_ops = {}
+    ep.scheduled = []
+    ep._schedule_media_retry = lambda cid, wait: ep.scheduled.append(cid)
+    return ep
+
+
+@needs_pjsua2
+def test_hold_waits_while_an_invite_transaction_is_open() -> None:
+    ep, call = _queueing_endpoint(), _MediaOpCall(open_tsx=True)
+    SipEndpoint.hold_call(ep, call)
+    assert call.sent == []
+    assert ep._pending_media_ops[7][0] == "hold" and ep.scheduled == [7]
+
+
+@needs_pjsua2
+def test_busy_hold_is_queued_not_raised() -> None:
+    ep, call = _queueing_endpoint(), _MediaOpCall(busy=True)
+    SipEndpoint.hold_call(ep, call)          # must not raise
+    assert ep._pending_media_ops[7][0] == "hold"
+
+
+@needs_pjsua2
+def test_idle_hold_goes_out_immediately() -> None:
+    ep, call = _queueing_endpoint(), _MediaOpCall()
+    SipEndpoint.hold_call(ep, call)
+    assert call.sent == ["hold"] and ep._pending_media_ops == {}
